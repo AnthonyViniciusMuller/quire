@@ -37,7 +37,7 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add library and reading schema migrations`
 - [x] `feat: add sync schema migrations`
 - [x] `build: add sqlc configuration and generation target`
-- [ ] `docs: add mer to schema mapping table`
+- [x] `docs: add mer to schema mapping table`
 
 ## Phase 3 — Protobuf contracts
 
