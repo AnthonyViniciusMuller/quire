@@ -170,7 +170,14 @@ which makes deduplication at the receiving end depend on comparing payloads.
 — carries `id_operacao`, `id_servidor` and `aplicado_em`, one row per destination. The delta
 is then stored once and the operation keeps one identity across the whole federation.
 
-**Status** open. Add a Quadro for `entrega_sync` to Appendix A and the entity to Figura 18.
+**Correction, continued.** `entrega_sync` also needs what a replication worker cannot run
+without: the number of attempts, the instant of the last one, and the last error. A peer
+belonging to another operator is unreachable often enough that retrying it at full rate would
+become the node's largest source of outbound traffic, and backing off requires that state to
+be durable.
+
+**Status** open. Implemented in `000003_sync` as `sync.operations` and `sync.deliveries`. Add
+a Quadro for `entrega_sync` to Appendix A and the entity to Figura 18.
 
 ### C08 — `ultimo_sync_em` cannot serve as the synchronization cursor
 
@@ -226,9 +233,18 @@ replicating node, so "how many operations the origin server holds" and "how many
 holds" are different numbers with nobody at fault. A digest over the set is
 topology-independent, which is precisely why anti-entropy protocols use one.
 
-**Status** settled 2026-08-26: cursor and digest, as above. The cursor lands with
-`feat: add sync schema migrations`; the digest with the RNF09 verification in phase 9. Both
-still have to be written into the text.
+**Open sub-question, for when the digest is built.** Retaining every operation forever is not
+an option, and pruning breaks the check: a server that trims its log and a device that trims
+differently compute different digests over the same causal history, and the verification then
+reports divergence permanently. XOR is its own inverse, so removing an operation from a
+digest is the same operation as adding it — which means the fix is agreement on *what* was
+pruned rather than on the digest itself. The likely shape is a watermark published with the
+digest: the digest covers only the operations above it, and a device holding older ones
+XORs them out before comparing. Settle it with the retention policy, not before.
+
+**Status** settled 2026-08-26: cursor and digest, as above. The cursor is implemented in
+`000003_sync`; the digest lands with the RNF09 verification in phase 9. Both still have to be
+written into the text.
 
 ### C09 — `token_acesso` never stores an access token
 
