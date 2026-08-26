@@ -8,7 +8,9 @@ and are written in English. Commits stay small and are reviewed before landing.
 
 Thesis traceability: requirement identifiers (RF, RNF, RN, UC) refer to the TCC specification;
 the entity-name mapping between the MER and the database schema lives in
-[`mer-mapping.md`](mer-mapping.md).
+[`mer-mapping.md`](mer-mapping.md), and everything the implementation found that has to reach
+the thesis — corrections to the specification and deliberate divergences from it — lives in
+[`tcc-corrections.md`](tcc-corrections.md). Append there when you find another one.
 
 ## Phase 0 — Repository bootstrap
 
@@ -31,6 +33,7 @@ the entity-name mapping between the MER and the database schema lives in
 
 - [x] `feat: add postgres connection pool and transaction helper`
 - [x] `feat: add identity and federation schema migrations`
+- [x] `docs: add tcc correction log`
 - [ ] `feat: add library and reading schema migrations`
 - [ ] `feat: add sync schema migrations`
 - [ ] `build: add sqlc configuration and generation target`
@@ -103,7 +106,7 @@ the entity-name mapping between the MER and the database schema lives in
 
 - [ ] `feat: add sync operation entity and repository`
 - [ ] `feat: add operation reconciler with crdt merge` — first settle the `updated_at`
-      question under [Design decisions to settle](#design-decisions-to-settle)
+      question under [Design decisions to settle](#design-decisions-to-settle) (C01)
 - [ ] `feat: add push operations use case`
 - [ ] `feat: add pull operations use case`
 - [ ] `feat: add bidirectional sync stream handler`
@@ -137,7 +140,7 @@ the entity-name mapping between the MER and the database schema lives in
 Questions found while implementing, whose answer belongs in the thesis and must be settled
 before the commit that depends on them.
 
-### `updated_at` has to be causally monotonic — settle before commit 64
+### `updated_at` has to be causally monotonic — settle before `feat: add operation reconciler with crdt merge`
 
 The planned per-field rule is "causal order first, then break ties on
 `(updated_at, device_id)`". That is **not a total order** when `updated_at` is a wall clock,
@@ -162,32 +165,11 @@ tie-break layered on top of it.
 **Proposed fix.** Make `updated_at` a hybrid logical clock: each write stamps
 `max(local wall clock, greatest observed updated_at + 1)`. Then `a` happens-before `b`
 implies `a.updated_at < b.updated_at`, the cycle cannot form, and the order is total. This
-extends RN02/RNF03 and should be recorded in the thesis alongside them.
+extends RN02/RNF03 and should be recorded in the thesis alongside them. Tracked as C01 in
+[`tcc-corrections.md`](tcc-corrections.md).
 
 ## Divergences from the thesis specification
 
-Recorded here so they can be carried into section 4.2.4 of the TCC.
-
-1. **English identifiers, one schema per slice.** The MER names entities in Portuguese
-   (`usuario`, `relogio_vetorial`, `operacao_sync`); the schema uses English and qualifies
-   each entity with the slice that owns it (`identity.users`, `vector_clock`,
-   `sync.operations`), which is what removes the prefix the MER had to carry in a single
-   flat namespace. `mer-mapping.md` holds the full mapping table.
-2. **File storage.** The MER models only metadata (`content_hash`, `size_bytes`). The schema adds
-   `library.ebook_contents` (hash-deduplicated pointers into object storage) and a `BlobStore`
-   port. An extension to the MER.
-3. **JWT validated in the application too.** The TCC delegates validation to Istio (RNF12). An
-   authentication interceptor in Go validates as well, so that tests and `docker compose` are
-   authenticated without a mesh. Both run in production — defense in depth.
-4. **Knative is out of scope.** Mentioned in section 2.6 but absent from RNF12 and from the
-   deployment diagram.
-5. **Go reference client (`quirectl`).** Needed to exercise the end-to-end suites without the
-   Flutter application, and used to demonstrate the system to the examining board.
-6. **`timestamptz` rather than `timestamp`.** Appendix A declares every temporal attribute as
-   `timestamp`. A federation spans operators, hosts and time zones, and a naive timestamp
-   cannot be compared across two of them; every column is `timestamp with time zone`.
-7. **`usuario.email` and `usuario.senha_hash` are nullable.** Appendix A declares both NOT
-   NULL, while 4.2.4 keeps the address out of the replicated set and gives authentication to
-   the origin server alone. A user replicated on a node that is not their origin therefore
-   has neither, and the constraint as written cannot be satisfied. Uniqueness of the address
-   stays scoped to the origin server, as RN09 requires.
+Moved to [`tcc-corrections.md`](tcc-corrections.md), which now holds both the corrections the
+specification needs and the divergences subsection 4.2.4 has to record. Keeping them in one
+document is what stops a finding from being written down twice and answered once.
