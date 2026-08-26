@@ -51,7 +51,7 @@ tie-break layered on top of it.
 
 **Status** open — settle before `feat: add operation reconciler with crdt merge`.
 
-### C02 — Quadros 18, 19 and 20 omit the attributes 4.2.4 requires of them
+### C02 — Quadros 18, 19 and 20 omit the attributes a replicable entity needs
 
 **Where** Quadro 18 (`ebook`), Quadro 19 (`colecao`), Quadro 20 (`ebook_colecao`), against
 the third modelling decision stated in 4.2.4.
@@ -69,11 +69,17 @@ versions with no causal information to compare, so RN02 has nothing to reconcile
 resurrected by the next node that had not yet heard about the deletion — exactly the failure
 logical deletion is introduced to prevent.
 
-**Correction** Add `relogio_vetorial` (jsonb, not null), `atualizado_em` and `removido` to
-Quadros 18, 19 and 20. The narrative in 4.2.4 already describes the corrected version and
-needs no change.
+A fourth attribute is missing for the same reason. The tie-break RN02 relies on is
+`(atualizado_em, id_dispositivo)`, and none of the three entities records a device at all —
+so even with a causally monotonic `atualizado_em` (C01), two concurrent writes that landed on
+the same value have no deterministic winner. `anotacao` and `progresso_leitura` already carry
+`id_dispositivo`; these three do not.
 
-**Status** open.
+**Correction** Add `relogio_vetorial` (jsonb, not null), `atualizado_em`, `id_dispositivo`
+and `removido` to Quadros 18, 19 and 20. The narrative in 4.2.4 already describes the
+corrected version and needs no change.
+
+**Status** open. Implemented in `000002_library_and_reading`.
 
 ### C03 — `usuario.email` and `usuario.senha_hash` cannot both be NOT NULL
 
@@ -130,6 +136,7 @@ instead of being updated, and "the position of this device in this book" stops b
 single answer.
 
 **Status** open. The grain itself stays as specified; the schema follows Quadro 21.
+Implemented in `000002_library_and_reading`.
 
 ### C06 — `ebook_colecao` has no uniqueness constraint
 
@@ -143,7 +150,7 @@ collection twice, and on an offline-first system two devices will do exactly tha
 
 **Correction** Add `UNIQUE (id_ebook, id_colecao)` to Quadro 20.
 
-**Status** open.
+**Status** open. Implemented in `000002_library_and_reading`.
 
 ### C07 — `operacao_sync` conflates the operation with its delivery
 
@@ -240,6 +247,26 @@ the point where the name is introduced.
 
 **Status** open, low priority. The schema uses `identity.access_tokens`, faithful to the
 current name.
+
+### C10 — `anotacao.id_dispositivo` has to mean the last writer, not the originator
+
+**Where** Quadro 22 and the description of `anotacao` in 4.2.4.
+
+**What the TCC says** `id_dispositivo` is "o aparelho que originou a anotação".
+
+**Why it does not hold** An annotation is editable (RF03, UC04 is marked «CRUD»), so it can
+be rewritten from a device other than the one that created it. The model never uses the
+originating device for anything, while the last-writer-wins tie-break of RN02 requires the
+device whose write is currently reflected — and after an edit from a second device, those two
+are different. Reading the attribute as the originator leaves the tie-break pointing at a
+device that did not make the write it is meant to arbitrate.
+
+**Correction** Describe `id_dispositivo` as the device whose write the row currently
+reflects, on `anotacao` as on the entities C02 adds it to. The attribute then means the same
+thing on every replicable entity, which is also what makes the reconciler uniform. On
+`progresso_leitura` the two readings coincide, since a row there has a single writer (C05).
+
+**Status** open. Implemented in `000002_library_and_reading`.
 
 ## Divergences
 

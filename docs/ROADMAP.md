@@ -34,7 +34,7 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add postgres connection pool and transaction helper`
 - [x] `feat: add identity and federation schema migrations`
 - [x] `docs: add tcc correction log`
-- [ ] `feat: add library and reading schema migrations`
+- [x] `feat: add library and reading schema migrations`
 - [ ] `feat: add sync schema migrations`
 - [ ] `build: add sqlc configuration and generation target`
 - [ ] `docs: add mer to schema mapping table`
