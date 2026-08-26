@@ -21,7 +21,7 @@ the entity-name mapping between the MER and the database schema lives in
 
 ## Phase 1 — Shared core
 
-- [ ] `feat: add configuration loading from environment`
+- [x] `feat: add configuration loading from environment`
 - [ ] `feat: add domain error type with wrapping`
 - [ ] `feat: add structured logging setup`
 - [ ] `feat: add vector clock comparison primitives`
