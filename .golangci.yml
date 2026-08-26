@@ -160,6 +160,12 @@ linters:
       - path: ^cmd/quirectl/
         linters:
           - forbidigo
+      # errs.Kind is an enum that doubles as an errors.Is target, not a set of
+      # sentinel error variables, so the ErrXxx naming convention does not
+      # apply to its constants.
+      - path: ^internal/shared/errs/kind\.go$
+        linters:
+          - errname
       # Migrations embedded as long SQL strings.
       - source: ^\s*//go:embed
         linters:
