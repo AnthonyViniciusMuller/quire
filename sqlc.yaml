@@ -1,0 +1,76 @@
+# Generation of the persistence code from the migrations and the query files.
+#
+# One block per slice, each generating into the slice that owns it. The blocks
+# appear as their slices do: a block whose queries directory is empty makes the
+# whole run fail, so the four still missing — identity, federation, library and
+# reading — are added by the phases that write their first query. See
+# docs/ROADMAP.md.
+#
+# The schema is the migrations directory, whole. sqlc reads it as the catalogue
+# every query is checked against, and skips the .down.sql files on its own, so
+# a query that names a column that does not exist is a build failure rather
+# than a runtime one.
+version: "2"
+
+sql:
+  - engine: postgresql
+    schema: migrations
+    queries: internal/sync/infra/persist/queries
+    gen:
+      go:
+        package: syncdb
+        out: internal/sync/infra/persist/syncdb
+        sql_package: pgx/v5
+
+        # The generated Querier is what a repository is written against, and
+        # what a test substitutes.
+        emit_interface: true
+
+        # An empty result is an empty slice, never nil. A caller that ranges
+        # over it behaves the same either way; one that compares it to nil does
+        # not, and that difference is a bug waiting for an empty table.
+        emit_empty_slices: true
+
+        # A nullable column becomes *T rather than a pgtype wrapper. The
+        # repository has to decide what absence means when it maps to the
+        # domain, and a pointer makes it say so.
+        emit_pointers_for_null_types: true
+
+        # Each slice generates from the whole catalogue, so without this every
+        # slice would carry a struct for every table in the node.
+        omit_unused_structs: true
+
+        overrides: &overrides
+          # time.Time rather than pgtype.Timestamptz. The driver type buys
+          # nothing here: a non-null column is always valid, and a nullable one
+          # is already a pointer.
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+          - db_type: "timestamptz"
+            nullable: true
+            go_type:
+              type: "time.Time"
+              pointer: true
+
+          # jsonb payloads stay encoded. A delta is decoded by the reconciler
+          # against the entity it targets, not by the repository that read it.
+          - db_type: "jsonb"
+            go_type: "encoding/json.RawMessage"
+
+          # A vector clock is the exception: it decodes straight into the type
+          # the merge laws are proved over, through the MarshalJSON and
+          # UnmarshalJSON that package already implements. The repository never
+          # sees bytes, and a clock read from the database is in canonical form
+          # — zero entries dropped — because that is what UnmarshalJSON does.
+          - column: "sync.operations.vector_clock"
+            go_type: &vectorclock "github.com/anthonyvsmuller/quire/internal/shared/crdt.VectorClock"
+          - column: "library.ebooks.vector_clock"
+            go_type: *vectorclock
+          - column: "library.collections.vector_clock"
+            go_type: *vectorclock
+          - column: "library.ebook_collections.vector_clock"
+            go_type: *vectorclock
+          - column: "reading.progress.vector_clock"
+            go_type: *vectorclock
+          - column: "reading.annotations.vector_clock"
+            go_type: *vectorclock

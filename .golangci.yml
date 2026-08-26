@@ -141,7 +141,9 @@ linters:
       # sqlc and protoc-gen-go output.
       - .*\.pb\.go$
       - .*_grpc\.pb\.go$
-      - internal/.*/infra/persist/.*
+      # sqlc writes into internal/<slice>/infra/persist/<slice>db; the
+      # repositories beside it are hand-written and are linted.
+      - internal/.*/infra/persist/[a-z]+db/.*
     rules:
       # Tests may build fixtures the way tests do.
       - path: _test\.go$
