@@ -23,7 +23,7 @@ the entity-name mapping between the MER and the database schema lives in
 
 - [x] `feat: add configuration loading from environment`
 - [x] `feat: add domain error type with wrapping`
-- [ ] `feat: add structured logging setup`
+- [x] `feat: add structured logging setup`
 - [ ] `feat: add vector clock comparison primitives`
 - [ ] `test: add property tests for crdt merge laws`
 
