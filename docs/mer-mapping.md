@@ -33,7 +33,7 @@ Every temporal attribute is `timestamptz` rather than the `timestamp` Appendix A
 | `servidor` | `federation.servers` | 13 |
 | `usuario` | `identity.users` | 14 |
 | `replica_usuario` | `federation.user_replicas` | 15 |
-| `token_acesso` | `identity.access_tokens` | 16 |
+| `token_acesso` → `credencial` | `identity.credentials` | 16 — renamed, C09 |
 | `dispositivo` | `identity.devices` | 17 |
 | `ebook` | `library.ebooks` | 18 |
 | `colecao` | `library.collections` | 19 |
@@ -94,7 +94,7 @@ capitalization.
 Added: unique `(user_id, server_id)`. One row per pair, reused as the decision changes, so
 that a grant and its revocation stay in one place.
 
-## `token_acesso` → `identity.access_tokens`
+## `token_acesso` → `identity.credentials`
 
 | MER | Schema | Note |
 |---|---|---|
@@ -106,8 +106,9 @@ that a grant and its revocation stay in one place.
 | `expira_em` | `expires_at` | |
 | `consumido` | `consumed` | covers both "already used" and "revoked" |
 
-The entity name is kept as the MER has it, although it never stores an access token — see
-C09, which leaves the rename to the author.
+The entity is renamed. `token_acesso` never stores an access token — that is a JWT, verified
+by signature and never persisted (RNF11) — and the MER's own description says so. C09 carries
+the rename into 4.2.4, Quadro 16 and Figura 18; the schema follows it in migration 000004.
 
 ## `dispositivo` → `identity.devices`
 

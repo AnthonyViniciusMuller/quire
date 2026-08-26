@@ -257,12 +257,13 @@ the access token is not persisted, because it is a JWT verified by signature (RN
 recovery credential. A reader of the model has to reach the end of the paragraph to learn
 that the entity does not contain what its name says.
 
-**Correction** Cosmetic, and the author's call: either rename the entity to something like
-`credencial`, or leave the name and add a sentence to 4.2.4 making the exclusion explicit at
-the point where the name is introduced.
+**Correction** Rename the entity to `credencial` in 4.2.4, in Quadro 16 and in Figura 18. The
+description then needs no disclaimer: the entity holds the credentials that outlive a single
+call, and the access token's absence from the model follows from RNF11 rather than having to
+be excused.
 
-**Status** open, low priority. The schema uses `identity.access_tokens`, faithful to the
-current name.
+**Status** settled 2026-08-26: renamed. The schema follows in
+`000004_rename_access_tokens_to_credentials`, as `identity.credentials`.
 
 ### C10 — `anotacao.id_dispositivo` has to mean the last writer, not the originator
 

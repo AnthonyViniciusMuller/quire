@@ -38,6 +38,7 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add sync schema migrations`
 - [x] `build: add sqlc configuration and generation target`
 - [x] `docs: add mer to schema mapping table`
+- [x] `refactor: rename the access token entity to credential`
 
 ## Phase 3 — Protobuf contracts
 
