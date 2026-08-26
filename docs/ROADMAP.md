@@ -14,8 +14,8 @@ the entity-name mapping between the MER and the database schema lives in
 
 - [x] `chore: initialize go module and repository layout`
 - [x] `docs: add readme and license`
-- [ ] `docs: add implementation roadmap`
-- [ ] `build: add makefile with development targets`
+- [x] `docs: add implementation roadmap`
+- [x] `build: add makefile with development targets`
 - [ ] `chore: add golangci-lint configuration`
 - [ ] `ci: add github actions workflow for lint and unit tests`
 
