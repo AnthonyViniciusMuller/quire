@@ -29,7 +29,7 @@ the entity-name mapping between the MER and the database schema lives in
 
 ## Phase 2 — Persistence
 
-- [ ] `feat: add postgres connection pool and transaction helper`
+- [x] `feat: add postgres connection pool and transaction helper`
 - [ ] `feat: add identity and federation schema migrations`
 - [ ] `feat: add library and reading schema migrations`
 - [ ] `feat: add sync schema migrations`
