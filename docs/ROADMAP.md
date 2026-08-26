@@ -24,7 +24,7 @@ the entity-name mapping between the MER and the database schema lives in
 - [x] `feat: add configuration loading from environment`
 - [x] `feat: add domain error type with wrapping`
 - [x] `feat: add structured logging setup`
-- [ ] `feat: add vector clock comparison primitives`
+- [x] `feat: add vector clock comparison primitives`
 - [ ] `test: add property tests for crdt merge laws`
 
 ## Phase 2 — Persistence
