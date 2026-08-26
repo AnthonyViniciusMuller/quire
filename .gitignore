@@ -1,0 +1,23 @@
+# Build artifacts
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Local data
+/tmp/
+/testdata/local/
+
+# Editors
+.idea/
+*.swp
+.DS_Store
