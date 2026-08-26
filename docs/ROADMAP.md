@@ -39,6 +39,7 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `build: add sqlc configuration and generation target`
 - [x] `docs: add mer to schema mapping table`
 - [x] `refactor: rename the access token entity to credential`
+- [x] `docs: settle the hybrid logical clock decision`
 
 ## Phase 3 — Protobuf contracts
 
@@ -106,8 +107,10 @@ the thesis — corrections to the specification and deliberate divergences from 
 ## Phase 9 — sync slice (UC09–11, UC16)
 
 - [ ] `feat: add sync operation entity and repository`
-- [ ] `feat: add operation reconciler with crdt merge` — first settle the `updated_at`
-      question under [Design decisions to settle](#design-decisions-to-settle) (C01)
+- [ ] `feat: add hybrid logical clock`
+- [ ] `feat: add operation reconciler with crdt merge` — the tie-break is
+      `(updated_at, device_id)` over the hybrid logical clock, per C01 in
+      [`tcc-corrections.md`](tcc-corrections.md)
 - [ ] `feat: add push operations use case`
 - [ ] `feat: add pull operations use case`
 - [ ] `feat: add bidirectional sync stream handler`
@@ -139,35 +142,13 @@ the thesis — corrections to the specification and deliberate divergences from 
 ## Design decisions to settle
 
 Questions found while implementing, whose answer belongs in the thesis and must be settled
-before the commit that depends on them.
+before the commit that depends on them. A question stays here only while it is open; once it
+is answered it becomes an entry in [`tcc-corrections.md`](tcc-corrections.md), so that the
+answer travels with the correction it produced rather than with the doubt it started as.
 
-### `updated_at` has to be causally monotonic — settle before `feat: add operation reconciler with crdt merge`
-
-The planned per-field rule is "causal order first, then break ties on
-`(updated_at, device_id)`". That is **not a total order** when `updated_at` is a wall clock,
-and without a total order there is no maximum, so merge loses associativity: two nodes can
-converge on different values depending on the order in which operations reached them.
-
-The counterexample, with three writes on two devices:
-
-| write | vector clock | relation |
-|---|---|---|
-| `a` | `{phone:1}` | `a` happens before `b` |
-| `b` | `{phone:2}` | `b` concurrent with `c`, and `c` is later by the clock, so `b < c` |
-| `c` | `{tablet:1}` | `c` concurrent with `a`, and `a` is later by the clock, so `c < a` |
-
-That closes the cycle `a < b < c < a`. Clock skew between devices is what lets `updated_at`
-contradict happens-before.
-
-The vector clock itself is not at fault: a pointwise maximum is a genuine join semilattice,
-and `internal/shared/crdt` proves the three laws by property test. The defect is only in the
-tie-break layered on top of it.
-
-**Proposed fix.** Make `updated_at` a hybrid logical clock: each write stamps
-`max(local wall clock, greatest observed updated_at + 1)`. Then `a` happens-before `b`
-implies `a.updated_at < b.updated_at`, the cycle cannot form, and the order is total. This
-extends RN02/RNF03 and should be recorded in the thesis alongside them. Tracked as C01 in
-[`tcc-corrections.md`](tcc-corrections.md).
+**None open.** The last one — whether `updated_at` could break ties as a wall clock — was
+settled on 2026-08-26 as C01: it cannot, and it becomes a hybrid logical clock. The
+counterexample and the argument are in that entry.
 
 ## Divergences from the thesis specification
 

@@ -30,26 +30,76 @@ name mapping is in [`mer-mapping.md`](mer-mapping.md).
 
 **Where** RN02, RNF03, and the reconciliation described in 4.2.4.
 
-**What the TCC implies** Per-field last-writer-wins over concurrent versions, with the tie
-broken on `(atualizado_em, id_dispositivo)`.
+**What the TCC implies** Per-field last-writer-wins: the vector clock decides first, and when
+it reports two versions concurrent, the tie is broken on `(atualizado_em, id_dispositivo)`.
 
-**Why it does not hold** With `atualizado_em` a wall clock, that relation is not a total
-order, so there is no maximum and merge loses associativity. With writes `a = {phone:1}`,
-`b = {phone:2}`, `c = {tablet:1}`: `a` causally precedes `b`; `b` and `c` are concurrent and
-`c` is later by the clock; `c` and `a` are concurrent and `a` is later by the clock. That
-closes the cycle `a < b < c < a`, and two nodes converge on different values depending on
-the order the operations reached them.
+**Why it does not hold** Merging a set of versions means taking the maximum under that
+relation, and a maximum exists only if the relation has no cycle. With `atualizado_em` a wall
+clock, it can have one — from ordinary skew between devices, with no clock ever running
+backwards.
 
-**Correction** Make `atualizado_em` a hybrid logical clock: every write stamps
-`max(local wall clock, greatest observed atualizado_em + 1)`. Then `a` happens-before `b`
-implies `a.atualizado_em < b.atualizado_em`, the cycle cannot form, and the order is total.
-Record it alongside RN02 and RNF03.
+Three devices:
+
+| write | device | wall clock | `atualizado_em` | vector clock |
+|---|---|---|---|---|
+| `a` | phone, clock correct | `10:00:05` | `10:00:05` | `{phone:1}` |
+| `b` | tablet, clock 10 s behind, has synced and seen `a` | `09:59:58` | `09:59:58` | `{phone:1, tablet:1}` |
+| `c` | laptop, clock correct, has synced with nobody | `10:00:02` | `10:00:02` | `{laptop:1}` |
+
+The three pairwise decisions:
+
+| pair | vector clock | winner | by |
+|---|---|---|---|
+| `a` vs `b` | `a` precedes `b` | `b` | causality; the timestamp is not consulted |
+| `b` vs `c` | concurrent | `c` | `10:00:02` > `09:59:58` |
+| `c` vs `a` | concurrent | `a` | `10:00:05` > `10:00:02` |
+
+That is `b > a`, `c > b`, `a > c`: a cycle, and therefore no maximum. Two nodes that saw all
+three writes disagree permanently, according to the order the writes reached them:
+
+- node X receives `a`, `b`, `c` → `merge(merge(a,b),c)` = `merge(b,c)` = `c`
+- node Y receives `b`, `c`, `a` → `merge(merge(b,c),a)` = `merge(c,a)` = `a`
+
+Neither node can detect it. Each applied the rule correctly and reached an answer that is
+locally reasonable. What is lost is associativity, and eventual consistency (RNF03) is exactly
+the promise that grouping and order cannot change the outcome.
+
+The defect is one edge: `a` precedes `b` while `t(a) > t(b)` — a causally later write carrying
+an earlier timestamp. Everything else in the relation is sound.
+
+**Correction** Make `atualizado_em` a hybrid logical clock. Every write stamps
+
+```
+t = max(local wall clock, greatest t this replica has observed + 1)
+```
+
+In the example, the tablet had already seen `a` at `10:00:05`, so
+`t(b) = max(09:59:58, 10:00:05 + 1µs) = 10:00:05.000001`, and the bad edge cannot be built.
+
+In general, if `a` precedes `b` then the author of `b` had observed `a` — that is what
+precedence means — so its greatest observed value is at least `t(a)` and `t(b) > t(a)`. Every
+causal edge then points towards a larger timestamp, and so does every concurrent edge, since
+that is the tie-break rule itself. A relation in which every edge increases a number has no
+cycle, so the maximum always exists and merge is associative again.
+
+Two concurrent writers that have never heard of each other can still land on the same `t`.
+`id_dispositivo` decides between them; any fixed rule works, provided it is the same on every
+node, and `(atualizado_em, id_dispositivo)` is then a total order — which is what taking a
+maximum requires.
+
+The cost is one extra read per write, for the greatest observed value, and that a device with
+a fast clock pushes the value ahead of real time until real time catches up, bounded by the
+skew. `atualizado_em` is `timestamptz`, so its microsecond resolution is the `+1`.
 
 **Note** The vector clock itself is sound — a pointwise maximum is a genuine join
-semilattice, proved by property test in `internal/shared/crdt`. The defect is only in the
+semilattice, proved by property test in `internal/shared/crdt`. The defect was only in the
 tie-break layered on top of it.
 
-**Status** open — settle before `feat: add operation reconciler with crdt merge`.
+**Status** settled 2026-08-26: hybrid logical clock, as above. Extends RN02 and RNF03 and has
+to be recorded alongside them in the text. In the code it lands as `feat: add hybrid logical
+clock` before the reconciler, and on the wire as a distinct `HybridTimestamp` message rather
+than a `google.protobuf.Timestamp`, so that nothing can compare it against a wall clock by
+accident.
 
 ### C02 — Quadros 18, 19 and 20 omit the attributes a replicable entity needs
 
