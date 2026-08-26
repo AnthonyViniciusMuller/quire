@@ -1,0 +1,183 @@
+version: "2"
+
+run:
+  timeout: 5m
+  # Tagged test files must be linted too, not only the untagged build.
+  build-tags:
+    - integration
+    - e2e
+    - kind
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    - depguard
+    - errname
+    - errorlint
+    - exhaustive
+    - forbidigo
+    - gocheckcompilerdirectives
+    - gochecknoglobals
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gosec
+    - lll
+    - makezero
+    - misspell
+    - musttag
+    - nakedret
+    - nilerr
+    - nilnesserr
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - reassign
+    - revive
+    - sloglint
+    - sqlclosecheck
+    - testifylint
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - wastedassign
+    - whitespace
+
+  settings:
+    depguard:
+      rules:
+        all:
+          deny:
+            - pkg: github.com/pkg/errors
+              desc: use the standard errors package together with internal/shared/errs
+            - pkg: io/ioutil
+              desc: deprecated, use io and os
+            - pkg: math/rand
+              desc: use math/rand/v2, or crypto/rand for anything security related
+
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+
+    exhaustive:
+      default-signifies-exhaustive: true
+
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Print.*$
+          msg: write to the structured logger, or to an explicit io.Writer
+        - pattern: ^print(ln)?$
+          msg: write to the structured logger, or to an explicit io.Writer
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+
+    gosec:
+      excludes:
+        # Integer conversion overflow: too noisy against database and protobuf widths.
+        - G115
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+
+    lll:
+      line-length: 120
+      tab-width: 4
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+
+    revive:
+      rules:
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: early-return
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: exported
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: unused-parameter
+        - name: var-declaration
+        - name: var-naming
+
+    sloglint:
+      no-mixed-args: true
+      # Prefer the *Context variants wherever a context.Context is in scope.
+      context: scope
+      static-msg: true
+      key-naming-case: snake
+
+    staticcheck:
+      checks:
+        - all
+
+  exclusions:
+    generated: lax
+    paths:
+      # sqlc and protoc-gen-go output.
+      - .*\.pb\.go$
+      - .*_grpc\.pb\.go$
+      - internal/.*/infra/persist/.*
+    rules:
+      # Tests may build fixtures the way tests do.
+      - path: _test\.go$
+        linters:
+          - containedctx
+          - dupl
+          - gochecknoglobals
+          - goconst
+          - gosec
+          - lll
+          - noctx
+          - unparam
+      # The reference client is a terminal program: printing is its output.
+      - path: ^cmd/quirectl/
+        linters:
+          - forbidigo
+      # Migrations embedded as long SQL strings.
+      - source: ^\s*//go:embed
+        linters:
+          - lll
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/anthonyvsmuller/quire
+    gofumpt:
+      module-path: github.com/anthonyvsmuller/quire
+      extra:
+        group-params: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
