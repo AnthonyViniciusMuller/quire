@@ -30,7 +30,7 @@ the entity-name mapping between the MER and the database schema lives in
 ## Phase 2 — Persistence
 
 - [x] `feat: add postgres connection pool and transaction helper`
-- [ ] `feat: add identity and federation schema migrations`
+- [x] `feat: add identity and federation schema migrations`
 - [ ] `feat: add library and reading schema migrations`
 - [ ] `feat: add sync schema migrations`
 - [ ] `build: add sqlc configuration and generation target`
@@ -168,9 +168,11 @@ extends RN02/RNF03 and should be recorded in the thesis alongside them.
 
 Recorded here so they can be carried into section 4.2.4 of the TCC.
 
-1. **English identifiers.** The MER names entities in Portuguese (`usuario`, `relogio_vetorial`,
-   `operacao_sync`); the schema uses English (`users`, `vector_clock`, `sync_operations`).
-   `mer-mapping.md` holds the full mapping table.
+1. **English identifiers, one schema per slice.** The MER names entities in Portuguese
+   (`usuario`, `relogio_vetorial`, `operacao_sync`); the schema uses English and qualifies
+   each entity with the slice that owns it (`identity.users`, `vector_clock`,
+   `sync.operations`), which is what removes the prefix the MER had to carry in a single
+   flat namespace. `mer-mapping.md` holds the full mapping table.
 2. **File storage.** The MER models only metadata (`content_hash`, `size_bytes`). The schema adds
    `library.ebook_contents` (hash-deduplicated pointers into object storage) and a `BlobStore`
    port. An extension to the MER.
@@ -181,3 +183,11 @@ Recorded here so they can be carried into section 4.2.4 of the TCC.
    deployment diagram.
 5. **Go reference client (`quirectl`).** Needed to exercise the end-to-end suites without the
    Flutter application, and used to demonstrate the system to the examining board.
+6. **`timestamptz` rather than `timestamp`.** Appendix A declares every temporal attribute as
+   `timestamp`. A federation spans operators, hosts and time zones, and a naive timestamp
+   cannot be compared across two of them; every column is `timestamp with time zone`.
+7. **`usuario.email` and `usuario.senha_hash` are nullable.** Appendix A declares both NOT
+   NULL, while 4.2.4 keeps the address out of the replicated set and gives authentication to
+   the origin server alone. A user replicated on a node that is not their origin therefore
+   has neither, and the constraint as written cannot be satisfied. Uniqueness of the address
+   stays scoped to the origin server, as RN09 requires.
