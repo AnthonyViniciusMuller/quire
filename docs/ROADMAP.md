@@ -25,7 +25,7 @@ the entity-name mapping between the MER and the database schema lives in
 - [x] `feat: add domain error type with wrapping`
 - [x] `feat: add structured logging setup`
 - [x] `feat: add vector clock comparison primitives`
-- [ ] `test: add property tests for crdt merge laws`
+- [x] `test: add property tests for crdt merge laws`
 
 ## Phase 2 — Persistence
 
@@ -102,7 +102,8 @@ the entity-name mapping between the MER and the database schema lives in
 ## Phase 9 — sync slice (UC09–11, UC16)
 
 - [ ] `feat: add sync operation entity and repository`
-- [ ] `feat: add operation reconciler with crdt merge`
+- [ ] `feat: add operation reconciler with crdt merge` — first settle the `updated_at`
+      question under [Design decisions to settle](#design-decisions-to-settle)
 - [ ] `feat: add push operations use case`
 - [ ] `feat: add pull operations use case`
 - [ ] `feat: add bidirectional sync stream handler`
@@ -130,6 +131,38 @@ the entity-name mapping between the MER and the database schema lives in
 - [ ] `ci: add end to end job on kind cluster`
 - [ ] `test: add grpc latency benchmark script`
 - [ ] `docs: add deployment and operations guide`
+
+## Design decisions to settle
+
+Questions found while implementing, whose answer belongs in the thesis and must be settled
+before the commit that depends on them.
+
+### `updated_at` has to be causally monotonic — settle before commit 64
+
+The planned per-field rule is "causal order first, then break ties on
+`(updated_at, device_id)`". That is **not a total order** when `updated_at` is a wall clock,
+and without a total order there is no maximum, so merge loses associativity: two nodes can
+converge on different values depending on the order in which operations reached them.
+
+The counterexample, with three writes on two devices:
+
+| write | vector clock | relation |
+|---|---|---|
+| `a` | `{phone:1}` | `a` happens before `b` |
+| `b` | `{phone:2}` | `b` concurrent with `c`, and `c` is later by the clock, so `b < c` |
+| `c` | `{tablet:1}` | `c` concurrent with `a`, and `a` is later by the clock, so `c < a` |
+
+That closes the cycle `a < b < c < a`. Clock skew between devices is what lets `updated_at`
+contradict happens-before.
+
+The vector clock itself is not at fault: a pointwise maximum is a genuine join semilattice,
+and `internal/shared/crdt` proves the three laws by property test. The defect is only in the
+tie-break layered on top of it.
+
+**Proposed fix.** Make `updated_at` a hybrid logical clock: each write stamps
+`max(local wall clock, greatest observed updated_at + 1)`. Then `a` happens-before `b`
+implies `a.updated_at < b.updated_at`, the cycle cannot form, and the order is total. This
+extends RN02/RNF03 and should be recorded in the thesis alongside them.
 
 ## Divergences from the thesis specification
 

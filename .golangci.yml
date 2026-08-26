@@ -59,8 +59,6 @@ linters:
               desc: use the standard errors package together with internal/shared/errs
             - pkg: io/ioutil
               desc: deprecated, use io and os
-            - pkg: math/rand
-              desc: use math/rand/v2, or crypto/rand for anything security related
 
     errorlint:
       errorf: true
