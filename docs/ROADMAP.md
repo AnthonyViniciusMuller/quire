@@ -17,7 +17,7 @@ the entity-name mapping between the MER and the database schema lives in
 - [x] `docs: add implementation roadmap`
 - [x] `build: add makefile with development targets`
 - [x] `chore: add golangci-lint configuration`
-- [ ] `ci: add github actions workflow for lint and unit tests`
+- [x] `ci: add github actions workflow for lint and unit tests`
 
 ## Phase 1 — Shared core
 

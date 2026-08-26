@@ -1,0 +1,73 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A new push to a branch cancels the run still in flight for it.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # `make lint` installs the version pinned in the Makefile, which stays the
+      # single source of truth for the toolchain.
+      - name: Cache pinned tools
+        uses: actions/cache@v6
+        with:
+          path: bin
+          key: tools-${{ runner.os }}-${{ hashFiles('Makefile') }}
+
+      - name: Check formatting and lint
+        run: make lint
+
+      - name: Check that go.mod is tidy
+        run: |
+          make tidy
+          git diff --exit-code -- go.mod go.sum
+
+  test:
+    name: unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: make build
+
+      - name: Vet
+        run: make vet
+
+      - name: Unit tests
+        run: make cover
+
+      - name: Upload coverage profile
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: bin/coverage.out
+          if-no-files-found: error
