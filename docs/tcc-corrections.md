@@ -499,6 +499,45 @@ about.
 because the contract has no field to carry the password. The change belongs with the contract
 amendment.
 
+### C15 — UC12 is written as the reader's catalogue, and `servidor` names no reader
+
+**Where** UC12 and RF13, against `servidor` in Quadro 13 and `replica_usuario` in Quadro 15.
+
+**What the TCC says** UC12 is the reader maintaining «os servidores de sincronização
+conhecidos», which reads as a catalogue belonging to whoever is signed in. `servidor` has no
+reference to `usuario`: the only table that names a reader is `replica_usuario`.
+
+**Why it does not hold** The two cannot both be true, and the schema is the one that is right.
+A node is a domain, an origin, a signing key location and a pinned public key — facts about
+that node, identical for everybody here, and `servidor.dominio` is unique for exactly that
+reason. Giving the table a reader would give one node as many rows as it has readers on this
+instance, and therefore as many pinned keys; the one that is wrong would then be invisible
+against the others, which is the opposite of what a pin is for (C12).
+
+What is per-reader is not the knowledge but the permission, and that is what `replica_usuario`
+already is: nothing leaves this node for a peer without an active row there (RN03).
+
+Two consequences follow, and both are visible in the contract.
+
+*Adding.* A domain another reader added first is already in the catalogue, and the second
+reader is told so rather than given a second row. Re-running discovery on it is
+`RefreshKnownServer`, a deliberate act, and not a side effect of somebody else's addition —
+C12 again.
+
+*Removing.* Forgetting a node is not a private act. A node another reader still replicates to
+must not be removable, or that reader would be left unable to revoke a peer that holds their
+data — and RN03 is the promise that they can. The check is over every reader's
+authorizations, not the caller's.
+
+**Correction** State in 4.2.4 that `servidor` is a catalogue of the node and `replica_usuario`
+is the decision of the reader: knowing that a node exists is shared, permission for it to hold
+a copy is not. UC12 then has to say that its delete is refused while any active authorization
+names the node.
+
+**Status** settled 2026-08-27: node-wide, as above. Implemented in
+`internal/federation/domain/server`, whose package comment carries the reasoning, and enforced
+by the known server management use cases of phase 6.
+
 ## Divergences
 
 Deliberate departures from a specification that is internally consistent. Subsection 4.2.4

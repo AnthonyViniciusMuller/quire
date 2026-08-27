@@ -3,9 +3,13 @@
 // three things the node needs from this slice.
 //
 // It is the only place where a concrete adapter is named. Everything above it
-// holds a port, so substituting bcrypt for another hashing algorithm, or the
-// temporary catalogue resolver for the federation slice's repository, is a
+// holds a port, so substituting bcrypt for another hashing algorithm is a
 // change to a constructor here and to nothing else.
+//
+// The one port it does not build an adapter for is the catalogue: that table
+// belongs to the federation slice, so the node hands this one the repository
+// and the resolver of UC14 is wired over it. What this slice depends on is the
+// port in that slice's domain, never an adapter of it.
 //
 // It reads no environment variable and opens no connection. The configuration
 // arrives loaded and the pool arrives open, because both are shared with the
@@ -15,6 +19,7 @@ package di
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/anthonyvsmuller/quire/internal/federation/domain/server"
 	"github.com/anthonyvsmuller/quire/internal/identity/application/service"
 	changepasswordusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/changepassword"
 	deleteuserusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/deleteuser"
@@ -79,7 +84,7 @@ type Container struct {
 // cost bcrypt refuses, or a deployment with no way to deliver a password
 // recovery are all deployment faults, and each of them is better as a node that
 // does not start than as a call that fails once somebody depends on it.
-func Initialize(cfg *config.Config, pool *pgxpool.Pool) (*Container, error) {
+func Initialize(cfg *config.Config, pool *pgxpool.Pool, servers server.Repository) (*Container, error) {
 	manager := persist.NewManager(pool)
 
 	users := userrepository.New(manager)
@@ -106,7 +111,11 @@ func Initialize(cfg *config.Config, pool *pgxpool.Pool) (*Container, error) {
 	}
 
 	clock := clockservice.New()
-	localServer := localserverservice.New(manager, &cfg.Server)
+
+	localServer, err := localserverservice.New(servers, &cfg.Server)
+	if err != nil {
+		return nil, err
+	}
 
 	// The manager itself is the unit of work: its Within is the port, so no
 	// adapter stands between them.

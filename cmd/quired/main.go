@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	federationdi "github.com/anthonyvsmuller/quire/internal/federation/di"
 	"github.com/anthonyvsmuller/quire/internal/identity/application/service"
 	identitydi "github.com/anthonyvsmuller/quire/internal/identity/di"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/jwks"
@@ -72,11 +73,18 @@ func run(ctx context.Context) error {
 		return err
 	}
 
+	// The federation slice comes first because the identity slice needs the
+	// catalogue from it: a reader is bound to the node that hosts them (UC14),
+	// and the row that says which node this is lives in federation.servers.
+	// Wiring the two is this file's job — neither slice imports the other's
+	// adapters.
+	federation := federationdi.Initialize(pool)
+
 	// Built before the listeners, so that a deployment fault — a signing key
 	// the node cannot read, a hashing cost bcrypt refuses, no way to deliver a
 	// password recovery — stops the node while it is still starting rather than
 	// at the first call that needs it.
-	identity, err := identitydi.Initialize(cfg, pool)
+	identity, err := identitydi.Initialize(cfg, pool, federation.Servers)
 	if err != nil {
 		return err
 	}

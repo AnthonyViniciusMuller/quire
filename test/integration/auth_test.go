@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	federationdi "github.com/anthonyvsmuller/quire/internal/federation/di"
 	quirev1 "github.com/anthonyvsmuller/quire/internal/gen/quire/v1"
 	identitydi "github.com/anthonyvsmuller/quire/internal/identity/di"
 	"github.com/anthonyvsmuller/quire/internal/shared/grpcx"
@@ -36,7 +37,7 @@ func serve(t *testing.T) quirev1.AuthServiceClient {
 
 	cfg := nodeConfig(t)
 
-	container, err := identitydi.Initialize(cfg, pool)
+	container, err := identitydi.Initialize(cfg, pool, federationdi.Initialize(pool).Servers)
 	if err != nil {
 		t.Fatalf("building the identity slice: %v", err)
 	}

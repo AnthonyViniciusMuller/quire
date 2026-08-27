@@ -110,9 +110,15 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 ## Phase 6 — federation slice (UC12, UC13, UC15)
 
-- [ ] `feat: add server domain entity and repository` — takes over
+- [x] `feat: add server domain entity and repository` — takes over
       `internal/identity/infra/service/localserver`, the temporary adapter phase 5 needed in
-      order to bind a reader to this node (UC14)
+      order to bind a reader to this node (UC14). The replica authorization entity and its
+      repository land here as well: it is the second entity the slice owns, one sqlc run
+      generates both, and the use cases that follow then build on a slice whose persistence
+      is finished. So does the slice's `di.Container`, because the identity slice needs the
+      catalogue from it and `cmd/quired` is where the two are wired. C15 in
+      [`tcc-corrections.md`](tcc-corrections.md) records what the table being node-wide means
+      for UC12
 - [ ] `feat: add well-known discovery client` — carries the `grpc` authority and the
       `spki-sha256:` pin the endpoints publish, per D06 and C12 in
       [`tcc-corrections.md`](tcc-corrections.md); the column and the `ServerDescriptor`

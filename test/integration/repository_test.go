@@ -9,6 +9,7 @@ import (
 	"time"
 	"uuid"
 
+	serverrepository "github.com/anthonyvsmuller/quire/internal/federation/infra/repository/server"
 	"github.com/anthonyvsmuller/quire/internal/identity/domain/credential"
 	"github.com/anthonyvsmuller/quire/internal/identity/domain/device"
 	"github.com/anthonyvsmuller/quire/internal/identity/domain/user"
@@ -16,6 +17,7 @@ import (
 	devicerepository "github.com/anthonyvsmuller/quire/internal/identity/infra/repository/device"
 	userrepository "github.com/anthonyvsmuller/quire/internal/identity/infra/repository/user"
 	localserverservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/localserver"
+	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/errs"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 )
@@ -38,7 +40,7 @@ func newRepositories(t *testing.T) repositories {
 	cfg := nodeConfig(t)
 	manager := persist.NewManager(pool)
 
-	serverID, err := localserverservice.New(manager, &cfg.Server).ID(t.Context())
+	serverID, err := localServer(t, manager, cfg).ID(t.Context())
 	if err != nil {
 		t.Fatalf("resolving this node's catalogue row: %v", err)
 	}
@@ -50,6 +52,18 @@ func newRepositories(t *testing.T) repositories {
 		credentials: credentialrepository.New(manager),
 		serverID:    serverID,
 	}
+}
+
+// localServer is the resolver of UC14, over the federation slice's catalogue.
+func localServer(t *testing.T, manager *persist.Manager, cfg *config.Config) *localserverservice.Service {
+	t.Helper()
+
+	resolver, err := localserverservice.New(serverrepository.New(manager), &cfg.Server)
+	if err != nil {
+		t.Fatalf("building the local server resolver: %v", err)
+	}
+
+	return resolver
 }
 
 // reader is a registered reader, written.
@@ -87,13 +101,13 @@ func TestLocalServerIsIdempotent(t *testing.T) {
 	cfg := nodeConfig(t)
 	manager := persist.NewManager(pool)
 
-	first, err := localserverservice.New(manager, &cfg.Server).ID(t.Context())
+	first, err := localServer(t, manager, cfg).ID(t.Context())
 	if err != nil {
 		t.Fatalf("the first resolution: %v", err)
 	}
 
 	// A different instance of the resolver, as a restarted process would build.
-	second, err := localserverservice.New(manager, &cfg.Server).ID(t.Context())
+	second, err := localServer(t, manager, cfg).ID(t.Context())
 	if err != nil {
 		t.Fatalf("the second resolution: %v", err)
 	}

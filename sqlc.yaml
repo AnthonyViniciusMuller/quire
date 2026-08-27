@@ -2,8 +2,8 @@
 #
 # One block per slice, each generating into the slice that owns it. The blocks
 # appear as their slices do: a block whose queries directory is empty makes the
-# whole run fail, so the three still missing — federation, library and reading —
-# are added by the phases that write their first query. See docs/ROADMAP.md.
+# whole run fail, so the two still missing — library and reading — are added by
+# the phases that write their first query. See docs/ROADMAP.md.
 #
 # The schema is the migrations directory, whole. sqlc reads it as the catalogue
 # every query is checked against, and skips the .down.sql files on its own, so
@@ -88,8 +88,23 @@ sql:
           - column: "reading.annotations.vector_clock"
             go_type: *vectorclock
 
-  # The sync slice. Its overrides are the same set, so it takes the anchor
-  # above rather than a copy that could drift from it.
+  # The federation slice. Its overrides are the same set, so it takes the
+  # anchor above rather than a copy that could drift from it.
+  - engine: postgresql
+    schema: migrations
+    queries: internal/federation/infra/persist/queries
+    gen:
+      go:
+        package: federationdb
+        out: internal/federation/infra/persist/federationdb
+        sql_package: pgx/v5
+        emit_interface: true
+        emit_empty_slices: true
+        emit_pointers_for_null_types: true
+        omit_unused_structs: true
+        overrides: *overrides
+
+  # The sync slice, on the same terms.
   - engine: postgresql
     schema: migrations
     queries: internal/sync/infra/persist/queries

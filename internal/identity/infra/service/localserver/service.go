@@ -1,10 +1,18 @@
-// Package localserver answers which node this is, from the catalogue in
-// federation.servers.
+// Package localserver answers which node this is, out of the catalogue the
+// federation slice owns.
 //
-// It is the temporary adapter of the port the identity use cases hold. The
-// catalogue belongs to the federation slice, which lands in phase 6; until it
-// does, UC14 still has to bind a reader to a row that exists, and this creates
-// that one row from the node's own configuration.
+// It is the adapter of the LocalServer port the identity use cases hold. UC14
+// binds a reader to the node they registered with, so registering one needs
+// the row in federation.servers that says which node this is — the identifier
+// every reader's origin_server_id points at (RN08) — and the domain that forms
+// the second half of their federated identifier (RN09).
+//
+// Phase 5 satisfied that port with a resolver of its own, which wrote the row
+// from a query the identity slice carried because the federation slice did not
+// exist yet. This is what replaced it: the row is written through
+// server.Repository, the catalogue's own port, and the query has gone back to
+// the slice that owns the table. The use cases did not change, which is what
+// having declared a port was for.
 package localserver
 
 import (
@@ -12,28 +20,31 @@ import (
 	"sync"
 	"uuid"
 
+	"github.com/anthonyvsmuller/quire/internal/federation/domain/server"
 	"github.com/anthonyvsmuller/quire/internal/identity/application/service"
 	"github.com/anthonyvsmuller/quire/internal/identity/domain/user"
-	"github.com/anthonyvsmuller/quire/internal/identity/infra/persist/identitydb"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
-	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 	"github.com/anthonyvsmuller/quire/internal/shared/wellknown"
 )
 
-// opID is the operation reported by this file, in the form the errs package
-// expects.
-const opID = "identity/localserver: id"
-
 // Service resolves this node's row in the catalogue, once.
 type Service struct {
-	manager *persist.Manager
+	servers server.Repository
 
-	domain  user.ServerDomain
-	baseURL string
-	jwksURI string
+	// descriptor is this node as its own configuration describes it. A node
+	// does not discover itself, so the values come from the environment rather
+	// than from a lookup — and they are validated at construction, because a
+	// base URL the catalogue would refuse is a deployment fault and belongs to
+	// the start of the process rather than to the first registration.
+	descriptor server.Descriptor
 
-	// resolved guards the cached identifier. Which node this is does not change
-	// while the process runs, so the row is read once and every later
+	// domain is the same value in the identity slice's vocabulary. The two
+	// types are separate on purpose — see server.Domain — and this is the one
+	// place they meet.
+	domain user.ServerDomain
+
+	// resolved guards the cached identifier. Which node this is does not
+	// change while the process runs, so the row is read once and every later
 	// registration is spared the statement — but the first two registrations
 	// can arrive together, and without the lock both would write it.
 	resolved sync.Mutex
@@ -43,16 +54,29 @@ type Service struct {
 // Service satisfies the port the use cases hold.
 var _ service.LocalServer = (*Service)(nil)
 
-// New returns the resolver for the node described by server.
-func New(manager *persist.Manager, server *config.Server) *Service {
-	base := server.BaseURL.String()
+// New returns the resolver for the node described by cfg, over the catalogue.
+//
+// It fails when the node's own description is not one the catalogue could
+// hold. That is a misconfiguration, and the node is better stopped by it here
+// than answering registrations until somebody notices.
+func New(servers server.Repository, cfg *config.Server) (*Service, error) {
+	base := cfg.BaseURL.String()
+
+	descriptor := server.Descriptor{
+		Domain:  server.ParseDomain(cfg.Name),
+		BaseURL: server.BaseURL(base),
+		JWKSURI: server.JWKSURI(base + wellknown.JWKSPath),
+	}
+
+	if err := descriptor.Validate(); err != nil {
+		return nil, err
+	}
 
 	return &Service{
-		manager: manager,
-		domain:  user.ServerDomain(server.Name),
-		baseURL: base,
-		jwksURI: base + wellknown.JWKSPath,
-	}
+		servers:    servers,
+		descriptor: descriptor,
+		domain:     user.ParseServerDomain(cfg.Name),
+	}, nil
 }
 
 // Domain is the second half of every identifier this node issues.
@@ -61,8 +85,8 @@ func (s *Service) Domain() user.ServerDomain { return s.domain }
 // ID is this node's row in the catalogue, created on the first call.
 //
 // The statement runs on whatever the context is running in, so a registration
-// that opened a transaction gets the row inside it. That is deliberate: the row
-// the reader is about to reference and the reader themselves then commit
+// that opened a transaction gets the row inside it. That is deliberate: the
+// row the reader is about to reference and the reader themselves then commit
 // together, and a rolled back registration leaves no half-written catalogue.
 func (s *Service) ID(ctx context.Context) (uuid.UUID, error) {
 	s.resolved.Lock()
@@ -72,19 +96,15 @@ func (s *Service) ID(ctx context.Context) (uuid.UUID, error) {
 		return s.id, nil
 	}
 
-	id, err := identitydb.New(s.manager.Executor(ctx)).EnsureLocalServer(ctx, identitydb.EnsureLocalServerParams{
-		Domain:  s.domain.String(),
-		BaseUrl: s.baseURL,
-		JwksUri: &s.jwksURI,
-	})
+	local, err := s.servers.EnsureLocal(ctx, s.descriptor)
 	if err != nil {
-		return uuid.UUID{}, persist.Classify(err, opID)
+		return uuid.UUID{}, err
 	}
 
-	// Cached only after it committed to being this node's row. A failure leaves
-	// the next call to try again, which is what an unreachable database at
-	// startup deserves.
-	s.id = id
+	// Cached only after it committed to being this node's row. A failure
+	// leaves the next call to try again, which is what an unreachable database
+	// at startup deserves.
+	s.id = local.ID
 
-	return id, nil
+	return s.id, nil
 }

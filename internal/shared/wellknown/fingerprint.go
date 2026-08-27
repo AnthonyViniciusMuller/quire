@@ -13,11 +13,16 @@ import (
 // The operations reported by this file, in the form the errs package expects.
 const opFingerprint = "shared/wellknown: fingerprint"
 
-// pinPrefix names what the digest covers. A pin that says what it is over can
+// PinPrefix names what the digest covers. A pin that says what it is over can
 // be replaced later by one over something else without a reader having to
 // guess which it is holding, and it is what makes the published value
 // self-describing rather than merely a hash.
-const pinPrefix = "spki-sha256:"
+//
+// It is exported because both ends of the exchange need it: this package
+// writes the value into the document, and the federation slice recognizes it
+// on the way back in. Two definitions of one wire constant is how a publisher
+// and a reader come to disagree about a format neither of them changed.
+const PinPrefix = "spki-sha256:"
 
 // certificateBlock is the PEM label of a certificate.
 const certificateBlock = "CERTIFICATE"
@@ -71,5 +76,5 @@ func Fingerprint(path string) (string, error) {
 func FingerprintOf(certificate *x509.Certificate) string {
 	digest := sha256.Sum256(certificate.RawSubjectPublicKeyInfo)
 
-	return pinPrefix + base64.StdEncoding.EncodeToString(digest[:])
+	return PinPrefix + base64.StdEncoding.EncodeToString(digest[:])
 }
