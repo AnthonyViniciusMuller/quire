@@ -1,0 +1,268 @@
+// The replication mechanism: the log of changes, how a device sends its own,
+// and how it collects everybody else's.
+//
+// UC09 (synchronize metadata between nodes), UC10 (share changes between a
+// reader's devices) and UC11 (reconcile after reconnection). RF10, RF12, RN02,
+// RN06 and RN10.
+//
+// Three properties hold across this file and are what make the rest of it
+// small.
+//
+// An operation's id is minted by the device that authored the change and is the
+// same uuid on every node that ever sees it. A node receiving the same
+// operation twice — from the device, and again from a peer that also replicates
+// the reader — recognizes it by that id, so receiving is idempotent and
+// deduplication never has to compare payloads.
+//
+// An operation's position is node-local. It is one node's order for one
+// reader's log, and two nodes number the same operations differently. A device
+// that pulls from two nodes therefore keeps one cursor per node.
+//
+// The log is append-only. An operation is never edited after it is written.
+// What changes is which peers have received it, and that is recorded elsewhere.
+syntax = "proto3";
+
+package quire.v1;
+
+import "google/protobuf/struct.proto";
+import "quire/v1/common.proto";
+
+option go_package = "github.com/anthonyvsmuller/quire/internal/gen/quire/v1;quirev1";
+
+service SyncService {
+  // UC09, outbound. Hands this node the changes a device authored, typically
+  // while it was disconnected (UC11).
+  //
+  // RN10: every operation must declare the device that is making the call.
+  // A batch containing one that does not fails whole, with PermissionDenied,
+  // rather than reporting a per-operation rejection — a batch with a forged
+  // author in it is not a batch any of which should be trusted.
+  rpc PushOperations(PushOperationsRequest) returns (PushOperationsResponse);
+
+  // UC09, inbound, and the whole of RN06: everything after the cursor, which
+  // is a position and not a timestamp. C08 in docs/tcc-corrections.md sets out
+  // why it cannot be a timestamp — an operation stamped early and committed
+  // late is skipped by a cursor that has already moved past it, and it is not
+  // delayed, it is lost.
+  rpc PullOperations(PullOperationsRequest) returns (PullOperationsResponse);
+
+  // UC10 and UC11 in one call: the same push and pull, kept open, so that a
+  // change made on one device reaches the reader's other devices as it happens
+  // rather than at the next poll. A device that has just reconnected drains its
+  // backlog through the same stream it then leaves open.
+  rpc Sync(stream SyncRequest) returns (stream SyncResponse);
+
+  // UC09 between nodes rather than between a device and its node.
+  //
+  // This is the only RPC in the contract whose caller is a peer node and not a
+  // reader's device, and it is authenticated differently for that reason: by
+  // the certificate fingerprint learned during discovery (RNF08), not by a JWT
+  // (RNF11). It names the reader explicitly, because a peer replicates many and
+  // the certificate identifies the node rather than any one of them.
+  //
+  // There is no peer-facing pull to match it. Replication is driven from the
+  // side that owes the data: the origin holds a delivery row per operation and
+  // destination, retries it with backoff until the destination confirms, and a
+  // peer that was unreachable for a week is caught up by that queue rather than
+  // by asking.
+  rpc ReplicateOperations(ReplicateOperationsRequest) returns (ReplicateOperationsResponse);
+}
+
+// Which record an operation changed. Named logically rather than by table, so
+// that the same name travels in this contract, in the node's schema and in the
+// SQLite schema on the device.
+enum TargetEntity {
+  TARGET_ENTITY_UNSPECIFIED = 0;
+  TARGET_ENTITY_EBOOK = 1;
+  TARGET_ENTITY_COLLECTION = 2;
+  TARGET_ENTITY_EBOOK_COLLECTION = 3;
+  TARGET_ENTITY_READING_PROGRESS = 4;
+  TARGET_ENTITY_ANNOTATION = 5;
+}
+
+// What the operation did to that record. Deletion is a write like any other:
+// it sets the tombstone, and reconciles against a concurrent edit by the same
+// rule everything else does.
+enum OperationKind {
+  OPERATION_KIND_UNSPECIFIED = 0;
+  OPERATION_KIND_INSERT = 1;
+  OPERATION_KIND_UPDATE = 2;
+  OPERATION_KIND_DELETE = 3;
+}
+
+// What became of one operation the caller offered.
+enum OperationOutcome {
+  OPERATION_OUTCOME_UNSPECIFIED = 0;
+
+  // Stored, and it changed the record.
+  OPERATION_OUTCOME_APPLIED = 1;
+
+  // Already in this node's log, by id. Nothing was done, and nothing is wrong:
+  // an operation reaching a node twice by two routes is the normal shape of a
+  // federation, not a fault.
+  OPERATION_OUTCOME_DUPLICATE = 2;
+
+  // Stored, and it lost the merge. The record already held a version that this
+  // one does not causally precede and does not beat on the tie-break, so the
+  // operation is kept in the log — a later node must reach the same conclusion
+  // from the same history — and the record is unchanged.
+  OPERATION_OUTCOME_SUPERSEDED = 3;
+
+  // Refused. The detail says why: a target that no longer exists, an entity
+  // name this node does not know. A caller cannot fix most of these by
+  // retrying.
+  OPERATION_OUTCOME_REJECTED = 4;
+}
+
+// One change to one record, as it travels between nodes.
+message Operation {
+  // Minted by the authoring device, and identical on every node that ever sees
+  // it. A node never generates one of its own on receipt.
+  string id = 1;
+
+  // The device that authored the change. RN10 requires it to be the device
+  // making the call, which is what stops one device from writing under
+  // another's clock entry.
+  string device_id = 2;
+
+  TargetEntity target_entity = 3;
+  string target_id = 4;
+  OperationKind operation = 5;
+
+  // The changed fields and nothing else (RN06). An object, never a whole
+  // record: reconciliation is per-field, so a delta naming two fields claims
+  // those two and leaves the rest to whichever device wrote them last.
+  google.protobuf.Struct delta = 6;
+
+  // The causal version the change was authored at, which is what the reconciler
+  // consults before anything else (RN02).
+  VectorClock vector_clock = 7;
+
+  // Stamped by the authoring device on the clock C01 describes, and the reason
+  // that clock has to be hybrid rather than a wall clock: it is the tie-break
+  // for the concurrent case, and a wall clock makes that relation cyclic.
+  HybridTimestamp created_at = 8;
+
+  // This node's order for this reader's log, assigned when the operation was
+  // stored here. It is meaningless in a request and ignored if set: the sender
+  // cannot know a number the receiver has not allocated yet.
+  int64 position = 9;
+}
+
+// The verdict on one operation.
+message OperationResult {
+  string operation_id = 1;
+  OperationOutcome outcome = 2;
+
+  // Populated for a rejection, and for the operator rather than the reader.
+  string detail = 3;
+}
+
+// A group of operations travelling together. It is a message rather than a
+// bare repeated field because the sync stream carries it in both directions.
+message OperationBatch {
+  repeated Operation operations = 1;
+}
+
+message PushOperationsRequest {
+  repeated Operation operations = 1;
+}
+
+message PushOperationsResponse {
+  // One result per operation offered, in the order they were offered.
+  repeated OperationResult results = 1;
+
+  // This node's head position for the reader after the push. A device that has
+  // just pushed learns from it whether there is anything to pull, without
+  // asking.
+  int64 last_position = 2;
+}
+
+message PullOperationsRequest {
+  // Everything strictly after this position, in order. Zero means from the
+  // beginning, which is what a device that has just been bound asks for.
+  //
+  // The position is this node's. A device that also pulls from a replica keeps
+  // that node's cursor separately, and the two numbers have nothing to do with
+  // each other.
+  int64 after_position = 1;
+
+  // Zero asks the server to choose.
+  int32 limit = 2;
+}
+
+message PullOperationsResponse {
+  // In ascending position order. A reader that has seen position N has
+  // necessarily seen every position below it — that is what allocating the
+  // number inside the writing transaction buys, and it is what lets the cursor
+  // be a single number rather than a set.
+  repeated Operation operations = 1;
+
+  // The position of the last operation returned, and the cursor to send next
+  // time. It is not this node's head: with has_more true there is more behind
+  // it.
+  int64 last_position = 2;
+
+  bool has_more = 3;
+}
+
+message SyncRequest {
+  oneof payload {
+    // Exactly once, as the first message of the stream. It carries the cursor,
+    // so the stream begins by draining what the device missed and then stays
+    // open for what happens next.
+    SyncStart start = 1;
+
+    // Changes the device authored, at any point after the start.
+    OperationBatch push = 2;
+
+    // The device confirms it has durably stored everything up to a position.
+    // The node advances the device's cursor on this and not on what it sent:
+    // an operation written to a socket is not an operation written to disk, and
+    // a device that dies in between must come back to the same place.
+    SyncAck ack = 3;
+  }
+}
+
+message SyncResponse {
+  oneof payload {
+    // Changes the device has not seen, sent as they are found and as they
+    // arrive from elsewhere.
+    OperationBatch operations = 1;
+
+    // The verdicts on a push, one result per operation offered.
+    SyncPushResult push_result = 2;
+  }
+}
+
+message SyncStart {
+  int64 after_position = 1;
+}
+
+message SyncAck {
+  int64 position = 1;
+}
+
+message SyncPushResult {
+  repeated OperationResult results = 1;
+}
+
+message ReplicateOperationsRequest {
+  // The reader whose log these operations belong to. A device-facing call takes
+  // this from the session; a peer-facing one cannot, because the certificate
+  // identifies the calling node and not a reader.
+  //
+  // The node serves the call only if that reader has an active authorization
+  // for the calling node (RF16, UC15). Nothing else in this contract is refused
+  // on the reader's own instruction, and RN03 is why this one is.
+  string user_id = 1;
+
+  repeated Operation operations = 2;
+}
+
+message ReplicateOperationsResponse {
+  // What the destination did with each operation. The origin marks its delivery
+  // rows applied from this, and anything not confirmed here is retried — which
+  // is safe precisely because receiving is idempotent by operation id.
+  repeated OperationResult results = 1;
+}

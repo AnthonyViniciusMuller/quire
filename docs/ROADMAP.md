@@ -48,7 +48,7 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add auth service protobuf definition`
 - [x] `feat: add library service protobuf definition`
 - [x] `feat: add reading service protobuf definition`
-- [ ] `feat: add sync service protobuf definition`
+- [x] `feat: add sync service protobuf definition`
 - [ ] `feat: add federation service protobuf definition`
 
 ## Phase 4 — Servers
