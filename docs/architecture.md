@@ -129,6 +129,15 @@ double written eight times drifts eight ways. They are fakes and not mocks — t
 repository enforces the uniqueness of RN09, so a test can exercise the duplicate registration
 path that an index decides in production.
 
+### The authentication interceptor belongs to the slice, not to `cmd`
+
+The reference puts its permission middleware under `cmd/rest/middleware/`, where it reaches
+into the auth slice for the service that verifies a token. Quire puts the equivalent in
+`internal/identity/infra/grpc/authn`, because the identity slice is the only part of the node
+that holds a signing key — which is what `internal/shared/grpcx` says when it documents the one
+interceptor its own chain does not include. What `cmd/quired` does is install it, not implement
+it.
+
 ### Repositories take a `context.Context`
 
 The reference's repository methods take none and call `context.Background()` internally. Quire
