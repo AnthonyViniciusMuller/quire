@@ -21,6 +21,22 @@ type Querier interface {
 	// shelf; what is tombstoned with the grouping are the memberships, by the
 	// statements in memberships.sql and in the same transaction.
 	CreateCollection(ctx context.Context, arg CreateCollectionParams) error
+	// The files this node actually holds, keyed by the digest of each (D02 in
+	// docs/tcc-corrections.md — an extension to the MER, which models only the
+	// metadata).
+	//
+	// Nothing here is scoped to a reader, and that is the point rather than an
+	// omission: the table is keyed by the digest, so two readers who imported the
+	// same file and one reader who imported it on two devices converge on one
+	// object. What is per-reader is library.ebooks, which names the digest and
+	// does not reference this table — a node replicating a reader without their
+	// files has every work row and none of these.
+	//
+	// There is no statement that removes a row. A file two readers hold is a file
+	// one of them deleting must not take from the other, so reclaiming an object
+	// means asking whether any work still names the digest — which is a sweep, not
+	// a cascade, and belongs to an operator's job rather than to a reader's call.
+	CreateContent(ctx context.Context, arg CreateContentParams) error
 	// The works in a reader's collection (RF01, RF04; UC01, UC02).
 	//
 	// Every statement here is scoped to one reader, and the ones that are not
@@ -71,6 +87,7 @@ type Querier interface {
 	// Outside a transaction it locks nothing worth having: the lock is released
 	// with the statement. The port says so.
 	GetCollectionByIDForUpdate(ctx context.Context, id uuid.UUID) (LibraryCollection, error)
+	GetContentByHash(ctx context.Context, contentHash string) (LibraryEbookContent, error)
 	// Tombstoned or not, because the caller is the one that knows what it is for:
 	// a reader asking to see the work is answered that there is none, and a reader
 	// asking to delete it again is answered that it is already gone.
@@ -78,6 +95,11 @@ type Querier interface {
 	// The register of one pair, set or cleared. A pair that has never been written
 	// is no row, which the caller answers by creating one rather than by failing.
 	GetMembershipByPair(ctx context.Context, arg GetMembershipByPairParams) (LibraryEbookCollection, error)
+	// Whether this node holds the bytes, which is what a creation is answered
+	// with. It is a separate statement from the read above because the answer is a
+	// boolean the caller acts on rather than a row it renders, and asking the
+	// primary key for its own existence is an index-only lookup.
+	HasContent(ctx context.Context, contentHash string) (bool, error)
 	// A reader's groupings, ordered by name so that the list does not reshuffle
 	// between two calls, with the identifier as the tie-break because names are
 	// not unique — a reader may well have two shelves called "later".

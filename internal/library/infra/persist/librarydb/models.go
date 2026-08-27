@@ -51,3 +51,12 @@ type LibraryEbookCollection struct {
 	DeviceID     *uuid.UUID
 	Deleted      bool
 }
+
+type LibraryEbookContent struct {
+	ContentHash   string
+	SizeBytes     int64
+	MediaType     string
+	StorageBucket string
+	StorageKey    string
+	CreatedAt     time.Time
+}

@@ -606,6 +606,32 @@ described. The port is required where the value is present: an authority without
 silently mean 443, which is the port the HTTP listener answers on in the deployment where the
 two do differ, and that is the deployment the column exists for.
 
+### D08 — the object store is addressed through three vendor SDKs
+
+`servidor` and the deployment diagram assume one object store. The implementation declares
+one port, `service.BlobStore`, and three adapters behind it — Amazon S3 through
+`aws-sdk-go-v2`, MinIO through `minio-go`, and Cloud Storage through `cloud.google.com/go/storage`
+— and the node builds whichever one the configuration named. Subsection 4.2.4 has to record
+that the store is a port rather than a product, and that the row in `library.ebook_contents`
+carries the bucket alongside the key so that a node moved between providers can still read
+what it stored under the old one.
+
+Two of the three speak the same protocol. MinIO *is* the S3 API, and Cloud Storage has an
+XML API that accepts SigV4 with HMAC keys, so a single hand-written client would have served
+all three at no dependency cost. The decision was to use the SDK each provider publishes
+instead, and the price is worth stating rather than discovering: the module graph goes from
+12 direct and 13 indirect dependencies to 20 and 66. `cloud.google.com/go/storage` accounts
+for most of it — it links 628 packages against the 233 of the AWS client and the 216 of the
+MinIO one, because its client carries an OpenTelemetry and Cloud Monitoring chain this node
+never uses.
+
+The reason to pay it is that each adapter is the code its provider's own documentation
+describes, which is what a deployment against that provider is supported running, and what a
+reader of this project can check against an upstream reference rather than against a
+signature implementation nobody else has reviewed.
+
+**Status** open. Implemented in phase 7.
+
 ### D07 — the refresh credential is rotated, and reuse of a spent one ends the device's sessions
 
 RF07 and RF08 say that the reader logs in and out; `token_acesso` holds a renewal credential

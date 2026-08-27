@@ -15,14 +15,14 @@ import (
 // else has a default.
 func requiredEnv() map[string]string {
 	return map[string]string{
-		"QUIRE_SERVER_NAME":               "quire-a.example",
-		"QUIRE_DATABASE_URL":              "postgres://quire:quire@localhost:5432/quire?sslmode=disable",
-		"QUIRE_STORAGE_ENDPOINT":          "http://localhost:9000",
-		"QUIRE_STORAGE_BUCKET":            "quire-contents",
-		"QUIRE_STORAGE_ACCESS_KEY_ID":     "quire",
-		"QUIRE_STORAGE_SECRET_ACCESS_KEY": "quire-secret",
-		"QUIRE_AUTH_PRIVATE_KEY_PEM":      "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
-		"QUIRE_AUTH_KEY_ID":               "2026-08",
+		"QUIRE_SERVER_NAME":                     "quire-a.example",
+		"QUIRE_DATABASE_URL":                    "postgres://quire:quire@localhost:5432/quire?sslmode=disable",
+		"QUIRE_STORAGE_BUCKET":                  "quire-contents",
+		"QUIRE_STORAGE_MINIO_ENDPOINT":          "localhost:9000",
+		"QUIRE_STORAGE_MINIO_ACCESS_KEY_ID":     "quire",
+		"QUIRE_STORAGE_MINIO_SECRET_ACCESS_KEY": "quire-secret",
+		"QUIRE_AUTH_PRIVATE_KEY_PEM":            "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
+		"QUIRE_AUTH_KEY_ID":                     "2026-08",
 	}
 }
 
@@ -76,8 +76,8 @@ func TestLoadFromAppliesDefaults(t *testing.T) {
 		{"shutdown timeout", cfg.Server.ShutdownTimeout, 15 * time.Second},
 		{"max connections", cfg.Database.MaxConnections, 10},
 		{"min connections", cfg.Database.MinConnections, 2},
-		{"storage region", cfg.Storage.Region, "us-east-1"},
-		{"storage path style", cfg.Storage.UsePathStyle, true},
+		{"storage provider", cfg.Storage.Provider(), config.StorageProviderMinIO},
+		{"minio tls", cfg.Storage.MinIO.UseTLS, false},
 		{"access token ttl", cfg.Auth.AccessTokenTTL, 15 * time.Minute},
 		{"refresh token ttl", cfg.Auth.RefreshTokenTTL, 30 * 24 * time.Hour},
 		{"bcrypt cost", cfg.Auth.BcryptCost, 12},
@@ -142,6 +142,138 @@ func TestLoadFromDerivesTheAdvertisedAddressFromAnyListenAddress(t *testing.T) {
 	}
 }
 
+// The object store is chosen by which section the deployment filled in rather
+// than by a provider variable, so that a name and the credentials beside it
+// cannot disagree.
+func TestStorageProviderIsTheSectionThatWasFilledIn(t *testing.T) {
+	t.Parallel()
+
+	bare := map[string]string{
+		"QUIRE_SERVER_NAME":          "quire-a.example",
+		"QUIRE_DATABASE_URL":         "postgres://quire:quire@localhost:5432/quire?sslmode=disable",
+		"QUIRE_STORAGE_BUCKET":       "quire-contents",
+		"QUIRE_AUTH_PRIVATE_KEY_PEM": "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
+		"QUIRE_AUTH_KEY_ID":          "2026-08",
+	}
+
+	tests := map[string]struct {
+		section map[string]string
+		want    config.StorageProvider
+	}{
+		"minio": {map[string]string{
+			"QUIRE_STORAGE_MINIO_ENDPOINT":          "localhost:9000",
+			"QUIRE_STORAGE_MINIO_ACCESS_KEY_ID":     "quire",
+			"QUIRE_STORAGE_MINIO_SECRET_ACCESS_KEY": "quire-secret",
+		}, config.StorageProviderMinIO},
+		"s3": {map[string]string{
+			"QUIRE_STORAGE_S3_REGION":            "sa-east-1",
+			"QUIRE_STORAGE_S3_ACCESS_KEY_ID":     "AKIA",
+			"QUIRE_STORAGE_S3_SECRET_ACCESS_KEY": "secret",
+		}, config.StorageProviderS3},
+		"gcs": {map[string]string{
+			"QUIRE_STORAGE_GCS_PROJECT_ID": "quire-tcc",
+		}, config.StorageProviderGCS},
+	}
+
+	for name, testCase := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			env := maps.Clone(bare)
+			maps.Copy(env, testCase.section)
+
+			if got := load(t, env).Storage.Provider(); got != testCase.want {
+				t.Errorf("Provider() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+// A deployment that named two stores has not said which of them holds the
+// objects the rows already point at, and picking one would be picking which
+// half of the library still opens.
+func TestValidateRefusesMoreThanOneObjectStore(t *testing.T) {
+	t.Parallel()
+
+	reported := loadErr(t, envWith(t, map[string]string{"QUIRE_STORAGE_GCS_PROJECT_ID": "quire-tcc"}))
+
+	for _, want := range []string{"minio", "gcs"} {
+		if !strings.Contains(reported, want) {
+			t.Errorf("LoadFrom() error = %q, which does not name %s", reported, want)
+		}
+	}
+}
+
+func TestValidateRefusesANodeWithNowhereToPutAFile(t *testing.T) {
+	t.Parallel()
+
+	env := envWith(t, nil)
+	for key := range env {
+		if strings.HasPrefix(key, "QUIRE_STORAGE_MINIO_") {
+			delete(env, key)
+		}
+	}
+
+	reported := loadErr(t, env)
+	if !strings.Contains(reported, "no object store was configured") {
+		t.Errorf("LoadFrom() error = %q, which does not say that no store was configured", reported)
+	}
+}
+
+// MinIO has no credential chain to fall back on, so half a section is a
+// deployment that meant to configure it and got it wrong — which is worth
+// being told, rather than being told that no store was named.
+func TestValidateRefusesAnIncompleteMinIOSection(t *testing.T) {
+	t.Parallel()
+
+	env := envWith(t, nil)
+	delete(env, "QUIRE_STORAGE_MINIO_SECRET_ACCESS_KEY")
+
+	reported := loadErr(t, env)
+	if !strings.Contains(reported, "QUIRE_STORAGE_MINIO_SECRET_ACCESS_KEY") {
+		t.Errorf("LoadFrom() error = %q, which does not name the missing half", reported)
+	}
+}
+
+// The SDK takes an authority and not a URL, and a value with a scheme in it is
+// a mistake that would otherwise surface as a dial failure at the first import.
+func TestValidateRefusesAMinIOEndpointWithAScheme(t *testing.T) {
+	t.Parallel()
+
+	reported := loadErr(t, envWith(t, map[string]string{
+		"QUIRE_STORAGE_MINIO_ENDPOINT": "http://localhost:9000",
+	}))
+
+	if !strings.Contains(reported, "without a scheme") {
+		t.Errorf("LoadFrom() error = %q", reported)
+	}
+}
+
+// The SDK's own credential chain lives in modules this node does not depend
+// on, so a region without a key pair is a node that would fail at the first
+// import rather than at startup.
+func TestValidateRefusesAnIncompleteS3Section(t *testing.T) {
+	t.Parallel()
+
+	env := envWith(t, map[string]string{"QUIRE_STORAGE_S3_REGION": "sa-east-1"})
+	for key := range env {
+		if strings.HasPrefix(key, "QUIRE_STORAGE_MINIO_") {
+			delete(env, key)
+		}
+	}
+
+	if reported := loadErr(t, env); !strings.Contains(reported, "QUIRE_STORAGE_S3_ACCESS_KEY_ID") {
+		t.Errorf("LoadFrom() error = %q, which does not name the missing credentials", reported)
+	}
+
+	env["QUIRE_STORAGE_S3_ACCESS_KEY_ID"] = "AKIA"
+	env["QUIRE_STORAGE_S3_SECRET_ACCESS_KEY"] = "secret"
+
+	if got := load(t, env).Storage.Provider(); got != config.StorageProviderS3 {
+		t.Errorf("Provider() = %q, want s3", got)
+	}
+}
+
 // Outside development the listen port and the port peers dial are routinely
 // different — a node behind a gateway listens on 9090 and is reached on 443 —
 // so a derived value would publish an address nobody can connect to.
@@ -161,6 +293,7 @@ func TestValidateAcceptsAnAdvertisedAddressGivenExplicitly(t *testing.T) {
 	cfg := load(t, envWith(t, map[string]string{
 		"QUIRE_ENV":                     "production",
 		"QUIRE_GRPC_ADVERTISED_ADDRESS": "quire-a.example:443",
+		"QUIRE_STORAGE_MINIO_USE_TLS":   "true",
 	}))
 
 	if got, want := cfg.Server.GRPCAdvertisedAddress, "quire-a.example:443"; got != want {
@@ -210,17 +343,17 @@ func TestLoadFromTreatsBlankValuesAsUnset(t *testing.T) {
 	// Container tooling routinely injects empty variables; they must fall back
 	// to the default rather than override it with an empty string.
 	cfg := load(t, envWith(t, map[string]string{
-		"QUIRE_GRPC_ADDRESS":     "  ",
-		"QUIRE_STORAGE_REGION":   "",
-		"QUIRE_AUTH_BCRYPT_COST": "",
+		"QUIRE_GRPC_ADDRESS":             "  ",
+		"QUIRE_DATABASE_MAX_CONNECTIONS": "",
+		"QUIRE_AUTH_BCRYPT_COST":         "",
 	}))
 
 	if got, want := cfg.Server.GRPCAddress, ":9090"; got != want {
 		t.Errorf("GRPCAddress = %q, want %q", got, want)
 	}
 
-	if got, want := cfg.Storage.Region, "us-east-1"; got != want {
-		t.Errorf("Region = %q, want %q", got, want)
+	if got, want := cfg.Database.MaxConnections, 10; got != want {
+		t.Errorf("MaxConnections = %d, want %d", got, want)
 	}
 
 	if got, want := cfg.Auth.BcryptCost, 12; got != want {
@@ -247,10 +380,7 @@ func TestLoadFromReportsEveryMissingRequiredVariable(t *testing.T) {
 	for _, key := range []string{
 		"QUIRE_SERVER_NAME",
 		"QUIRE_DATABASE_URL",
-		"QUIRE_STORAGE_ENDPOINT",
 		"QUIRE_STORAGE_BUCKET",
-		"QUIRE_STORAGE_ACCESS_KEY_ID",
-		"QUIRE_STORAGE_SECRET_ACCESS_KEY",
 		"QUIRE_AUTH_PRIVATE_KEY_PEM",
 		"QUIRE_AUTH_KEY_ID",
 	} {
@@ -270,7 +400,7 @@ func TestLoadFromRejectsMalformedValues(t *testing.T) {
 		// The decoder names the offending value, which is what a startup log
 		// needs in order to point at the wrong variable.
 		"integer":   {map[string]string{"QUIRE_DATABASE_MAX_CONNECTIONS": "many"}, `"many"`},
-		"boolean":   {map[string]string{"QUIRE_STORAGE_USE_PATH_STYLE": "perhaps"}, `"perhaps"`},
+		"boolean":   {map[string]string{"QUIRE_STORAGE_MINIO_USE_TLS": "perhaps"}, `"perhaps"`},
 		"duration":  {map[string]string{"QUIRE_SHUTDOWN_TIMEOUT": "soon"}, `"soon"`},
 		"log level": {map[string]string{"QUIRE_LOG_LEVEL": "chatty"}, `"chatty"`},
 		"url":       {map[string]string{"QUIRE_SERVER_BASE_URL": "://nope"}, `"://nope"`},
@@ -371,9 +501,9 @@ func TestSecretNeverRendersItsValue(t *testing.T) {
 
 		// The realistic accident: dumping the whole configuration.
 		cfg := load(t, envWith(t, map[string]string{
-			"QUIRE_DATABASE_URL":              "postgres://user:" + value + "@db/quire",
-			"QUIRE_STORAGE_SECRET_ACCESS_KEY": value,
-			"QUIRE_AUTH_PRIVATE_KEY_PEM":      value,
+			"QUIRE_DATABASE_URL":                    "postgres://user:" + value + "@db/quire",
+			"QUIRE_STORAGE_MINIO_SECRET_ACCESS_KEY": value,
+			"QUIRE_AUTH_PRIVATE_KEY_PEM":            value,
 		}))
 
 		if rendered := fmt.Sprintf("%+v", cfg); strings.Contains(rendered, value) {

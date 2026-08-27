@@ -154,7 +154,11 @@ the thesis — corrections to the specification and deliberate divergences from 
       `jsonb_set` expression — the stamping rule of C01 exists once, in `crdt.Revision`, and a
       `SET` clause that recomputed it would be a second copy in a language it could not be
       tested against
-- [ ] `feat: add blob store port with s3 adapter`
+- [x] `feat: add blob store port with s3 adapter` — three adapters over one port, not one:
+      `s3`, `minio` and `gcs`, each on the SDK its provider publishes, chosen in `di` by which
+      section of `QUIRE_STORAGE_*` the deployment filled in. The `ebook_contents` entity and
+      its repository land here, because the row and the object are the same fact — this node
+      has the bytes (D02). The cost is measured and recorded in D08: 25 modules to 86
 - [ ] `feat: add ebook management use cases`
 - [ ] `feat: add collection management use cases`
 - [ ] `feat: add ebook content upload and download streaming`

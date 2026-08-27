@@ -119,25 +119,135 @@ type Database struct {
 	ConnectTimeout time.Duration `env:"QUIRE_DATABASE_CONNECT_TIMEOUT" envDefault:"10s"`
 }
 
-// Storage describes the S3-compatible object store that holds e-book files.
-// Only the file bytes live here; every piece of metadata stays in PostgreSQL.
+// StorageProvider names which object store holds the e-book files.
+//
+// It is never configured directly. The node infers it from which section of
+// [Storage] the deployment filled in, which is what [Storage.Provider]
+// answers — one bucket variable and one section, rather than a provider
+// variable that can disagree with the credentials beside it.
+type StorageProvider string
+
+// The object stores the node can be pointed at.
+const (
+	// StorageProviderNone is no section filled in.
+	StorageProviderNone StorageProvider = ""
+	// StorageProviderS3 is Amazon S3.
+	StorageProviderS3 StorageProvider = "s3"
+	// StorageProviderMinIO is a self-hosted MinIO.
+	StorageProviderMinIO StorageProvider = "minio"
+	// StorageProviderGCS is Google Cloud Storage.
+	StorageProviderGCS StorageProvider = "gcs"
+)
+
+// Storage describes the object store that holds e-book files. Only the file
+// bytes live there; every piece of metadata stays in PostgreSQL.
+//
+// There are three sections and exactly one of them is filled in. The node
+// refuses to start on none — it would have nowhere to put a file — and on more
+// than one, because a deployment that named two stores has not said which of
+// them holds the objects the rows already point at.
 type Storage struct {
-	// Endpoint is the base URL of the object store, MinIO in development and
-	// S3 or GCS in the cloud.
-	Endpoint string `env:"QUIRE_STORAGE_ENDPOINT,required,notEmpty"`
-	// Region is the bucket region.
-	Region string `env:"QUIRE_STORAGE_REGION" envDefault:"us-east-1"`
-	// Bucket holds the e-book contents, keyed by content hash.
+	// Bucket holds the e-book contents, keyed by content hash. Every provider
+	// needs one and it is the same value for all of them, so it is here rather
+	// than in each section.
 	Bucket string `env:"QUIRE_STORAGE_BUCKET,required,notEmpty"`
-	// AccessKeyID identifies the credentials.
-	AccessKeyID string `env:"QUIRE_STORAGE_ACCESS_KEY_ID,required,notEmpty"`
+
+	// S3 is Amazon S3, through the AWS SDK.
+	S3 StorageS3
+	// MinIO is a self-hosted MinIO, through the MinIO SDK.
+	MinIO StorageMinIO
+	// GCS is Google Cloud Storage, through the Cloud Storage SDK.
+	GCS StorageGCS
+}
+
+// StorageS3 addresses Amazon S3.
+type StorageS3 struct {
+	// Region is the bucket region, and the variable that selects this section:
+	// an S3 client cannot be built without one, and nothing else here is
+	// mandatory.
+	Region string `env:"QUIRE_STORAGE_S3_REGION"`
+	// AccessKeyID identifies the credentials. Both halves are required: the
+	// SDK's own credential chain — an instance role, a service account with
+	// IRSA — lives in a module this node does not depend on, and adding it for
+	// a deployment that does not exist yet is seven modules for nothing.
+	AccessKeyID string `env:"QUIRE_STORAGE_S3_ACCESS_KEY_ID"`
 	// SecretAccessKey authenticates the credentials.
-	SecretAccessKey Secret `env:"QUIRE_STORAGE_SECRET_ACCESS_KEY,required,notEmpty"`
-	// UsePathStyle addresses buckets as a path segment rather than a subdomain,
-	// which MinIO requires.
-	UsePathStyle bool `env:"QUIRE_STORAGE_USE_PATH_STYLE" envDefault:"true"`
-	// PresignTTL bounds how long a download link stays valid.
-	PresignTTL time.Duration `env:"QUIRE_STORAGE_PRESIGN_TTL" envDefault:"15m"`
+	SecretAccessKey Secret `env:"QUIRE_STORAGE_S3_SECRET_ACCESS_KEY"`
+	// Endpoint overrides the one the SDK derives from the region, for the
+	// S3-compatible services that are neither Amazon nor MinIO.
+	Endpoint string `env:"QUIRE_STORAGE_S3_ENDPOINT"`
+}
+
+// StorageMinIO addresses a self-hosted MinIO.
+type StorageMinIO struct {
+	// Endpoint is the host and port MinIO answers on, without a scheme, and
+	// the variable that selects this section.
+	Endpoint string `env:"QUIRE_STORAGE_MINIO_ENDPOINT"`
+	// AccessKeyID identifies the credentials. MinIO has no credential chain to
+	// fall back on, so both halves are required once this section is chosen.
+	AccessKeyID string `env:"QUIRE_STORAGE_MINIO_ACCESS_KEY_ID"`
+	// SecretAccessKey authenticates the credentials.
+	SecretAccessKey Secret `env:"QUIRE_STORAGE_MINIO_SECRET_ACCESS_KEY"`
+	// UseTLS dials the endpoint over HTTPS. It is false by default because the
+	// MinIO a developer runs beside the node is plain HTTP, and it is checked
+	// in production for the same reason the discovery client is.
+	UseTLS bool `env:"QUIRE_STORAGE_MINIO_USE_TLS" envDefault:"false"`
+}
+
+// StorageGCS addresses Google Cloud Storage.
+//
+// It is the one section whose credentials may be left out, and not because it
+// is special: application default credentials are built into the SDK this node
+// already depends on, so supporting them costs nothing — which is exactly what
+// the equivalent for S3 does not.
+type StorageGCS struct {
+	// ProjectID is the project the bucket belongs to, and one of the two
+	// variables that select this section.
+	ProjectID string `env:"QUIRE_STORAGE_GCS_PROJECT_ID"`
+	// CredentialsFile is the service account key. Leaving it empty hands the
+	// SDK its application default credentials, which is what Workload Identity
+	// supplies on GKE and what a developer gets from `gcloud auth`.
+	CredentialsFile string `env:"QUIRE_STORAGE_GCS_CREDENTIALS_FILE"`
+}
+
+// Provider reports which section the deployment filled in, and
+// StorageProviderNone when it filled in none.
+//
+// A section counts as filled in when any of its variables is set. That is
+// deliberately generous: a deployment that set the MinIO endpoint and forgot
+// its keys has chosen MinIO and got it wrong, and being told that is more
+// useful than being told that no store was configured.
+func (s *Storage) Provider() StorageProvider {
+	switch {
+	case s.MinIO.Endpoint != "" || s.MinIO.AccessKeyID != "" || s.MinIO.SecretAccessKey != "":
+		return StorageProviderMinIO
+	case s.GCS.ProjectID != "" || s.GCS.CredentialsFile != "":
+		return StorageProviderGCS
+	case s.S3.Region != "" || s.S3.AccessKeyID != "" || s.S3.SecretAccessKey != "" || s.S3.Endpoint != "":
+		return StorageProviderS3
+	default:
+		return StorageProviderNone
+	}
+}
+
+// providersConfigured is how many sections the deployment filled in, which is
+// what makes "exactly one" checkable.
+func (s *Storage) providersConfigured() []StorageProvider {
+	var chosen []StorageProvider
+
+	if s.MinIO.Endpoint != "" || s.MinIO.AccessKeyID != "" || s.MinIO.SecretAccessKey != "" {
+		chosen = append(chosen, StorageProviderMinIO)
+	}
+
+	if s.GCS.ProjectID != "" || s.GCS.CredentialsFile != "" {
+		chosen = append(chosen, StorageProviderGCS)
+	}
+
+	if s.S3.Region != "" || s.S3.AccessKeyID != "" || s.S3.SecretAccessKey != "" || s.S3.Endpoint != "" {
+		chosen = append(chosen, StorageProviderS3)
+	}
+
+	return chosen
 }
 
 // Auth describes token issuance, verification and password handling.
@@ -261,6 +371,7 @@ func (c *Config) Validate() error {
 		errors.Join(c.validateServer()...),
 		errors.Join(c.validateDatabase()...),
 		errors.Join(c.validateAuth()...),
+		errors.Join(c.validateStorage()...),
 		errors.Join(c.validateFederation()...),
 	)
 }
@@ -374,6 +485,105 @@ func (c *Config) validateAuth() []error {
 	if c.Auth.BcryptCost < minBcryptCost || c.Auth.BcryptCost > maxBcryptCost {
 		errs = append(errs, fmt.Errorf("QUIRE_AUTH_BCRYPT_COST: %d is outside the range %d to %d",
 			c.Auth.BcryptCost, minBcryptCost, maxBcryptCost))
+	}
+
+	return errs
+}
+
+// validateStorage checks that the deployment named exactly one object store
+// and named it completely.
+//
+// The node refuses to start on none, because it would have nowhere to put a
+// file and would only discover that at the first import. It refuses on more
+// than one for a less obvious reason: a deployment that named two has not said
+// which of them holds the objects the rows in library.ebook_contents already
+// point at, and picking one would be picking which half of the library still
+// opens.
+func (c *Config) validateStorage() []error {
+	var errs []error
+
+	chosen := c.Storage.providersConfigured()
+
+	switch len(chosen) {
+	case 1:
+	case 0:
+		return []error{errors.New("QUIRE_STORAGE_*: no object store was configured; set one of " +
+			"QUIRE_STORAGE_S3_REGION, QUIRE_STORAGE_MINIO_ENDPOINT or QUIRE_STORAGE_GCS_PROJECT_ID")}
+	default:
+		names := make([]string, 0, len(chosen))
+		for _, provider := range chosen {
+			names = append(names, string(provider))
+		}
+
+		return []error{fmt.Errorf("QUIRE_STORAGE_*: %s were all configured; a node holds its "+
+			"objects in exactly one store", strings.Join(names, " and "))}
+	}
+
+	switch chosen[0] {
+	case StorageProviderMinIO:
+		errs = append(errs, c.validateStorageMinIO()...)
+	case StorageProviderS3:
+		errs = append(errs, c.validateStorageS3()...)
+	case StorageProviderGCS:
+	case StorageProviderNone:
+	}
+
+	return errs
+}
+
+// validateStorageMinIO checks the section MinIO needs in full. It has no
+// credential chain to fall back on, so both halves of the key are required,
+// and the endpoint is an authority rather than a URL because that is what the
+// SDK takes.
+func (c *Config) validateStorageMinIO() []error {
+	var errs []error
+
+	minio := &c.Storage.MinIO
+
+	if minio.Endpoint == "" {
+		errs = append(errs, errors.New("QUIRE_STORAGE_MINIO_ENDPOINT: required once the MinIO section is used"))
+	}
+
+	if strings.Contains(minio.Endpoint, "://") {
+		errs = append(errs, fmt.Errorf("QUIRE_STORAGE_MINIO_ENDPOINT: %q must be a host and port, "+
+			"without a scheme; use QUIRE_STORAGE_MINIO_USE_TLS to choose one", minio.Endpoint))
+	}
+
+	if minio.AccessKeyID == "" || minio.SecretAccessKey == "" {
+		errs = append(errs, errors.New(
+			"QUIRE_STORAGE_MINIO_ACCESS_KEY_ID and QUIRE_STORAGE_MINIO_SECRET_ACCESS_KEY: both are required"))
+	}
+
+	// The bytes of every reader's library cross this connection. In
+	// development the MinIO beside the node is plain HTTP, which is why the
+	// default is false and why the check is on the profile rather than on the
+	// value.
+	if !minio.UseTLS && c.Environment.IsProduction() {
+		errs = append(errs, errors.New(
+			"QUIRE_STORAGE_MINIO_USE_TLS: plain http to the object store is not allowed in production"))
+	}
+
+	return errs
+}
+
+// validateStorageS3 checks the section S3 needs in full.
+//
+// The credentials are required rather than optional. The SDK's own chain — an
+// instance role, a service account with IRSA — lives in modules this node does
+// not depend on, and a node that started without credentials would fail at the
+// first import instead of at startup.
+func (c *Config) validateStorageS3() []error {
+	var errs []error
+
+	s3 := &c.Storage.S3
+
+	if s3.Region == "" {
+		errs = append(errs, errors.New("QUIRE_STORAGE_S3_REGION: required once the S3 section is used"))
+	}
+
+	if s3.AccessKeyID == "" || s3.SecretAccessKey == "" {
+		errs = append(errs, errors.New(
+			"QUIRE_STORAGE_S3_ACCESS_KEY_ID and QUIRE_STORAGE_S3_SECRET_ACCESS_KEY: both are required"))
 	}
 
 	return errs
