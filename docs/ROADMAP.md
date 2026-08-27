@@ -54,11 +54,13 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 ## Phase 4 — Servers
 
-- [ ] `feat: add grpc server bootstrap with interceptor chain`
+- [x] `feat: add grpc server bootstrap with interceptor chain`
 - [ ] `feat: add error and recovery interceptors`
 - [ ] `feat: add request logging interceptor`
 - [ ] `feat: add http server for health and metrics`
 - [ ] `feat: add well-known discovery endpoints`
+- [ ] `feat: add node server entrypoint` — not in the original plan, which never
+      creates `cmd/quired`, so `make build` has been failing since phase 0
 
 ## Phase 5 — identity slice (UC06–08, UC14)
 
