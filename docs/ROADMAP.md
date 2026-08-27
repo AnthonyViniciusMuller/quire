@@ -123,7 +123,8 @@ the thesis — corrections to the specification and deliberate divergences from 
       `spki-sha256:` pin the endpoints publish, per D06 and C12 in
       [`tcc-corrections.md`](tcc-corrections.md); the column and the `ServerDescriptor`
       field land with it
-- [ ] `feat: add discover server use case`
+- [x] `feat: add discover server use case` — the slice's `command.Usecase` shape and its
+      `apptest` doubles land with it, as phase 5's first use case did
 - [ ] `feat: add known server management use cases`
 - [ ] `feat: add replica authorization use cases`
 - [ ] `feat: add federation grpc handlers`
