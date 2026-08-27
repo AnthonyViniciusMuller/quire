@@ -479,3 +479,32 @@ the base URL. Subsection 4.2.4 has to record that `servidor` gains a column for 
 collapse the two endpoints into one address, which is an accident of deployment and not a
 property of the protocol. The column and the protobuf field land with the discovery client in
 phase 6; this entry is what stops that from being rediscovered there.
+
+### D07 — the refresh credential is rotated, and reuse of a spent one ends the device's sessions
+
+RF07 and RF08 say that the reader logs in and out; `token_acesso` holds a renewal credential
+with `expira_em` and `consumido`, and the MER says nothing about what happens when one is
+presented twice. The implementation makes two choices there, and both belong in 4.2.4.
+
+*Rotation.* Refreshing consumes the credential presented and issues a replacement, rather than
+returning a new access token against a credential that stays valid for its whole thirty days.
+Without it, a credential copied from a device's storage is usable for as long as the original,
+and nothing distinguishes the two holders.
+
+*Reuse detection.* A credential that is presented after it has been consumed is, by
+construction, a credential that two parties hold: the legitimate device already exchanged it
+and holds the replacement. The node answers by revoking every credential of that device, which
+is what the OAuth 2.0 Security Best Current Practice prescribes for rotated refresh tokens, and
+it is what makes rotation worth doing — without it a thief simply refreshes alongside the
+reader.
+
+*The cost, stated rather than hidden.* A device whose reply was lost on a mobile network
+retries with the credential it still has, and is logged out for it. That false positive is
+real, and on an offline-first system over mobile networks it is not rare. The alternative
+that avoids it — a grace window in which a spent credential returns the replacement it was
+already exchanged for — requires the credential to record which credential replaced it, and
+`token_acesso` has no such attribute. Adding one is the change 4.2.4 would need if the trade
+is judged the wrong way round; the cost of the choice as made is one re-authentication, and
+the cost of not making it is a stolen credential that works for thirty days.
+
+**Status** open. Implemented in the refresh use case of phase 5.

@@ -86,7 +86,8 @@ the thesis — corrections to the specification and deliberate divergences from 
       `federation.servers`, which phase 6 owns. It lands as the `LocalServer` port with a
       temporary adapter; phase 6 replaces the adapter and the use cases do not change
 - [x] `feat: add login and logout use cases`
-- [ ] `feat: add refresh token use case`
+- [x] `feat: add refresh token use case` — rotation, and reuse of a spent credential ends
+      the device's sessions, per D07 in [`tcc-corrections.md`](tcc-corrections.md)
 - [ ] `feat: add password recovery use cases`
 - [ ] `feat: add device management use cases`
 - [ ] `feat: add authentication interceptor`
