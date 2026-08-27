@@ -181,3 +181,20 @@ cannot forget the call — the compiler asks about the error.
 name is the reference's and it is kept; the stutter check alone is excluded for
 `internal/*/domain/*` in [`.golangci.yml`](../.golangci.yml), and the rest of `revive` still
 applies there.
+
+### A value object two entities share gets a package of its own
+
+The reference's `domain/` holds one package per entity and nothing else. The reading slice has
+one package that is not an entity: [`domain/locator`](../internal/reading/domain/locator),
+which is the place in a document an annotation is attached to and a reading position *is*.
+
+Both entities hold one and neither owns it. Giving the type to either package would make the
+other import a neighbour for a value that is not about it — `progress.Locator` on an
+annotation, or `annotation.Locator` on a bookmark — and giving each a copy would be one
+validation rule written twice, in the two places `reading.annotations_locator_not_blank` and
+`reading.progress_locator_not_blank` say the same thing.
+
+This is not a licence for a `domain/shared`. The test is that the value has to be *the same
+value*, checked the same way against the same constraint, on two entities of one slice; a type
+that merely looks similar on both belongs to each of them. Anything two *slices* share belongs
+in the shared core instead — which is where [`crdt`](../internal/shared/crdt) is, and why.

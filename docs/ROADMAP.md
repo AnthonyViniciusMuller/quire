@@ -185,7 +185,13 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 ## Phase 8 — reading slice (UC04, UC05)
 
-- [ ] `feat: add annotation and reading progress entities`
+- [x] `feat: add annotation and reading progress entities` — `crdt.Version` lands with them, in
+      the shared core beside `crdt.Revision`, because the two entities of this slice reconcile
+      differently and C05 is the difference: an annotation is written by every device and needs
+      the full revision, a progress row is written by one and carries the clock and the
+      timestamp without the two fields that break a tie. The `locator` package lands as well —
+      a value object both entities hold and neither owns, which is a departure from the layout
+      every other slice follows and is recorded in [`architecture.md`](architecture.md)
 - [ ] `feat: add annotation and reading progress repositories`
 - [ ] `feat: add annotation management use cases`
 - [ ] `feat: add reading progress use cases`

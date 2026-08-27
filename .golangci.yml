@@ -95,6 +95,15 @@ linters:
       line-length: 120
       tab-width: 4
 
+    misspell:
+      # The MER of the TCC is written in Portuguese, and the packages that
+      # implement an entity name it as the specification does — "MER:
+      # progresso_leitura" — so that a reader can find the Quadro the code came
+      # from. The checker reads the Portuguese as a misspelling of an English
+      # word; the mapping is the point of the comment.
+      ignore-rules:
+        - progresso
+
     nolintlint:
       require-explanation: true
       require-specific: true
