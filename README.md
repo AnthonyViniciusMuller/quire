@@ -37,8 +37,12 @@ The node server (`quired`) exposes two listeners:
 
 The code is organized hexagonally by feature slice — `identity`, `federation`, `library`,
 `reading`, `sync` — each with its own `domain`, `application`, `infra` and `di` packages, over a
-shared core in `internal/shared`. E-book files live in S3-compatible object storage, deduplicated
-by content hash; everything else lives in PostgreSQL, one schema per slice.
+shared core in `internal/shared`. One package per entity and one per use case, following
+[`College-Redberry/open-adoption`](https://github.com/College-Redberry/open-adoption); the
+layout and the places this project departs from it are in
+[`docs/architecture.md`](docs/architecture.md). E-book files live in S3-compatible object
+storage, deduplicated by content hash; everything else lives in PostgreSQL, one schema per
+slice.
 
 A reference CLI client (`quirectl`) drives the end-to-end suites and stands in for the mobile
 client during demonstrations.

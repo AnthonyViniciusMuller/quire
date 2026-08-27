@@ -6,6 +6,10 @@ resume the work by reading this file and `git log`.
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
 and are written in English. Commits stay small and are reviewed before landing.
 
+The layout every slice follows — one package per entity, one per use case — is in
+[`architecture.md`](architecture.md), together with the places this project departs from the
+reference implementation it is modelled on. Read it before starting a slice.
+
 Thesis traceability: requirement identifiers (RF, RNF, RN, UC) refer to the TCC specification;
 the entity-name mapping between the MER and the database schema lives in
 [`mer-mapping.md`](mer-mapping.md), and everything the implementation found that has to reach
@@ -64,6 +68,10 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 ## Phase 5 — identity slice (UC06–08, UC14)
 
+- [x] `docs: record the architecture every slice follows` — not in the original plan. The
+      slice layout is
+      [`College-Redberry/open-adoption`](https://github.com/College-Redberry/open-adoption),
+      and it had never been written down beyond the four layer names in the readme
 - [ ] `feat: add user and device domain entities`
 - [ ] `feat: add user and device repositories with postgres`
 - [ ] `feat: add password hashing service`
