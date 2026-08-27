@@ -1,0 +1,301 @@
+// The reader's collection: the works they hold, the file behind each one, and
+// the groupings they file them under.
+//
+// UC01 («CRD» maintain e-books), UC02 (import) and UC03 (organize the
+// collection). RF01, RF04 and RF05.
+//
+// Every entity here replicates, which makes this service the *connected* path
+// to a change rather than the only one. A device that is online calls these
+// RPCs; a device that was not calls SyncService.PushOperations when it comes
+// back, with the same change expressed as an operation it authored itself. The
+// two have to be indistinguishable afterwards, so a write accepted here is
+// appended to the same log, stamped with the calling device and its clock —
+// which is why no request below carries a Revision. The server writes it; the
+// reply reports it.
+syntax = "proto3";
+
+package quire.v1;
+
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "quire/v1/common.proto";
+
+option go_package = "github.com/anthonyvsmuller/quire/internal/gen/quire/v1;quirev1";
+
+service LibraryService {
+  // UC01, create. Registers the metadata of a work. The bytes travel
+  // separately, and the reply says whether this node already holds them.
+  rpc CreateEbook(CreateEbookRequest) returns (CreateEbookResponse);
+
+  // UC01, read.
+  rpc GetEbook(GetEbookRequest) returns (GetEbookResponse);
+
+  // UC01, read — the whole collection, optionally narrowed to one grouping.
+  rpc ListEbooks(ListEbooksRequest) returns (ListEbooksResponse);
+
+  // RF05. UC01 is marked «CRD» because the file itself is not editable; its
+  // metadata is, and this is the RPC that edits it.
+  rpc UpdateEbook(UpdateEbookRequest) returns (UpdateEbookResponse);
+
+  // UC01, delete. A tombstone, never a removal: a row deleted outright is
+  // resurrected by the next node that had not yet heard about the deletion.
+  rpc DeleteEbook(DeleteEbookRequest) returns (DeleteEbookResponse);
+
+  // UC02. Streams the bytes of a work this node does not hold yet. The client
+  // sends the description first and the content after it, so the node can
+  // refuse an oversized or unsupported file before receiving any of it.
+  rpc UploadEbookContent(stream UploadEbookContentRequest) returns (UploadEbookContentResponse);
+
+  // Streams the bytes back. A node that replicates this reader without their
+  // files answers that it does not hold them — holding the metadata and not
+  // the file is a state the authorization makes legitimate, not an error.
+  rpc DownloadEbookContent(DownloadEbookContentRequest) returns (stream DownloadEbookContentResponse);
+
+  // UC03, create.
+  rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionResponse);
+
+  // UC03, read.
+  rpc GetCollection(GetCollectionRequest) returns (GetCollectionResponse);
+
+  // UC03, read — optionally narrowed to the groupings one work is filed under.
+  rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse);
+
+  // UC03, update.
+  rpc UpdateCollection(UpdateCollectionRequest) returns (UpdateCollectionResponse);
+
+  // UC03, delete. A tombstone, for the reason DeleteEbook is one.
+  rpc DeleteCollection(DeleteCollectionRequest) returns (DeleteCollectionResponse);
+
+  // UC03. Files a work under a grouping. Repeating it is not an error: the
+  // pair is unique (C06) and membership is a register that is set, not a row
+  // that is appended.
+  rpc AddEbookToCollection(AddEbookToCollectionRequest) returns (AddEbookToCollectionResponse);
+
+  // UC03. Clears that register, and is likewise idempotent.
+  rpc RemoveEbookFromCollection(RemoveEbookFromCollectionRequest) returns (RemoveEbookFromCollectionResponse);
+}
+
+// The formats UC02 admits, as listed in subsection 4.2.2.
+//
+// Adding a value here is not a breaking change: an older node receiving one it
+// does not know keeps the number and can still store, replicate and return the
+// work — it simply cannot name the format to its own reader.
+enum EbookFormat {
+  EBOOK_FORMAT_UNSPECIFIED = 0;
+  EBOOK_FORMAT_EPUB = 1;
+  EBOOK_FORMAT_PDF = 2;
+  EBOOK_FORMAT_MOBI = 3;
+  EBOOK_FORMAT_DJVU = 4;
+  EBOOK_FORMAT_CBZ = 5;
+}
+
+// Collections and categories are the same structure with a different meaning,
+// which is what lets RF05 offer both without a second entity.
+enum CollectionKind {
+  COLLECTION_KIND_UNSPECIFIED = 0;
+  COLLECTION_KIND_COLLECTION = 1;
+  COLLECTION_KIND_CATEGORY = 2;
+}
+
+// A work in the reader's collection.
+message Ebook {
+  string id = 1;
+  string title = 2;
+
+  // Absent rather than empty when the file did not say. A work whose author is
+  // unknown and one whose author is the empty string are different claims.
+  optional string author = 3;
+  optional string publisher = 4;
+  optional string language = 5;
+
+  EbookFormat format = 6;
+
+  // The digest of the file, lowercase hex sha-256. It is what identifies the
+  // bytes across the whole federation: the same work imported by two readers,
+  // or by one reader on two devices, converges on one stored object.
+  //
+  // It is deliberately not a reference to something this node holds. A node
+  // replicating a reader without their files has every row here and none of
+  // the bytes (D02).
+  string content_hash = 7;
+
+  optional int64 size_bytes = 8;
+
+  // The metadata a format carries and this contract does not name — series,
+  // ISBN, subjects (RF05). An object, never a scalar: the column it lands in
+  // is jsonb and constrained to one.
+  google.protobuf.Struct extra_metadata = 9;
+
+  google.protobuf.Timestamp imported_at = 10;
+
+  Revision revision = 11;
+}
+
+// A grouping the reader defined over their collection.
+message Collection {
+  string id = 1;
+  string name = 2;
+  CollectionKind kind = 3;
+  optional string description = 4;
+  google.protobuf.Timestamp created_at = 5;
+  Revision revision = 6;
+}
+
+// The bytes of a work, as this node holds them.
+message EbookContent {
+  string content_hash = 1;
+  int64 size_bytes = 2;
+  string media_type = 3;
+}
+
+message CreateEbookRequest {
+  // The revision is ignored if set: the server stamps it with the calling
+  // device and that device's clock.
+  Ebook ebook = 1;
+}
+
+message CreateEbookResponse {
+  Ebook ebook = 1;
+
+  // True when this node does not hold the bytes for the digest declared, which
+  // is the client's cue to call UploadEbookContent. It is false far more often
+  // than a client might expect — the same file imported on a second device, or
+  // by a second reader on this node, is already here.
+  bool content_missing = 2;
+}
+
+message GetEbookRequest {
+  string ebook_id = 1;
+}
+
+message GetEbookResponse {
+  Ebook ebook = 1;
+}
+
+message ListEbooksRequest {
+  // Zero asks the server to choose. A client that wants a specific page size
+  // says so; one that does not should not have to.
+  int32 page_size = 1;
+  string page_token = 2;
+
+  // Narrows the reply to the works filed under one grouping.
+  optional string collection_id = 3;
+}
+
+// Tombstoned works are never listed here. A client rebuilding its local state
+// needs them and gets them from SyncService, which is where the history lives;
+// this service answers what the collection is, not how it got that way.
+message ListEbooksResponse {
+  repeated Ebook ebooks = 1;
+  string next_page_token = 2;
+}
+
+message UpdateEbookRequest {
+  string ebook_id = 1;
+  Ebook ebook = 2;
+
+  // Which fields the write claims. It is not only a convenience here:
+  // reconciliation is per-field last-writer-wins, so a mask naming two fields
+  // is a claim over those two and leaves every other field to whichever device
+  // wrote it last.
+  google.protobuf.FieldMask update_mask = 3;
+}
+
+message UpdateEbookResponse {
+  Ebook ebook = 1;
+}
+
+message DeleteEbookRequest {
+  string ebook_id = 1;
+}
+
+message DeleteEbookResponse {}
+
+message UploadEbookContentRequest {
+  oneof payload {
+    // Exactly once, as the first message of the stream.
+    EbookContent content = 1;
+
+    // Then the bytes, in as many messages as the client chooses. The node
+    // hashes them as they arrive and rejects the upload if the digest does not
+    // match the one declared, so a truncated or altered transfer cannot be
+    // stored under a name that promises otherwise.
+    bytes chunk = 2;
+  }
+}
+
+message UploadEbookContentResponse {
+  EbookContent content = 1;
+}
+
+message DownloadEbookContentRequest {
+  string ebook_id = 1;
+}
+
+message DownloadEbookContentResponse {
+  oneof payload {
+    EbookContent content = 1;
+    bytes chunk = 2;
+  }
+}
+
+message CreateCollectionRequest {
+  Collection collection = 1;
+}
+
+message CreateCollectionResponse {
+  Collection collection = 1;
+}
+
+message GetCollectionRequest {
+  string collection_id = 1;
+}
+
+message GetCollectionResponse {
+  Collection collection = 1;
+}
+
+message ListCollectionsRequest {
+  // Narrows the reply to the groupings one work is filed under, which is the
+  // reverse of the filter ListEbooks offers.
+  optional string ebook_id = 1;
+}
+
+// Not paginated, unlike the works themselves: a reader defines shelves by hand
+// and there are as many of them as they had patience for.
+message ListCollectionsResponse {
+  repeated Collection collections = 1;
+}
+
+message UpdateCollectionRequest {
+  string collection_id = 1;
+  Collection collection = 2;
+  google.protobuf.FieldMask update_mask = 3;
+}
+
+message UpdateCollectionResponse {
+  Collection collection = 1;
+}
+
+message DeleteCollectionRequest {
+  string collection_id = 1;
+}
+
+// The works survive the grouping. Deleting a shelf is not deleting what was on
+// it, and the memberships are tombstoned with it.
+message DeleteCollectionResponse {}
+
+message AddEbookToCollectionRequest {
+  string ebook_id = 1;
+  string collection_id = 2;
+}
+
+message AddEbookToCollectionResponse {}
+
+message RemoveEbookFromCollectionRequest {
+  string ebook_id = 1;
+  string collection_id = 2;
+}
+
+message RemoveEbookFromCollectionResponse {}
