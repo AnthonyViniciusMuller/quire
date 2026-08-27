@@ -16,9 +16,17 @@
 // one nobody noticed had stopped running. The build tag is what keeps it out of
 // `go test ./...`, so it cannot fail anybody by accident either.
 //
-// The suite owns that database. It drops every schema the node declares before
-// it applies them, which is what makes a run repeatable — so the variable must
-// point at a throwaway one, and `make test-integration` says how to get one.
+// The object store is supplied on the same terms, and for the same reason. The
+// question was open from phase 5 — whether to have a container library start
+// these — and it is answered the same way for both: the eighty-seven modules
+// that library costs are eighty-seven modules against a go.mod with twenty
+// direct dependencies, and a Makefile target that runs `docker run` is a
+// dependency on Docker, which the alternative also has.
+//
+// The suite owns both. It drops every schema the node declares before it
+// applies them, and it empties the bucket between tests, which is what makes a
+// run repeatable — so the variables must point at throwaway ones, and
+// `make test-integration` says how to get them.
 package integration_test
 
 import (
@@ -37,12 +45,25 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
 )
 
 // databaseURLVariable names the database the suite runs against.
 const databaseURLVariable = "QUIRE_TEST_DATABASE_URL"
+
+// The variables naming the object store the suite runs against. It is a MinIO
+// because that is what a developer can run beside the node; the adapter under
+// test is the one a deployment against MinIO uses, and the S3 adapter beside it
+// has its own tests against the same protocol.
+const (
+	storageEndpointVariable = "QUIRE_TEST_STORAGE_ENDPOINT"
+	storageAccessKeyID      = "QUIRE_TEST_STORAGE_ACCESS_KEY_ID"
+	storageSecretAccessKey  = "QUIRE_TEST_STORAGE_SECRET_ACCESS_KEY"
+	storageBucketVariable   = "QUIRE_TEST_STORAGE_BUCKET"
+)
 
 // migrationsDirectory holds the schema, relative to this package.
 const migrationsDirectory = "../../migrations"
@@ -55,6 +76,10 @@ const testServerName = "quire-a.example"
 // statements run against the same catalogue the node runs against.
 var pool *pgxpool.Pool
 
+// objects is the bucket the suite stores files in, opened once for the same
+// reason the pool is.
+var objects *minio.Client
+
 func TestMain(m *testing.M) {
 	os.Exit(run(m))
 }
@@ -65,11 +90,7 @@ func TestMain(m *testing.M) {
 // not run deferred functions, and a pool left open holds connections the next
 // run would compete with.
 func run(m *testing.M) int {
-	databaseURL := os.Getenv(databaseURLVariable)
-	if databaseURL == "" {
-		panic(databaseURLVariable + " is not set. These tests need a PostgreSQL to run against; " +
-			"`make test-integration` says how to get a throwaway one.")
-	}
+	databaseURL := requiredEnv(databaseURLVariable)
 
 	ctx := context.Background()
 
@@ -90,7 +111,52 @@ func run(m *testing.M) int {
 		panic("applying the schema: " + err.Error())
 	}
 
+	objects = openBucket(ctx)
+
 	return m.Run()
+}
+
+// openBucket connects to the object store and makes sure the bucket exists.
+//
+// It creates the bucket rather than requiring one, because the alternative is a
+// setup step somebody forgets and a failure that names a missing object instead
+// of a missing bucket.
+func openBucket(ctx context.Context) *minio.Client {
+	endpoint := requiredEnv(storageEndpointVariable)
+
+	client, err := minio.New(endpoint, &minio.Options{
+		Creds: credentials.NewStaticV4(
+			requiredEnv(storageAccessKeyID), requiredEnv(storageSecretAccessKey), ""),
+	})
+	if err != nil {
+		panic("addressing " + storageEndpointVariable + ": " + err.Error())
+	}
+
+	bucket := requiredEnv(storageBucketVariable)
+
+	exists, err := client.BucketExists(ctx, bucket)
+	if err != nil {
+		panic("the object store at " + storageEndpointVariable + " is not answering: " + err.Error())
+	}
+
+	if !exists {
+		if err := client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
+			panic("creating the bucket " + bucket + ": " + err.Error())
+		}
+	}
+
+	return client
+}
+
+// requiredEnv reads a variable the suite cannot run without.
+func requiredEnv(name string) string {
+	value := os.Getenv(name)
+	if value == "" {
+		panic(name + " is not set. These tests need a PostgreSQL and an object store to run " +
+			"against; `make test-integration` says how to get throwaway ones.")
+	}
+
+	return value
 }
 
 // schemas are the ones the node owns, and the ones this suite drops before it
@@ -134,17 +200,44 @@ func applySchema(ctx context.Context, opened *pgxpool.Pool) error {
 	return nil
 }
 
-// reset empties the tables of the identity and federation slices, so that each
-// test starts from a catalogue with nothing in it.
+// reset empties the tables of every slice, so that each test starts from a node
+// that knows nothing.
 //
-// federation.servers is the root of the cascade: a reader references it, and
-// their devices and credentials reference them.
+// federation.servers is the root of the cascade: a reader references it, their
+// devices and credentials reference them, and their works and groupings
+// reference the reader.
+//
+// library.ebook_contents is truncated on its own, because nothing references
+// it — which is the point of that table (D02) and therefore also the reason it
+// is not swept up by the cascade. What it records is what this node holds, and
+// leaving it behind would make a later test believe a file is here.
 func reset(t *testing.T) {
 	t.Helper()
 
-	_, err := pool.Exec(t.Context(), "TRUNCATE federation.servers CASCADE")
+	_, err := pool.Exec(t.Context(),
+		"TRUNCATE federation.servers, library.ebook_contents CASCADE")
 	if err != nil {
 		t.Fatalf("resetting the database: %v", err)
+	}
+}
+
+// resetStorage empties the bucket, so that a test does not find the file a
+// previous one uploaded. The object is keyed by its digest, so two tests
+// uploading the same bytes would otherwise share it.
+func resetStorage(t *testing.T) {
+	t.Helper()
+
+	bucket := os.Getenv(storageBucketVariable)
+	ctx := t.Context()
+
+	for object := range objects.ListObjects(ctx, bucket, minio.ListObjectsOptions{Recursive: true}) {
+		if object.Err != nil {
+			t.Fatalf("listing the bucket: %v", object.Err)
+		}
+
+		if err := objects.RemoveObject(ctx, bucket, object.Key, minio.RemoveObjectOptions{}); err != nil {
+			t.Fatalf("emptying the bucket: %v", err)
+		}
 	}
 }
 
@@ -169,6 +262,18 @@ func nodeConfig(t *testing.T) *config.Config {
 			ShutdownTimeout:       5 * time.Second,
 		},
 		Database: config.Database{URL: config.Secret(os.Getenv(databaseURLVariable))},
+		Storage: config.Storage{
+			Bucket: os.Getenv(storageBucketVariable),
+			// Half a megabyte, which is smaller than any real e-book and large
+			// enough for every file this suite invents — so a test can reach
+			// the ceiling without carrying a megabyte of fixture.
+			MaxUploadBytes: 512 * 1024,
+			MinIO: config.StorageMinIO{
+				Endpoint:        os.Getenv(storageEndpointVariable),
+				AccessKeyID:     os.Getenv(storageAccessKeyID),
+				SecretAccessKey: config.Secret(os.Getenv(storageSecretAccessKey)),
+			},
+		},
 		Federation: config.Federation{
 			DiscoveryTimeout: 5 * time.Second,
 			// The peers these tests discover are httptest servers, which speak

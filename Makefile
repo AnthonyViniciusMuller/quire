@@ -82,18 +82,36 @@ vet:
 test:
 	$(GO) test -race -shuffle=on ./...
 
-# The suite needs a PostgreSQL and owns it: it drops every schema the node
-# declares before applying them. TEST_DATABASE_URL therefore points at a
-# throwaway one, never at DATABASE_URL, and `test-db-up` brings one up on a port
+# The suite needs a PostgreSQL and an object store, and it owns both: it drops
+# every schema the node declares before applying them, and it empties the
+# bucket between tests. These variables therefore point at throwaway ones, never
+# at DATABASE_URL or at a real bucket, and `test-up` brings both up on ports
 # nothing else uses.
-TEST_DATABASE_URL ?= postgres://quire:quire@127.0.0.1:55433/quire?sslmode=disable
-TEST_DB_CONTAINER := quire-test-db
+TEST_DATABASE_URL       ?= postgres://quire:quire@127.0.0.1:55433/quire?sslmode=disable
+TEST_STORAGE_ENDPOINT   ?= 127.0.0.1:55900
+TEST_STORAGE_ACCESS_KEY ?= quire
+TEST_STORAGE_SECRET_KEY ?= quire-secret
+TEST_STORAGE_BUCKET     ?= quire-test-contents
+TEST_DB_CONTAINER       := quire-test-db
+TEST_STORAGE_CONTAINER  := quire-test-storage
 
-## test-integration: integration tests against TEST_DATABASE_URL
+## test-integration: integration tests against the throwaway postgres and object store
 .PHONY: test-integration
 test-integration:
 	QUIRE_TEST_DATABASE_URL="$(TEST_DATABASE_URL)" \
+	QUIRE_TEST_STORAGE_ENDPOINT="$(TEST_STORAGE_ENDPOINT)" \
+	QUIRE_TEST_STORAGE_ACCESS_KEY_ID="$(TEST_STORAGE_ACCESS_KEY)" \
+	QUIRE_TEST_STORAGE_SECRET_ACCESS_KEY="$(TEST_STORAGE_SECRET_KEY)" \
+	QUIRE_TEST_STORAGE_BUCKET="$(TEST_STORAGE_BUCKET)" \
 		$(GO) test -race -tags=integration -timeout=15m ./test/integration/...
+
+## test-up: start the throwaway postgres and object store the integration tests need
+.PHONY: test-up
+test-up: test-db-up test-storage-up
+
+## test-down: stop them
+.PHONY: test-down
+test-down: test-db-down test-storage-down
 
 ## test-db-up: start the throwaway postgres the integration tests run against
 .PHONY: test-db-up
@@ -107,6 +125,21 @@ test-db-up:
 .PHONY: test-db-down
 test-db-down:
 	docker rm -f $(TEST_DB_CONTAINER)
+
+## test-storage-up: start the throwaway minio the integration tests run against
+.PHONY: test-storage-up
+test-storage-up:
+	docker run --rm -d --name $(TEST_STORAGE_CONTAINER) -p 127.0.0.1:55900:9000 \
+		-e MINIO_ROOT_USER=$(TEST_STORAGE_ACCESS_KEY) \
+		-e MINIO_ROOT_PASSWORD=$(TEST_STORAGE_SECRET_KEY) \
+		quay.io/minio/minio:latest server /data
+	@until curl -sf http://$(TEST_STORAGE_ENDPOINT)/minio/health/live >/dev/null 2>&1; do sleep 1; done
+	@echo "$(TEST_STORAGE_CONTAINER) is ready on 55900"
+
+## test-storage-down: stop it
+.PHONY: test-storage-down
+test-storage-down:
+	docker rm -f $(TEST_STORAGE_CONTAINER)
 
 ## test-e2e: end-to-end tests against the two federated nodes
 .PHONY: test-e2e

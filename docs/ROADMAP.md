@@ -179,7 +179,9 @@ the thesis — corrections to the specification and deliberate divergences from 
       packages land with them: a page token is the domain's keyset in a form a client can hold,
       and a mask naming a path the call cannot write is refused rather than ignored, because on
       a per-field last-writer-wins entity an ignored path is a change nobody made
-- [ ] `test: add integration tests for library service`
+- [x] `test: add integration tests for library service` — against the same supplied
+      PostgreSQL as phases 5 and 6, and against a supplied MinIO on the same terms, which is
+      what settled the open question about a container library for both
 
 ## Phase 8 — reading slice (UC04, UC05)
 
@@ -243,7 +245,7 @@ before the commit that depends on them. A question stays here only while it is o
 is answered it becomes an entry in [`tcc-corrections.md`](tcc-corrections.md), so that the
 answer travels with the correction it produced rather than with the doubt it started as.
 
-Five are open, all found while implementing phase 5. Each names what the answer changes, so
+Four are open, all found while implementing phase 5. Each names what the answer changes, so
 that answering it is a decision rather than an archaeology.
 
 **Should the contract carry a password on the call that changes an address?** C13 aside, this
@@ -266,20 +268,21 @@ offline-first system is not rare. The implementation follows the OAuth 2.0 Secur
 alternative — a grace window — needs `token_acesso` to record which credential replaced it,
 which is a change to Appendix A.
 
-**Testcontainers or a database the runner supplies?** The integration suite takes the second,
-for the 87 modules the first costs against a `go.mod` of twelve direct dependencies. The
-Makefile comment from phase 0 promised the first and now says otherwise. The same question
-returns in phase 7, which needs MinIO for the blob store, so answering it once settles both.
-
 **Should changing a password end the session that changed it?** The contract says only that
 resetting one ends every session. The implementation makes changing one do the same, on the
 reasoning that a reader who changes their password is responding to a suspicion. Sparing the
 calling device is implementable — the access token names it — and needs one more statement on
 the credential repository.
 
-The last question settled was whether `updated_at` could break ties as a wall clock, on
-2026-08-26: it cannot, and it becomes a hybrid logical clock. The counterexample and the
-argument are in C01.
+Two have been settled since. Whether `updated_at` could break ties as a wall clock, on
+2026-08-26: it cannot, and it becomes a hybrid logical clock — the counterexample and the
+argument are in C01. And whether the integration suite should have a container library start
+its dependencies, on 2026-08-27: it should not, and phase 7 confirmed it rather than
+reopening it. That second one leaves no entry in
+[`tcc-corrections.md`](tcc-corrections.md), because it is a question about this project's
+tooling and not about the specification — the suite now needs a MinIO as well as a
+PostgreSQL, `make test-up` brings both up, and the 87 modules testcontainers costs are
+still 87 modules.
 
 ## Divergences from the thesis specification
 

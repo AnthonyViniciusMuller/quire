@@ -59,7 +59,8 @@ deploy/docker   local federation       deploy/k8s         kustomize + Istio + ce
 ```bash
 make dev-up            # docker compose: two federated nodes, each with Postgres and MinIO
 make test              # unit tests
-make test-integration  # testcontainers: Postgres + MinIO
+make test-up           # throwaway Postgres and MinIO for the integration suite
+make test-integration  # integration tests against them
 make test-e2e          # end-to-end against the two nodes
 ```
 
