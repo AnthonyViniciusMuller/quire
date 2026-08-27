@@ -19,6 +19,7 @@ type FederationServer struct {
 	IsLocal                bool
 	DiscoveredAt           *time.Time
 	Active                 bool
+	GrpcAuthority          *string
 }
 
 type FederationUserReplica struct {

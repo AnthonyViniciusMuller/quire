@@ -87,7 +87,7 @@ type Server struct {
 // EnsureLocal, from the node's own configuration rather than from a lookup:
 // a node does not discover itself, and the row has to exist before anything
 // could ask it to.
-func New(descriptor Descriptor, discoveredAt time.Time) (*Server, error) {
+func New(descriptor *Descriptor, discoveredAt time.Time) (*Server, error) {
 	if err := descriptor.Validate(); err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func New(descriptor Descriptor, discoveredAt time.Time) (*Server, error) {
 		// the reply that reports the node has to carry it.
 		ID: uuid.New(),
 		Props: Props{
-			Descriptor:   descriptor,
+			Descriptor:   *descriptor,
 			DiscoveredAt: discoveredAt,
 			Active:       true,
 		},
@@ -128,7 +128,7 @@ func Restore(id uuid.UUID, props *Props) *Server {
 // identical from here, and they are the only party that can tell them apart —
 // which is also why this happens on a call they made rather than on a
 // schedule (C12).
-func (s *Server) Refresh(descriptor Descriptor, at time.Time) (bool, error) {
+func (s *Server) Refresh(descriptor *Descriptor, at time.Time) (bool, error) {
 	if err := descriptor.Validate(); err != nil {
 		return false, err
 	}
@@ -146,7 +146,7 @@ func (s *Server) Refresh(descriptor Descriptor, at time.Time) (bool, error) {
 
 	changed := s.CertificateFingerprint != descriptor.CertificateFingerprint
 
-	s.Descriptor = descriptor
+	s.Descriptor = *descriptor
 	s.DiscoveredAt = at
 
 	return changed, nil

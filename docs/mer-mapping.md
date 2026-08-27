@@ -58,6 +58,13 @@ Every temporal attribute is `timestamptz` rather than the `timestamp` Appendix A
 | `descoberto_em` | `discovered_at` | |
 | `ativo` | `active` | |
 
+Added: `grpc_authority`, the host:port a peer dials for the API — D06. The MER gives
+`servidor` a single `url_base`, and that is enough only where a gateway answers for both
+endpoints on one authority; the `.well-known` documents are plain HTTP because RFC 8615
+requires it and the API is gRPC, so without a mesh in front the two listen on different
+ports and a peer that learned only `url_base` has nowhere to dial. Nullable: a node whose
+document publishes none can be recorded and cannot be replicated to.
+
 Added: a partial unique index on `is_local`, so at most one row can claim to be this
 instance. Two would make "is this user local" unanswerable, and that question decides whether
 the node authenticates a user or merely replicates them.

@@ -46,10 +46,24 @@ type ServerDescriptor struct {
 	// Where it publishes the public keys its tokens are signed with, so that a
 	// peer can verify them without sharing a secret (RNF11).
 	JwksUri *string `protobuf:"bytes,3,opt,name=jwks_uri,json=jwksUri,proto3,oneof" json:"jwks_uri,omitempty"`
-	// The certificate to pin for node-to-node mTLS (RNF08).
+	// The certificate to pin for node-to-node mTLS (RNF08). It is a digest of
+	// the public key and not of the certificate — see C12 in
+	// docs/tcc-corrections.md — and its form says so: spki-sha256:<base64>.
 	CertificateFingerprint *string `protobuf:"bytes,4,opt,name=certificate_fingerprint,json=certificateFingerprint,proto3,oneof" json:"certificate_fingerprint,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// The authority to dial for gRPC, as host:port.
+	//
+	// It is published separately from the base URL because the two are only the
+	// same address where a gateway happens to collapse them: the .well-known
+	// documents are plain HTTP because RFC 8615 requires it, and the API is
+	// gRPC, so without a mesh in front the two listen on different ports. A peer
+	// that learned only the base URL would have nowhere to dial for replication.
+	// D06 in docs/tcc-corrections.md.
+	//
+	// Absent on a node whose document publishes none, which is a node this
+	// instance can record and cannot replicate to.
+	Grpc          *string `protobuf:"bytes,5,opt,name=grpc,proto3,oneof" json:"grpc,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ServerDescriptor) Reset() {
@@ -106,6 +120,13 @@ func (x *ServerDescriptor) GetJwksUri() string {
 func (x *ServerDescriptor) GetCertificateFingerprint() string {
 	if x != nil && x.CertificateFingerprint != nil {
 		return *x.CertificateFingerprint
+	}
+	return ""
+}
+
+func (x *ServerDescriptor) GetGrpc() string {
+	if x != nil && x.Grpc != nil {
+		return *x.Grpc
 	}
 	return ""
 }
@@ -1351,14 +1372,16 @@ var File_quire_v1_federation_proto protoreflect.FileDescriptor
 
 const file_quire_v1_federation_proto_rawDesc = "" +
 	"\n" +
-	"\x19quire/v1/federation.proto\x12\bquire.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13quire/v1/auth.proto\"\xcc\x01\n" +
+	"\x19quire/v1/federation.proto\x12\bquire.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13quire/v1/auth.proto\"\xee\x01\n" +
 	"\x10ServerDescriptor\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x12\x1e\n" +
 	"\bjwks_uri\x18\x03 \x01(\tH\x00R\ajwksUri\x88\x01\x01\x12<\n" +
-	"\x17certificate_fingerprint\x18\x04 \x01(\tH\x01R\x16certificateFingerprint\x88\x01\x01B\v\n" +
+	"\x17certificate_fingerprint\x18\x04 \x01(\tH\x01R\x16certificateFingerprint\x88\x01\x01\x12\x17\n" +
+	"\x04grpc\x18\x05 \x01(\tH\x02R\x04grpc\x88\x01\x01B\v\n" +
 	"\t_jwks_uriB\x1a\n" +
-	"\x18_certificate_fingerprint\"\xdf\x01\n" +
+	"\x18_certificate_fingerprintB\a\n" +
+	"\x05_grpc\"\xdf\x01\n" +
 	"\x06Server\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12:\n" +
 	"\n" +

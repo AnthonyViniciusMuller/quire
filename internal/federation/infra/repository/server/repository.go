@@ -54,15 +54,16 @@ func (r *Repository) queries(ctx context.Context) *federationdb.Queries {
 // that opened a transaction gets the row inside it. That is deliberate: the
 // row the reader is about to reference and the reader themselves then commit
 // together, and a rolled back registration leaves no half-written catalogue.
-func (r *Repository) EnsureLocal(ctx context.Context, descriptor server.Descriptor) (*server.Server, error) {
+func (r *Repository) EnsureLocal(ctx context.Context, descriptor *server.Descriptor) (*server.Server, error) {
 	if err := descriptor.Validate(); err != nil {
 		return nil, err
 	}
 
 	row, err := r.queries(ctx).EnsureLocalServer(ctx, federationdb.EnsureLocalServerParams{
-		Domain:  descriptor.Domain.String(),
-		BaseUrl: descriptor.BaseURL.String(),
-		JwksUri: optionalString(descriptor.JWKSURI.String()),
+		Domain:        descriptor.Domain.String(),
+		BaseUrl:       descriptor.BaseURL.String(),
+		JwksUri:       optionalString(descriptor.JWKSURI.String()),
+		GrpcAuthority: optionalString(descriptor.GRPCAuthority.String()),
 	})
 	if err != nil {
 		return nil, persist.Classify(err, opEnsureLocal)
@@ -80,6 +81,7 @@ func (r *Repository) Create(ctx context.Context, node *server.Server) error {
 		BaseUrl:                node.BaseURL.String(),
 		JwksUri:                optionalString(node.JWKSURI.String()),
 		CertificateFingerprint: optionalString(node.CertificateFingerprint.String()),
+		GrpcAuthority:          optionalString(node.GRPCAuthority.String()),
 		DiscoveredAt:           optionalTime(node.DiscoveredAt),
 		Active:                 node.Active,
 	})
@@ -101,6 +103,7 @@ func (r *Repository) Update(ctx context.Context, node *server.Server) error {
 		BaseUrl:                node.BaseURL.String(),
 		JwksUri:                optionalString(node.JWKSURI.String()),
 		CertificateFingerprint: optionalString(node.CertificateFingerprint.String()),
+		GrpcAuthority:          optionalString(node.GRPCAuthority.String()),
 		DiscoveredAt:           optionalTime(node.DiscoveredAt),
 		Active:                 node.Active,
 	})
@@ -194,7 +197,7 @@ func toDomain(row *federationdb.FederationServer) *server.Server {
 		Active:  row.Active,
 	}
 
-	// The three nullable columns. Absent means the node published none, which
+	// The four nullable columns. Absent means the node published none, which
 	// the domain reads as the zero value of each.
 	if row.JwksUri != nil {
 		props.JWKSURI = server.JWKSURI(*row.JwksUri)
@@ -202,6 +205,10 @@ func toDomain(row *federationdb.FederationServer) *server.Server {
 
 	if row.CertificateFingerprint != nil {
 		props.CertificateFingerprint = server.Fingerprint(*row.CertificateFingerprint)
+	}
+
+	if row.GrpcAuthority != nil {
+		props.GRPCAuthority = server.GRPCAuthority(*row.GrpcAuthority)
 	}
 
 	if row.DiscoveredAt != nil {

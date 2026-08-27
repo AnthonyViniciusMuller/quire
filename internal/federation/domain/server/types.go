@@ -15,6 +15,7 @@ const (
 	opParseBaseURL     = "federation/server: parse base url"
 	opParseJWKSURI     = "federation/server: parse jwks uri"
 	opParseFingerprint = "federation/server: parse fingerprint"
+	opParseGRPC        = "federation/server: parse grpc authority"
 )
 
 // The stable machine-readable codes this package attaches to the errors it
@@ -28,6 +29,8 @@ const (
 	CodeInvalidJWKSURI = "invalid_jwks_uri"
 	// CodeInvalidFingerprint is a pin that is not in the form C12 settled on.
 	CodeInvalidFingerprint = "invalid_certificate_fingerprint"
+	// CodeInvalidGRPCAuthority is an address no gRPC client could dial.
+	CodeInvalidGRPCAuthority = "invalid_grpc_authority"
 )
 
 // The widths federation.servers declares, counted in characters as PostgreSQL
@@ -35,6 +38,7 @@ const (
 const (
 	maxDomainLength      = 255
 	maxURLLength         = 255
+	maxAuthorityLength   = 255
 	maxFingerprintLength = 128
 )
 
@@ -207,6 +211,63 @@ func (f Fingerprint) Validate() error {
 	}
 }
 
+// GRPCAuthority is the host:port a peer dials for the API, as the node's own
+// discovery document publishes it.
+//
+// It is separate from the base URL because the two are only the same address
+// where a gateway happens to collapse them — D06 in docs/tcc-corrections.md.
+// The .well-known documents are plain HTTP because RFC 8615 requires it and
+// the API is gRPC, so without a mesh in front they listen on different ports,
+// and a peer that learned only the base URL would have nowhere to dial.
+//
+// It is absent on a node whose document publishes none. That node can be
+// recorded and cannot be replicated to, which is a fact about it rather than a
+// malformed record — and refusing it here would turn a peer that is merely
+// unreachable into a peer that cannot be described.
+type GRPCAuthority string
+
+// String renders the authority.
+func (g GRPCAuthority) String() string { return string(g) }
+
+// IsZero reports whether the node published none.
+func (g GRPCAuthority) IsZero() bool { return string(g) == "" }
+
+// Validate reports why the authority could not be dialed, or nil.
+//
+// The port is required, unlike in a Domain. That is the whole reason the value
+// exists: the address a peer dials is precisely the one the base URL does not
+// imply, and an authority without a port would silently mean 443 — the port
+// the HTTP listener answers on in the deployment where the two do differ.
+func (g GRPCAuthority) Validate() error {
+	invalid := func(reason string) error {
+		return errs.New(errs.KindInvalidArgument, "the server grpc authority is not usable").
+			WithOp(opParseGRPC).
+			WithCode(CodeInvalidGRPCAuthority).
+			WithField("grpc", reason)
+	}
+
+	if g.IsZero() {
+		return nil
+	}
+
+	host, port, hasPort := strings.Cut(string(g), ":")
+
+	switch {
+	case !hasPort:
+		return invalid("it must carry a port, since it is not the one the base url implies")
+	case !isPort(port):
+		return invalid("its port must be one to five digits")
+	case characterCount(string(g)) > maxAuthorityLength:
+		return invalid("it must be at most 255 characters long")
+	}
+
+	if err := Domain(host).Validate(); err != nil {
+		return invalid("its host may contain only lower-case letters, digits, dots and hyphens")
+	}
+
+	return nil
+}
+
 // Descriptor is everything a node publishes about itself, as discovery returns
 // it. It is the mutable half of a catalogue row: the fields below are learned
 // from the node and refreshed, never typed.
@@ -219,22 +280,29 @@ type Descriptor struct {
 	JWKSURI JWKSURI
 	// CertificateFingerprint is the pin for node-to-node mTLS (RNF08).
 	CertificateFingerprint Fingerprint
+	// GRPCAuthority is where the API answers (D06).
+	GRPCAuthority GRPCAuthority
 }
 
 // Validate reports the first field of the descriptor that cannot be stored, or
 // nil.
+//
+// The receiver is a pointer for the reason every other heavy value in this
+// repository is passed as one: five strings is eighty bytes, and copying them
+// at each of the four layers a description crosses is a copy nobody asked for.
 //
 // It returns what the field itself raised rather than wrapping it. The value
 // objects already say which field failed, why, and under which code, and an
 // outer message would replace all three with a vaguer one — the message a
 // client is shown is the outermost, and this is not the layer that knows more
 // than the field does.
-func (d Descriptor) Validate() error {
+func (d *Descriptor) Validate() error {
 	for _, validate := range []func() error{
 		d.Domain.Validate,
 		d.BaseURL.Validate,
 		d.JWKSURI.Validate,
 		d.CertificateFingerprint.Validate,
+		d.GRPCAuthority.Validate,
 	} {
 		if err := validate(); err != nil {
 			return err

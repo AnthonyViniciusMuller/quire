@@ -119,7 +119,7 @@ the thesis — corrections to the specification and deliberate divergences from 
       catalogue from it and `cmd/quired` is where the two are wired. C15 in
       [`tcc-corrections.md`](tcc-corrections.md) records what the table being node-wide means
       for UC12
-- [ ] `feat: add well-known discovery client` — carries the `grpc` authority and the
+- [x] `feat: add well-known discovery client` — carries the `grpc` authority and the
       `spki-sha256:` pin the endpoints publish, per D06 and C12 in
       [`tcc-corrections.md`](tcc-corrections.md); the column and the `ServerDescriptor`
       field land with it

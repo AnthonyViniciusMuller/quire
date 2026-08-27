@@ -16,6 +16,7 @@ func TestToDomain(t *testing.T) {
 	at := time.Date(2026, time.August, 27, 12, 0, 0, 0, time.UTC)
 	jwks := "https://quire-b.example/.well-known/jwks.json"
 	pin := wellknown.PinPrefix + "Zm9vYmFyCg=="
+	authority := "quire-b.example:9090"
 
 	node := toDomain(&federationdb.FederationServer{
 		ID:                     id,
@@ -23,6 +24,7 @@ func TestToDomain(t *testing.T) {
 		BaseUrl:                "https://quire-b.example",
 		JwksUri:                &jwks,
 		CertificateFingerprint: &pin,
+		GrpcAuthority:          &authority,
 		DiscoveredAt:           &at,
 		Active:                 true,
 	})
@@ -36,6 +38,8 @@ func TestToDomain(t *testing.T) {
 		t.Error("the signing key location was lost, so this node could not verify the peer's tokens")
 	case !node.Pinned() || node.CertificateFingerprint.String() != pin:
 		t.Error("the pin RNF08 is checked against was lost")
+	case node.GRPCAuthority.String() != authority:
+		t.Error("the address replication dials was lost, and D06 is the whole reason the column exists")
 	case !node.DiscoveredAt.Equal(at):
 		t.Error("the row no longer says when its description was learned")
 	case node.IsLocal:
@@ -63,6 +67,8 @@ func TestToDomainOfANodeWithoutAPin(t *testing.T) {
 		t.Error("a node that published no certificate reported a pin")
 	case !node.JWKSURI.IsZero():
 		t.Error("a node that published no keys reported a location for them")
+	case !node.GRPCAuthority.IsZero():
+		t.Error("a node discovered before the column existed reported an address to dial")
 	case !node.DiscoveredAt.IsZero():
 		t.Error("a row nothing discovered reported a discovery time")
 	case !node.IsLocal:

@@ -8,6 +8,12 @@
 -- across the federation, and is_local is what the partial unique index allows
 -- exactly one row to claim; a statement that changed either would either
 -- orphan the readers hosted here or make "is this reader local" unanswerable.
+--
+-- Every column list below ends with grpc_authority rather than reading in the
+-- order the record is described in. It is the order the table has, since the
+-- column was added by a later migration, and a list in any other order makes
+-- sqlc generate a row struct per statement instead of reusing the one model —
+-- four near-identical types, and a repository that maps each of them.
 
 -- Create or refresh the row that says which node this is.
 --
@@ -20,26 +26,32 @@
 -- publishes its pin in the discovery document, and what is stored here is what
 -- peers were told, not what this node checks.
 --
+-- The gRPC authority is written, and is the value this node advertises: a
+-- catalogue where the local row could not say where the API answers would be
+-- one a reader cannot read their own node out of (D06).
+--
 -- If this node is renamed, the insert collides with the partial unique index
 -- rather than leaving two rows claiming to be this instance — which is the
 -- right outcome: a node whose domain changed has a catalogue that needs an
 -- operator, not a second identity.
 -- name: EnsureLocalServer :one
-INSERT INTO federation.servers (domain, base_url, jwks_uri, is_local, discovered_at, active)
-VALUES ($1, $2, $3, true, now(), true)
+INSERT INTO federation.servers (domain, base_url, jwks_uri, grpc_authority, is_local, discovered_at, active)
+VALUES ($1, $2, $3, $4, true, now(), true)
 ON CONFLICT (domain) DO UPDATE
-    SET base_url = EXCLUDED.base_url,
-        jwks_uri = EXCLUDED.jwks_uri,
-        is_local = true,
-        active   = true
-RETURNING id, domain, base_url, jwks_uri, certificate_fingerprint, is_local, discovered_at, active;
+    SET base_url       = EXCLUDED.base_url,
+        jwks_uri       = EXCLUDED.jwks_uri,
+        grpc_authority = EXCLUDED.grpc_authority,
+        is_local       = true,
+        active         = true
+RETURNING id, domain, base_url, jwks_uri, certificate_fingerprint, is_local, discovered_at, active,
+          grpc_authority;
 
 -- A peer, with the identifier the entity minted. is_local is false here and in
 -- no other statement: EnsureLocalServer above is the only writer of the flag.
 -- name: CreateServer :exec
 INSERT INTO federation.servers (id, domain, base_url, jwks_uri, certificate_fingerprint,
-                                is_local, discovered_at, active)
-VALUES ($1, $2, $3, $4, $5, false, $6, $7);
+                                grpc_authority, is_local, discovered_at, active)
+VALUES ($1, $2, $3, $4, $5, $6, false, $7, $8);
 
 -- What a refresh learned, and whether the node takes part.
 -- name: UpdateServer :execrows
@@ -47,8 +59,9 @@ UPDATE federation.servers
 SET base_url                = $2,
     jwks_uri                = $3,
     certificate_fingerprint = $4,
-    discovered_at           = $5,
-    active                  = $6
+    grpc_authority          = $5,
+    discovered_at           = $6,
+    active                  = $7
 WHERE id = $1;
 
 -- name: DeleteServer :execrows
@@ -56,14 +69,16 @@ DELETE FROM federation.servers
 WHERE id = $1;
 
 -- name: GetServerByID :one
-SELECT id, domain, base_url, jwks_uri, certificate_fingerprint, is_local, discovered_at, active
+SELECT id, domain, base_url, jwks_uri, certificate_fingerprint, is_local, discovered_at, active,
+       grpc_authority
 FROM federation.servers
 WHERE id = $1;
 
 -- The lookup UC12 addresses by name, and the one that tells an addition from a
 -- node the catalogue already holds.
 -- name: GetServerByDomain :one
-SELECT id, domain, base_url, jwks_uri, certificate_fingerprint, is_local, discovered_at, active
+SELECT id, domain, base_url, jwks_uri, certificate_fingerprint, is_local, discovered_at, active,
+       grpc_authority
 FROM federation.servers
 WHERE domain = $1;
 
@@ -71,7 +86,8 @@ WHERE domain = $1;
 -- two calls and needs no tie-break. Deactivated nodes are hidden unless asked
 -- for: they are still known, and what they are not is replicated to.
 -- name: ListServers :many
-SELECT id, domain, base_url, jwks_uri, certificate_fingerprint, is_local, discovered_at, active
+SELECT id, domain, base_url, jwks_uri, certificate_fingerprint, is_local, discovered_at, active,
+       grpc_authority
 FROM federation.servers
 WHERE active
    OR sqlc.arg(include_inactive)::boolean

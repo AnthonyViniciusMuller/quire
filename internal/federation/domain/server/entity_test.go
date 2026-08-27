@@ -15,12 +15,13 @@ import (
 var discovered = time.Date(2026, time.August, 27, 12, 0, 0, 0, time.UTC)
 
 // peer is a node as its discovery document describes it.
-func peer() server.Descriptor {
-	return server.Descriptor{
+func peer() *server.Descriptor {
+	return &server.Descriptor{
 		Domain:                 "quire-b.example",
 		BaseURL:                "https://quire-b.example",
 		JWKSURI:                "https://quire-b.example/.well-known/jwks.json",
 		CertificateFingerprint: server.Fingerprint(wellknown.PinPrefix + "Zm9vYmFyCg=="),
+		GRPCAuthority:          "quire-b.example:9090",
 	}
 }
 
@@ -41,6 +42,8 @@ func TestNew(t *testing.T) {
 		t.Error("a node the reader just added does not take part in replication")
 	case !node.Pinned():
 		t.Error("the pin RNF08 is checked against was not carried across")
+	case node.GRPCAuthority != "quire-b.example:9090":
+		t.Error("the address replication dials was not carried across (D06)")
 	case !node.DiscoveredAt.Equal(discovered):
 		t.Error("the node does not say when its description was learned")
 	}

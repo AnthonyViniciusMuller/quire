@@ -39,6 +39,12 @@ type Querier interface {
 	// across the federation, and is_local is what the partial unique index allows
 	// exactly one row to claim; a statement that changed either would either
 	// orphan the readers hosted here or make "is this reader local" unanswerable.
+	//
+	// Every column list below ends with grpc_authority rather than reading in the
+	// order the record is described in. It is the order the table has, since the
+	// column was added by a later migration, and a list in any other order makes
+	// sqlc generate a row struct per statement instead of reusing the one model —
+	// four near-identical types, and a repository that maps each of them.
 	// Create or refresh the row that says which node this is.
 	//
 	// The upsert is on the domain, and it rewrites what a redeployment may have
@@ -49,6 +55,10 @@ type Querier interface {
 	// The certificate pin is deliberately absent. A node does not pin itself: it
 	// publishes its pin in the discovery document, and what is stored here is what
 	// peers were told, not what this node checks.
+	//
+	// The gRPC authority is written, and is the value this node advertises: a
+	// catalogue where the local row could not say where the API answers would be
+	// one a reader cannot read their own node out of (D06).
 	//
 	// If this node is renamed, the insert collides with the partial unique index
 	// rather than leaving two rows claiming to be this instance — which is the

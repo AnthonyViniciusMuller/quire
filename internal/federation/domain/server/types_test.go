@@ -167,16 +167,54 @@ func TestFingerprintIsOptional(t *testing.T) {
 	}
 }
 
+// TestGRPCAuthorityRequiresAPort is the whole of D06 in one rule. The value
+// exists because the address a peer dials is precisely the one the base URL
+// does not imply, and an authority without a port would silently mean 443 —
+// the port the HTTP listener answers on in the deployment where the two do
+// differ.
+func TestGRPCAuthorityRequiresAPort(t *testing.T) {
+	t.Parallel()
+
+	if err := server.GRPCAuthority("quire-b.example:9090").Validate(); err != nil {
+		t.Fatalf("Validate on a published authority = %v, want nil", err)
+	}
+
+	var absent server.GRPCAuthority
+	if !absent.IsZero() || absent.Validate() != nil {
+		t.Error("a node that published no authority could not be described")
+	}
+
+	for name, authority := range map[string]server.GRPCAuthority{
+		"no port":            "quire-b.example",
+		"a named port":       "quire-b.example:grpc",
+		"a url":              "https://quire-b.example:9090",
+		"a host with a path": "quire-b.example:9090/nodes",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			err := authority.Validate()
+			if err == nil {
+				t.Fatalf("Validate(%q) = nil, want an error", authority)
+			}
+
+			assertInvalidArgument(t, err, server.CodeInvalidGRPCAuthority, "grpc")
+		})
+	}
+}
+
 // TestDescriptorValidateKeepsTheFieldError covers what a client is shown when
 // one field of a description is wrong: the code and the field of that field,
 // not a summary of the whole descriptor.
 func TestDescriptorValidateKeepsTheFieldError(t *testing.T) {
 	t.Parallel()
 
-	err := server.Descriptor{
+	descriptor := server.Descriptor{
 		Domain:  "quire-a.example",
 		BaseURL: "quire-a.example",
-	}.Validate()
+	}
+
+	err := descriptor.Validate()
 	if err == nil {
 		t.Fatal("Validate with an unusable base url = nil, want an error")
 	}

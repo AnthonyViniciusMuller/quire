@@ -36,7 +36,7 @@ type Repository interface {
 	// It is the only way a local row is written. The identity slice reaches it
 	// through its own LocalServer port, which is what UC14 binds a reader
 	// with.
-	EnsureLocal(ctx context.Context, descriptor Descriptor) (*Server, error)
+	EnsureLocal(ctx context.Context, descriptor *Descriptor) (*Server, error)
 
 	// Create records a peer, and reports errs.KindAlreadyExists with
 	// CodeDomainKnown when the catalogue already holds its domain.

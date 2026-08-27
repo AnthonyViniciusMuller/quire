@@ -36,7 +36,7 @@ type Service struct {
 	// than from a lookup — and they are validated at construction, because a
 	// base URL the catalogue would refuse is a deployment fault and belongs to
 	// the start of the process rather than to the first registration.
-	descriptor server.Descriptor
+	descriptor *server.Descriptor
 
 	// domain is the same value in the identity slice's vocabulary. The two
 	// types are separate on purpose — see server.Domain — and this is the one
@@ -62,10 +62,15 @@ var _ service.LocalServer = (*Service)(nil)
 func New(servers server.Repository, cfg *config.Server) (*Service, error) {
 	base := cfg.BaseURL.String()
 
-	descriptor := server.Descriptor{
+	descriptor := &server.Descriptor{
 		Domain:  server.ParseDomain(cfg.Name),
 		BaseURL: server.BaseURL(base),
 		JWKSURI: server.JWKSURI(base + wellknown.JWKSPath),
+		// The address peers dial, which is not the one this node listens on
+		// wherever a gateway answers for it (D06). It is the same value the
+		// discovery document publishes, and the catalogue holds it so that a
+		// reader can read their own node out of the same list as every other.
+		GRPCAuthority: server.GRPCAuthority(cfg.GRPCAdvertisedAddress),
 	}
 
 	if err := descriptor.Validate(); err != nil {

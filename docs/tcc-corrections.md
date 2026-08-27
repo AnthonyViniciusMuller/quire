@@ -587,8 +587,16 @@ The discovery documents therefore carry the gRPC authority explicitly, as `grpc`
 the base URL. Subsection 4.2.4 has to record that `servidor` gains a column for it and that
 `ServerDescriptor` carries it: without it the federation works only where a mesh happens to
 collapse the two endpoints into one address, which is an accident of deployment and not a
-property of the protocol. The column and the protobuf field land with the discovery client in
-phase 6; this entry is what stops that from being rediscovered there.
+property of the protocol.
+
+**Status** open. Implemented in phase 6: `servidor` gains `grpc_authority` in
+`000005_server_grpc_authority`, `ServerDescriptor` gains `grpc`, and the discovery client
+reads it out of the document. The column is nullable and the value optional, because a node
+whose document publishes none is a node this instance can record and cannot replicate to —
+refusing it at discovery would turn a peer that is merely unreachable into one that cannot be
+described. The port is required where the value is present: an authority without one would
+silently mean 443, which is the port the HTTP listener answers on in the deployment where the
+two do differ, and that is the deployment the column exists for.
 
 ### D07 — the refresh credential is rotated, and reuse of a spent one ends the device's sessions
 

@@ -102,8 +102,23 @@ message ServerDescriptor {
   // peer can verify them without sharing a secret (RNF11).
   optional string jwks_uri = 3;
 
-  // The certificate to pin for node-to-node mTLS (RNF08).
+  // The certificate to pin for node-to-node mTLS (RNF08). It is a digest of
+  // the public key and not of the certificate — see C12 in
+  // docs/tcc-corrections.md — and its form says so: spki-sha256:<base64>.
   optional string certificate_fingerprint = 4;
+
+  // The authority to dial for gRPC, as host:port.
+  //
+  // It is published separately from the base URL because the two are only the
+  // same address where a gateway happens to collapse them: the .well-known
+  // documents are plain HTTP because RFC 8615 requires it, and the API is
+  // gRPC, so without a mesh in front the two listen on different ports. A peer
+  // that learned only the base URL would have nowhere to dial for replication.
+  // D06 in docs/tcc-corrections.md.
+  //
+  // Absent on a node whose document publishes none, which is a node this
+  // instance can record and cannot replicate to.
+  optional string grpc = 5;
 }
 
 // A node in this reader's catalogue.
