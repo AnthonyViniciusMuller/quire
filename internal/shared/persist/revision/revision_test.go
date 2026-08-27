@@ -5,8 +5,8 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/anthonyvsmuller/quire/internal/library/infra/repository/revision"
 	"github.com/anthonyvsmuller/quire/internal/shared/crdt"
+	"github.com/anthonyvsmuller/quire/internal/shared/persist/revision"
 )
 
 func TestToColumnsCompactsTheClock(t *testing.T) {

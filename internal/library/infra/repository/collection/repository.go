@@ -9,9 +9,9 @@ import (
 
 	"github.com/anthonyvsmuller/quire/internal/library/domain/collection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/persist/librarydb"
-	"github.com/anthonyvsmuller/quire/internal/library/infra/repository/revision"
 	"github.com/anthonyvsmuller/quire/internal/shared/errs"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
+	"github.com/anthonyvsmuller/quire/internal/shared/persist/revision"
 )
 
 // The operations reported by this file, in the form the errs package expects.

@@ -192,7 +192,14 @@ the thesis — corrections to the specification and deliberate divergences from 
       timestamp without the two fields that break a tie. The `locator` package lands as well —
       a value object both entities hold and neither owns, which is a departure from the layout
       every other slice follows and is recorded in [`architecture.md`](architecture.md)
-- [ ] `feat: add annotation and reading progress repositories`
+- [x] `feat: add annotation and reading progress repositories` — the reading block of
+      `sqlc.yaml`, and `000007_reading_pagination_index`, which is 000006's finding on the
+      other table: the index the reading schema shipped with covers `ebook_id` alone, and the
+      planner would not use it at all for an ordered page, reading through the primary key and
+      filtering instead. Measured on 220 000 marks: 1 881 buffers and 3.4 ms became 4 and
+      0.3 ms, and the last page costs what the first does. `revision` moves from the library
+      slice into `internal/shared/persist`, because what a NULL `device_id` means is now a
+      question four repositories ask
 - [ ] `feat: add annotation management use cases`
 - [ ] `feat: add reading progress use cases`
 - [ ] `feat: add reading grpc handlers`

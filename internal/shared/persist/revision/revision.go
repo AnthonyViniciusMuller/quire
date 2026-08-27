@@ -1,11 +1,17 @@
 // Package revision converts between the causal state of a replicated record
 // and the four columns that hold it.
 //
-// It is one package rather than a pair of helpers repeated in three
-// repositories, because the conversion carries a decision and a decision made
-// three times is a decision that drifts: device_id is nullable, and what a
-// NULL there means has to be answered the same way for a work, a grouping and
-// a filing.
+// It is one package rather than a pair of helpers repeated in every repository
+// that writes a replicated row, because the conversion carries a decision and a
+// decision made in four places is a decision that drifts: device_id is
+// nullable, and what a NULL there means has to be answered the same way for a
+// work, a grouping, a filing and an annotation.
+//
+// It sits in the shared core rather than in the library slice, where it was
+// written, for the same reason crdt.Revision does: the answer is about the
+// causal state of a row and not about what the row holds, so it belongs to
+// every slice that stores one — the library, the reading slice, and the sync
+// reconciler that will read all of them.
 //
 // What it means is that the device is unknown. The column is
 // ON DELETE SET NULL, so a revision can lose the device it named — in practice

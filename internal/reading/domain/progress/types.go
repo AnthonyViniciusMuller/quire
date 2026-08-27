@@ -117,3 +117,12 @@ func round(value float64) float64 {
 
 	return math.Round(value*scale) / scale
 }
+
+// RestorePercent rebuilds a proportion already stored, without checking it.
+//
+// A repository uses it and nothing else does. What is in the row was checked
+// by the constructor that wrote it and by reading.progress_percent_range, and
+// a value re-refused on the way out would make a row unreadable rather than
+// merely out of range — which is the wrong answer for a node that has to hand
+// back what a peer replicated to it.
+func RestorePercent(value float64) Percent { return Percent{value: value, known: true} }

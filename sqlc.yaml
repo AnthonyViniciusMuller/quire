@@ -1,9 +1,8 @@
 # Generation of the persistence code from the migrations and the query files.
 #
-# One block per slice, each generating into the slice that owns it. The blocks
-# appear as their slices do: a block whose queries directory is empty makes the
-# whole run fail, so the one still missing — reading — is added by the phase
-# that writes its first query. See docs/ROADMAP.md.
+# One block per slice, each generating into the slice that owns it. A block
+# whose queries directory is empty makes the whole run fail, so each was added
+# by the phase that wrote its slice's first query; every slice now has one.
 #
 # The schema is the migrations directory, whole. sqlc reads it as the catalogue
 # every query is checked against, and skips the .down.sql files on its own, so
@@ -88,6 +87,18 @@ sql:
           - column: "reading.annotations.vector_clock"
             go_type: *vectorclock
 
+          # The one numeric column in the catalogue, as a float rather than as
+          # pgtype.Numeric, for the reason a timestamptz is a time.Time: the
+          # driver type buys nothing the repository would use, and the contract
+          # carries the value as a double in any case. numeric(5, 2) holds at
+          # most five significant digits, which a float64 round-trips exactly,
+          # so nothing is lost between the column and the wire — and the domain
+          # is what refuses a value outside 0 to 100 before either sees it.
+          - column: "reading.progress.percent"
+            go_type:
+              type: "float64"
+              pointer: true
+
   # The library slice, on the same terms as the federation block below. Its
   # queries are checked against the whole catalogue, which is what makes a page
   # of works that joins library.ebook_collections a compile-time question.
@@ -98,6 +109,24 @@ sql:
       go:
         package: librarydb
         out: internal/library/infra/persist/librarydb
+        sql_package: pgx/v5
+        emit_interface: true
+        emit_empty_slices: true
+        emit_pointers_for_null_types: true
+        omit_unused_structs: true
+        overrides: *overrides
+
+  # The reading slice, on the same terms. It sits after the library block
+  # because it reads against it: reading.annotations and reading.progress both
+  # reference library.ebooks, and a query here that joined the works table is
+  # checked against the same catalogue in the same run.
+  - engine: postgresql
+    schema: migrations
+    queries: internal/reading/infra/persist/queries
+    gen:
+      go:
+        package: readingdb
+        out: internal/reading/infra/persist/readingdb
         sql_package: pgx/v5
         emit_interface: true
         emit_empty_slices: true
