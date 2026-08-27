@@ -17,10 +17,11 @@ import (
 var now = time.Date(2026, time.August, 27, 12, 0, 0, 0, time.UTC)
 
 type fixture struct {
-	usecase  *updateserver.UpdateServer
-	servers  *apptest.ServerRepository
-	replicas *apptest.ReplicaRepository
-	peer     *server.Server
+	usecase     *updateserver.UpdateServer
+	servers     *apptest.ServerRepository
+	replicas    *apptest.ReplicaRepository
+	transaction *apptest.Transaction
+	peer        *server.Server
 }
 
 func newFixture(t *testing.T) fixture {
@@ -38,11 +39,14 @@ func newFixture(t *testing.T) fixture {
 		t.Fatalf("Create: %v", err)
 	}
 
+	transaction := apptest.NewTransaction()
+
 	return fixture{
-		usecase:  updateserver.New(servers, replicas),
-		servers:  servers,
-		replicas: replicas,
-		peer:     peer,
+		usecase:     updateserver.New(servers, replicas, transaction),
+		servers:     servers,
+		replicas:    replicas,
+		transaction: transaction,
+		peer:        peer,
 	}
 }
 
@@ -82,6 +86,10 @@ func TestExecute(t *testing.T) {
 
 	if stored.Active {
 		t.Error("the flag was answered with and not written")
+	}
+
+	if locked := f.servers.Locked(); len(locked) != 1 || locked[0] != f.peer.ID {
+		t.Errorf("locked = %v, want the row the check is about", locked)
 	}
 }
 

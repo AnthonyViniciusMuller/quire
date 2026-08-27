@@ -86,6 +86,24 @@ type Querier interface {
 	// node the catalogue already holds.
 	GetServerByDomain(ctx context.Context, domain string) (FederationServer, error)
 	GetServerByID(ctx context.Context, id uuid.UUID) (FederationServer, error)
+	// The same read, holding the row until the transaction ends.
+	//
+	// It is what makes the refusals of DeleteServerIfUnused and of the update that
+	// clears `active` hold against a concurrent authorization. Both of those check
+	// federation.user_replicas and then write federation.servers, and under READ
+	// COMMITTED a subquery sees the snapshot its own statement began with — so an
+	// authorization committed in between would be invisible to the check and lost
+	// to the cascade.
+	//
+	// Every call that authorizes a node takes this lock first, and so does every
+	// call that would refuse because of one. They then serialize on the row they
+	// disagree about, and whichever arrives second sees what the first committed,
+	// because each statement in a READ COMMITTED transaction takes a fresh
+	// snapshot.
+	//
+	// Outside a transaction it locks nothing worth having: the lock is released
+	// with the statement. The port says so.
+	GetServerByIDForUpdate(ctx context.Context, id uuid.UUID) (FederationServer, error)
 	// Newest decision first, with the identifier breaking the tie between two
 	// granted in the same instant.
 	ListReplicaAuthorizationsByUser(ctx context.Context, arg ListReplicaAuthorizationsByUserParams) ([]FederationUserReplica, error)

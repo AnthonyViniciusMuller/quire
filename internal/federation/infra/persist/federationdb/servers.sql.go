@@ -204,6 +204,48 @@ func (q *Queries) GetServerByID(ctx context.Context, id uuid.UUID) (FederationSe
 	return i, err
 }
 
+const getServerByIDForUpdate = `-- name: GetServerByIDForUpdate :one
+SELECT id, domain, base_url, jwks_uri, certificate_fingerprint, is_local, discovered_at, active,
+       grpc_authority
+FROM federation.servers
+WHERE id = $1
+    FOR UPDATE
+`
+
+// The same read, holding the row until the transaction ends.
+//
+// It is what makes the refusals of DeleteServerIfUnused and of the update that
+// clears `active` hold against a concurrent authorization. Both of those check
+// federation.user_replicas and then write federation.servers, and under READ
+// COMMITTED a subquery sees the snapshot its own statement began with — so an
+// authorization committed in between would be invisible to the check and lost
+// to the cascade.
+//
+// Every call that authorizes a node takes this lock first, and so does every
+// call that would refuse because of one. They then serialize on the row they
+// disagree about, and whichever arrives second sees what the first committed,
+// because each statement in a READ COMMITTED transaction takes a fresh
+// snapshot.
+//
+// Outside a transaction it locks nothing worth having: the lock is released
+// with the statement. The port says so.
+func (q *Queries) GetServerByIDForUpdate(ctx context.Context, id uuid.UUID) (FederationServer, error) {
+	row := q.db.QueryRow(ctx, getServerByIDForUpdate, id)
+	var i FederationServer
+	err := row.Scan(
+		&i.ID,
+		&i.Domain,
+		&i.BaseUrl,
+		&i.JwksUri,
+		&i.CertificateFingerprint,
+		&i.IsLocal,
+		&i.DiscoveredAt,
+		&i.Active,
+		&i.GrpcAuthority,
+	)
+	return i, err
+}
+
 const listServers = `-- name: ListServers :many
 SELECT id, domain, base_url, jwks_uri, certificate_fingerprint, is_local, discovered_at, active,
        grpc_authority

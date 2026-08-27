@@ -17,10 +17,11 @@ import (
 var now = time.Date(2026, time.August, 27, 12, 0, 0, 0, time.UTC)
 
 type fixture struct {
-	usecase  *removeserver.RemoveServer
-	servers  *apptest.ServerRepository
-	replicas *apptest.ReplicaRepository
-	peer     *server.Server
+	usecase     *removeserver.RemoveServer
+	servers     *apptest.ServerRepository
+	replicas    *apptest.ReplicaRepository
+	transaction *apptest.Transaction
+	peer        *server.Server
 }
 
 func newFixture(t *testing.T) fixture {
@@ -38,7 +39,15 @@ func newFixture(t *testing.T) fixture {
 		t.Fatalf("Create: %v", err)
 	}
 
-	return fixture{usecase: removeserver.New(servers, replicas), servers: servers, replicas: replicas, peer: peer}
+	transaction := apptest.NewTransaction()
+
+	return fixture{
+		usecase:     removeserver.New(servers, replicas, transaction),
+		servers:     servers,
+		replicas:    replicas,
+		transaction: transaction,
+		peer:        peer,
+	}
 }
 
 func TestExecute(t *testing.T) {
@@ -52,6 +61,16 @@ func TestExecute(t *testing.T) {
 
 	if f.servers.Count() != 0 {
 		t.Error("the node is still in the catalogue")
+	}
+
+	// The lock and the unit of work are what make the refusal below hold
+	// against a reader authorizing the node at the same moment.
+	if f.transaction.Calls() != 1 {
+		t.Errorf("units of work = %d, want the one the check and the delete share", f.transaction.Calls())
+	}
+
+	if locked := f.servers.Locked(); len(locked) != 1 || locked[0] != f.peer.ID {
+		t.Errorf("locked = %v, want the row the check is about", locked)
 	}
 }
 

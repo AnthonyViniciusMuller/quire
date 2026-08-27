@@ -68,6 +68,19 @@ type Repository interface {
 	// GetByID reads a node by primary key, active or not.
 	GetByID(ctx context.Context, id uuid.UUID) (*Server, error)
 
+	// GetByIDForUpdate is GetByID holding the row until the transaction ends.
+	//
+	// It is what makes the two refusals that consult
+	// federation.user_replicas — forgetting a node, and stopping one — hold
+	// against a reader authorizing that node at the same moment. Both check
+	// the authorizations and then write the server, and the check cannot see a
+	// write committed after its own statement began; the calls that would
+	// disagree therefore take this lock first and serialize on the row.
+	//
+	// It must be called inside a unit of work. Outside one the lock is
+	// released with the statement, which is to say immediately.
+	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (*Server, error)
+
 	// GetByDomain reads a node by the authority it is known as, which is the
 	// value UC12 addresses a lookup to and the one the catalogue makes unique.
 	GetByDomain(ctx context.Context, domain Domain) (*Server, error)

@@ -10,11 +10,19 @@
 // catalogue is node-wide (C15). A reader who wants a node stopped for
 // themselves revokes their own authorization, which is the call that is theirs
 // alone; this one is about what the instance knows.
+//
+// It runs as a unit of work, and takes the row lock before it counts. Under
+// READ COMMITTED a statement sees the snapshot it began with, so a reader
+// authorizing this node between the count and the delete would be invisible to
+// both — and the foreign key cascades, so their authorization would go with
+// the row rather than stop it. Authorizing takes the same lock, and the two
+// then serialize on the node they disagree about.
 package removeserver
 
 import (
 	"context"
 
+	"github.com/anthonyvsmuller/quire/internal/federation/application/service"
 	command "github.com/anthonyvsmuller/quire/internal/federation/application/usecase"
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/replica"
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/server"
@@ -27,16 +35,21 @@ const opExecute = "federation/removeserver: execute"
 
 // RemoveServer forgets nodes.
 type RemoveServer struct {
-	servers  server.Repository
-	replicas replica.Repository
+	servers     server.Repository
+	replicas    replica.Repository
+	transaction service.Transaction
 }
 
 // RemoveServer satisfies the shape every use case of the slice has.
 var _ command.Usecase[Input, Output] = (*RemoveServer)(nil)
 
 // New returns the use case over its dependencies.
-func New(servers server.Repository, replicas replica.Repository) *RemoveServer {
-	return &RemoveServer{servers: servers, replicas: replicas}
+func New(
+	servers server.Repository,
+	replicas replica.Repository,
+	transaction service.Transaction,
+) *RemoveServer {
+	return &RemoveServer{servers: servers, replicas: replicas, transaction: transaction}
 }
 
 // Execute forgets the node.
@@ -51,36 +64,39 @@ func New(servers server.Repository, replicas replica.Repository) *RemoveServer {
 // refused.
 //
 // So a delete that reports no row after the checks passed is a race that was
-// lost, and it is answered exactly as the check would have answered it.
+// lost — which the lock makes unreachable through this node's own calls, and
+// the statement still refuses.
 func (r *RemoveServer) Execute(ctx context.Context, input Input) (Output, error) {
-	node, err := r.servers.GetByID(ctx, input.ServerID)
-	if err != nil {
-		return Output{}, err
-	}
+	return Output{}, r.transaction.Within(ctx, func(ctx context.Context) error {
+		node, err := r.servers.GetByIDForUpdate(ctx, input.ServerID)
+		if err != nil {
+			return err
+		}
 
-	if removable := node.Removable(); removable != nil {
-		return Output{}, removable
-	}
+		if removable := node.Removable(); removable != nil {
+			return removable
+		}
 
-	authorized, err := r.replicas.CountActiveForServer(ctx, node.ID)
-	if err != nil {
-		return Output{}, err
-	}
+		authorized, err := r.replicas.CountActiveForServer(ctx, node.ID)
+		if err != nil {
+			return err
+		}
 
-	if authorized > 0 {
-		return Output{}, r.inUse()
-	}
+		if authorized > 0 {
+			return r.inUse()
+		}
 
-	removed, err := r.servers.Delete(ctx, node.ID)
-	if err != nil {
-		return Output{}, err
-	}
+		removed, err := r.servers.Delete(ctx, node.ID)
+		if err != nil {
+			return err
+		}
 
-	if !removed {
-		return Output{}, r.inUse()
-	}
+		if !removed {
+			return r.inUse()
+		}
 
-	return Output{}, nil
+		return nil
+	})
 }
 
 // inUse is the answer to a node somebody still allows to hold their data.

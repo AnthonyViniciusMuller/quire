@@ -16,13 +16,14 @@ import (
 
 // The operations reported by this file, in the form the errs package expects.
 const (
-	opEnsureLocal = "federation/server: ensure local"
-	opCreate      = "federation/server: create"
-	opUpdate      = "federation/server: update"
-	opDelete      = "federation/server: delete"
-	opGetByID     = "federation/server: get by id"
-	opGetByDomain = "federation/server: get by domain"
-	opList        = "federation/server: list"
+	opEnsureLocal      = "federation/server: ensure local"
+	opCreate           = "federation/server: create"
+	opUpdate           = "federation/server: update"
+	opDelete           = "federation/server: delete"
+	opGetByID          = "federation/server: get by id"
+	opGetByIDForUpdate = "federation/server: get by id for update"
+	opGetByDomain      = "federation/server: get by domain"
+	opList             = "federation/server: list"
 )
 
 // constraintDomain is the name of the unique constraint on the domain, as it
@@ -140,6 +141,16 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*server.Server,
 	row, err := r.queries(ctx).GetServerByID(ctx, id)
 	if err != nil {
 		return nil, readError(err, opGetByID)
+	}
+
+	return toDomain(&row), nil
+}
+
+// GetByIDForUpdate is GetByID holding the row until the transaction ends.
+func (r *Repository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (*server.Server, error) {
+	row, err := r.queries(ctx).GetServerByIDForUpdate(ctx, id)
+	if err != nil {
+		return nil, readError(err, opGetByIDForUpdate)
 	}
 
 	return toDomain(&row), nil

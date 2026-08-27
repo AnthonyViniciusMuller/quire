@@ -12,12 +12,18 @@
 // authorizes is therefore neither deactivable nor removable, and the reader
 // who wants it stopped for themselves revokes their own authorization, which
 // is the call that is theirs alone.
+//
+// Clearing the flag runs as a unit of work that takes the row lock first, for
+// the reason forgetting a node does: the check reads the authorizations and
+// the write touches the catalogue, and a reader authorizing the node between
+// the two would be invisible to the check.
 package updateserver
 
 import (
 	"context"
 	"uuid"
 
+	"github.com/anthonyvsmuller/quire/internal/federation/application/service"
 	command "github.com/anthonyvsmuller/quire/internal/federation/application/usecase"
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/replica"
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/server"
@@ -30,46 +36,62 @@ const opExecute = "federation/updateserver: execute"
 
 // UpdateServer writes whether a node takes part.
 type UpdateServer struct {
-	servers  server.Repository
-	replicas replica.Repository
+	servers     server.Repository
+	replicas    replica.Repository
+	transaction service.Transaction
 }
 
 // UpdateServer satisfies the shape every use case of the slice has.
 var _ command.Usecase[Input, Output] = (*UpdateServer)(nil)
 
 // New returns the use case over its dependencies.
-func New(servers server.Repository, replicas replica.Repository) *UpdateServer {
-	return &UpdateServer{servers: servers, replicas: replicas}
+func New(
+	servers server.Repository,
+	replicas replica.Repository,
+	transaction service.Transaction,
+) *UpdateServer {
+	return &UpdateServer{servers: servers, replicas: replicas, transaction: transaction}
 }
 
 // Execute writes the flag.
 func (u *UpdateServer) Execute(ctx context.Context, input Input) (Output, error) {
-	node, err := u.servers.GetByID(ctx, input.ServerID)
+	var written *server.Server
+
+	err := u.transaction.Within(ctx, func(ctx context.Context) error {
+		node, err := u.servers.GetByIDForUpdate(ctx, input.ServerID)
+		if err != nil {
+			return err
+		}
+
+		// Only the clearing is guarded. Restoring a node nobody is replicating
+		// to costs nothing, and restoring one somebody is replicating to is
+		// what they wanted.
+		if !input.Active && node.Active {
+			if refused := u.refuseWhileAuthorized(ctx, node.ID); refused != nil {
+				return refused
+			}
+		}
+
+		// The domain refuses this instance, whatever the flag was going to
+		// become: a node that stopped replicating on its own behalf would have
+		// taken its own readers out of the federation.
+		if err := node.SetActive(input.Active); err != nil {
+			return err
+		}
+
+		if err := u.servers.Update(ctx, node); err != nil {
+			return err
+		}
+
+		written = node
+
+		return nil
+	})
 	if err != nil {
 		return Output{}, err
 	}
 
-	// Only the clearing is guarded. Restoring a node nobody is replicating to
-	// costs nothing, and restoring one somebody is replicating to is what they
-	// wanted.
-	if !input.Active && node.Active {
-		if err := u.refuseWhileAuthorized(ctx, node.ID); err != nil {
-			return Output{}, err
-		}
-	}
-
-	// The domain refuses this instance, whatever the flag was going to become:
-	// a node that stopped replicating on its own behalf would have taken its
-	// own readers out of the federation.
-	if err := node.SetActive(input.Active); err != nil {
-		return Output{}, err
-	}
-
-	if err := u.servers.Update(ctx, node); err != nil {
-		return Output{}, err
-	}
-
-	return Output{Server: node}, nil
+	return Output{Server: written}, nil
 }
 
 // refuseWhileAuthorized reports why the node may not be stopped, or nil.

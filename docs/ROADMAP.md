@@ -128,7 +128,8 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add known server management use cases` — six of them, one per method of UC12.
       Deactivating a node carries the same refusal as forgetting one, since `active` is
       node-wide too; C15 in [`tcc-corrections.md`](tcc-corrections.md) records both
-- [ ] `feat: add replica authorization use cases`
+- [x] `feat: add replica authorization use cases` — and the row lock that makes the two
+      refusals of the previous commit hold against a grant arriving at the same moment
 - [ ] `feat: add federation grpc handlers`
 - [ ] `test: add integration tests for server discovery`
 

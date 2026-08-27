@@ -133,6 +133,7 @@ func (c *Clock) Advance(by time.Duration) {
 type ServerRepository struct {
 	mu      sync.Mutex
 	records map[uuid.UUID]*server.Server
+	locked  []uuid.UUID
 }
 
 // ServerRepository satisfies the port the use cases hold.
@@ -237,6 +238,26 @@ func (r *ServerRepository) GetByID(_ context.Context, id uuid.UUID) (*server.Ser
 	}
 
 	return cloneServer(stored), nil
+}
+
+// GetByIDForUpdate is GetByID: there is no transaction behind these doubles,
+// so there is nothing to hold. What the fake preserves is that a use case
+// which must take the lock still has to ask for it, and Locked reports that it
+// did.
+func (r *ServerRepository) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (*server.Server, error) {
+	r.mu.Lock()
+	r.locked = append(r.locked, id)
+	r.mu.Unlock()
+
+	return r.GetByID(ctx, id)
+}
+
+// Locked is every row a caller took the lock on, in order.
+func (r *ServerRepository) Locked() []uuid.UUID {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return append([]uuid.UUID(nil), r.locked...)
 }
 
 // GetByDomain reads a node by the authority it is known as.
@@ -420,4 +441,46 @@ func cloneReplica(authorization *replica.Replica) *replica.Replica {
 func replicaNotFound() error {
 	return errs.New(errs.KindNotFound, "that node holds nothing of this reader's").
 		WithCode(replica.CodeNotFound)
+}
+
+// Transaction runs the work directly. There is no database behind these
+// doubles, so there is nothing to commit — what the fake preserves is that the
+// use case still has to ask, and that the context it hands on is the one its
+// repositories are called with.
+type Transaction struct {
+	// Err, when set, is what Within reports without running the work — for the
+	// test that needs a unit that could not be opened. It is read under the
+	// lock, so a parallel test may set it.
+	Err error
+
+	mu    sync.Mutex
+	calls int
+}
+
+// Transaction satisfies the port the use cases hold.
+var _ service.Transaction = (*Transaction)(nil)
+
+// NewTransaction returns the fake unit of work.
+func NewTransaction() *Transaction { return &Transaction{} }
+
+// Within runs fn.
+func (t *Transaction) Within(ctx context.Context, fn func(ctx context.Context) error) error {
+	t.mu.Lock()
+	t.calls++
+	err := t.Err
+	t.mu.Unlock()
+
+	if err != nil {
+		return err
+	}
+
+	return fn(ctx)
+}
+
+// Calls is how often a unit of work was opened.
+func (t *Transaction) Calls() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.calls
 }

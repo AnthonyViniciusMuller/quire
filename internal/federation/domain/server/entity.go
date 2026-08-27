@@ -48,8 +48,12 @@ const (
 	// CodeDomainMismatch is a refresh answered by a different domain from the
 	// one on record.
 	CodeDomainMismatch = "server_domain_mismatch"
-	// CodeLocalServer is an attempt to edit or forget this node's own row.
+	// CodeLocalServer is an attempt to edit or forget this node's own row, or
+	// to authorize it to hold a copy of data it already holds.
 	CodeLocalServer = "local_server"
+	// CodeServerInactive is an operation that needs the node to take part in
+	// replication, on one that has been deactivated here.
+	CodeServerInactive = "server_inactive"
 )
 
 // Props is everything about a node other than its identifier.
