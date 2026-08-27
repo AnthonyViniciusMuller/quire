@@ -38,6 +38,7 @@ import (
 	updatecollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/updatecollection"
 	updateebookusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/updateebook"
 	uploadcontentusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/uploadcontent"
+	"github.com/anthonyvsmuller/quire/internal/library/domain/ebook"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/addebooktocollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/createcollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/createebook"
@@ -75,6 +76,12 @@ const opInitialize = "library/di: initialize"
 type Container struct {
 	// Service is the gRPC surface of the slice, ready to be registered.
 	Service *libraryservice.Service
+
+	// Ebooks is the collection this node holds. The reading slice reaches it
+	// through its own port, which is what establishes whose a mark or a
+	// reading position is: both of its tables reference a work and neither
+	// references a reader.
+	Ebooks ebook.Repository
 
 	// closer releases what the object store client holds, when it holds
 	// anything. Only one of the three adapters does.
@@ -146,7 +153,11 @@ func Initialize(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (*C
 			removefromcollectionusecase.New(works, collections, memberships, clock, transaction)),
 	}
 
-	return &Container{Service: libraryservice.New(&controllers), closer: closer}, nil
+	return &Container{
+		Service: libraryservice.New(&controllers),
+		Ebooks:  works,
+		closer:  closer,
+	}, nil
 }
 
 // blobStore builds the adapter the configuration named, and returns what

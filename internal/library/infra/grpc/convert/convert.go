@@ -21,7 +21,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/library/domain/collection"
 	"github.com/anthonyvsmuller/quire/internal/library/domain/content"
 	"github.com/anthonyvsmuller/quire/internal/library/domain/ebook"
-	"github.com/anthonyvsmuller/quire/internal/shared/crdt"
+	"github.com/anthonyvsmuller/quire/internal/shared/crdtpb"
 )
 
 // Format renders a stored format as the enumerator the contract names it by.
@@ -101,30 +101,6 @@ func KindValue(kind quirev1.CollectionKind) string {
 	}
 }
 
-// Revision renders the replication metadata of a row.
-//
-// The timestamp is a HybridTimestamp and not a google.protobuf.Timestamp, and
-// the contract is emphatic about why: the value is not a wall clock, and a
-// distinct message is what stops anything from comparing it against one by
-// accident or rendering it to a reader as the time of day (C01).
-func Revision(revision crdt.Revision) *quirev1.Revision {
-	rendered := &quirev1.Revision{
-		VectorClock: &quirev1.VectorClock{Entries: map[string]uint64{}},
-		UpdatedAt:   &quirev1.HybridTimestamp{UnixMicros: revision.UpdatedAt.UnixMicro()},
-		DeviceId:    revision.DeviceID.String(),
-		Deleted:     revision.Deleted,
-	}
-
-	// Zero entries are dropped, as the contract requires: a device absent and
-	// a device mapped to zero are the same causal history, and sending both
-	// forms would make them compare unequal.
-	for device, counter := range revision.VectorClock.Compact() {
-		rendered.VectorClock.Entries[string(device)] = counter
-	}
-
-	return rendered
-}
-
 // Ebook renders one work.
 func Ebook(work *ebook.Ebook) *quirev1.Ebook {
 	rendered := &quirev1.Ebook{
@@ -133,7 +109,7 @@ func Ebook(work *ebook.Ebook) *quirev1.Ebook {
 		Format:      Format(work.Format),
 		ContentHash: work.Hash.String(),
 		ImportedAt:  timestamppb.New(work.ImportedAt),
-		Revision:    Revision(work.Revision),
+		Revision:    crdtpb.Revision(work.Revision),
 	}
 
 	// The optional fields are rendered as absent rather than as empty strings.
@@ -189,7 +165,7 @@ func Collection(grouping *collection.Collection) *quirev1.Collection {
 		Name:      grouping.Name.String(),
 		Kind:      Kind(grouping.Kind),
 		CreatedAt: timestamppb.New(grouping.CreatedAt),
-		Revision:  Revision(grouping.Revision),
+		Revision:  crdtpb.Revision(grouping.Revision),
 	}
 
 	if !grouping.Description.IsZero() {

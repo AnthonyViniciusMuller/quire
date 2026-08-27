@@ -214,7 +214,13 @@ the thesis — corrections to the specification and deliberate divergences from 
       what settles two calls from a device crossing, since there is no row to lock the first
       time through and an `ON CONFLICT DO UPDATE` would be a second copy of C01's stamping
       rule in SQL
-- [ ] `feat: add reading grpc handlers`
+- [x] `feat: add reading grpc handlers` — seven calls, the slice's `di.Container`, and the
+      adapter of the `Works` port, which reads through the library slice's own repository and
+      is wired in `cmd/quired` where the two containers meet. Two packages move into the
+      shared core rather than being written a second time: `fieldmask`, because every update
+      in this contract carries a mask over an entity that reconciles per field, and the
+      rendering of a `crdt.Revision` on the wire, which becomes `internal/shared/crdtpb` —
+      the compaction rule is the one that would drift
 - [ ] `test: add integration tests for reading service`
 
 ## Phase 9 — sync slice (UC09–11, UC16)

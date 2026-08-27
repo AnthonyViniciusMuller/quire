@@ -24,6 +24,7 @@ import (
 	identitydi "github.com/anthonyvsmuller/quire/internal/identity/di"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/jwks"
 	librarydi "github.com/anthonyvsmuller/quire/internal/library/di"
+	readingdi "github.com/anthonyvsmuller/quire/internal/reading/di"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/grpcx"
 	"github.com/anthonyvsmuller/quire/internal/shared/httpx"
@@ -102,6 +103,13 @@ func run(ctx context.Context) error {
 
 	defer func() { _ = library.Close() }()
 
+	// After the library slice, because it reads through it: both of the
+	// reading slice's tables reference a work and neither references a reader,
+	// so whose a mark or a position is is established through the library's
+	// works repository. Wiring the two is this file's job — neither slice
+	// imports the other's container.
+	reading := readingdi.Initialize(pool, library.Ebooks)
+
 	grpcServer, err := grpcx.New(ctx, &cfg.Server,
 		grpcx.WithChain(grpcx.NewChain(logger).Around(registry.GRPCServerInterceptors())),
 		// Nearest the handler, and after the chain above on purpose. A call it
@@ -126,6 +134,7 @@ func run(ctx context.Context) error {
 	identity.Service.Register(grpcServer.Registrar())
 	federation.Service.Register(grpcServer.Registrar())
 	library.Service.Register(grpcServer.Registrar())
+	reading.Service.Register(grpcServer.Registrar())
 
 	// After every service is registered, so that a method nobody has called
 	// yet still has a series rather than appearing the first time it fails.

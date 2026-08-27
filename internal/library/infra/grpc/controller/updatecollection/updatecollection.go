@@ -10,8 +10,8 @@ import (
 	command "github.com/anthonyvsmuller/quire/internal/library/application/usecase"
 	usecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/updatecollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/convert"
-	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/fieldmask"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/identifier"
+	"github.com/anthonyvsmuller/quire/internal/shared/grpcx/fieldmask"
 )
 
 // The paths the mask may name.

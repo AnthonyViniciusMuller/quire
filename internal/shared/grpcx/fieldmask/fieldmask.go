@@ -11,6 +11,12 @@
 // That is why an unknown path is refused rather than ignored. An ignored path
 // is a change the client believes it made, and on this kind of entity a change
 // nobody made is a change that stays unmade until somebody looks.
+//
+// It sits in the shared core rather than in the slice it was written for
+// because the rule is not that slice's. Every update in this contract carries a
+// mask over an entity that reconciles per field — a work, a grouping, a mark —
+// and a copy per slice would be the same refusal spelled differently, which is
+// how two slices come to disagree about what an unknown path means.
 package fieldmask
 
 import (
@@ -24,7 +30,7 @@ import (
 
 // opClaimed is the operation reported by this file, in the form the errs
 // package expects.
-const opClaimed = "library/fieldmask: claimed"
+const opClaimed = "grpcx/fieldmask: claimed"
 
 // CodeInvalidFieldMask is a mask naming a path the call cannot write.
 const CodeInvalidFieldMask = "invalid_field_mask"

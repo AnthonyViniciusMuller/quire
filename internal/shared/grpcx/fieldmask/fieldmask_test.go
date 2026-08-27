@@ -6,8 +6,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
-	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/fieldmask"
 	"github.com/anthonyvsmuller/quire/internal/shared/errs"
+	"github.com/anthonyvsmuller/quire/internal/shared/grpcx/fieldmask"
 )
 
 func TestClaimedIsTheSetTheMaskNames(t *testing.T) {

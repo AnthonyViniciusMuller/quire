@@ -10,7 +10,6 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/library/domain/content"
 	"github.com/anthonyvsmuller/quire/internal/library/domain/ebook"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/convert"
-	"github.com/anthonyvsmuller/quire/internal/shared/crdt"
 )
 
 // at is when the values below were written, and digest is a well-formed
@@ -120,33 +119,6 @@ func TestEbookRendersWhatTheFileSaid(t *testing.T) {
 		t.Error("the metadata RF05 exists for was lost")
 	case rendered.GetFormat() != quirev1.EbookFormat_EBOOK_FORMAT_EPUB:
 		t.Error("the format was not carried across")
-	}
-}
-
-// A device absent from a clock and a device mapped to zero are the same causal
-// history, and sending both forms would make them compare unequal.
-func TestRevisionDropsTheZeroEntries(t *testing.T) {
-	t.Parallel()
-
-	phone, tablet := uuid.New(), uuid.New()
-
-	rendered := convert.Revision(crdt.Revision{
-		VectorClock: crdt.VectorClock{crdt.Author(phone): 2, crdt.Author(tablet): 0},
-		UpdatedAt:   at,
-		DeviceID:    phone,
-	})
-
-	if len(rendered.GetVectorClock().GetEntries()) != 1 {
-		t.Errorf("the clock rendered as %v, want the zero entry dropped",
-			rendered.GetVectorClock().GetEntries())
-	}
-
-	if rendered.GetUpdatedAt().GetUnixMicros() != at.UnixMicro() {
-		t.Error("the tie-break timestamp was not carried across")
-	}
-
-	if rendered.GetDeviceId() != phone.String() {
-		t.Error("the tie-break lost its second half")
 	}
 }
 
