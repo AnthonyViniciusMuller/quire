@@ -91,3 +91,16 @@ WHERE user_id = sqlc.arg(user_id)
     OR (imported_at, id) < (sqlc.arg(cursor_imported_at)::timestamptz, sqlc.arg(cursor_id)::uuid))
 ORDER BY imported_at DESC, id DESC
 LIMIT sqlc.arg(page_size)::integer;
+
+-- Whether the reader has any work naming the digest, which is what an upload
+-- is checked against (C16 in docs/tcc-corrections.md).
+--
+-- Tombstoned works count, and the partial index therefore does not serve this
+-- statement — ebooks_content_hash_idx does. A reader who deleted a work on one
+-- device while another was still uploading its file is describing an ordinary
+-- crossing, not an attempt to store bytes they have no claim to.
+-- name: UserHoldsContent :one
+SELECT EXISTS (SELECT 1
+               FROM library.ebooks
+               WHERE user_id = $1
+                 AND content_hash = $2);

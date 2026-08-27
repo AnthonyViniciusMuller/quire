@@ -168,7 +168,12 @@ the thesis — corrections to the specification and deliberate divergences from 
       `AddEbookToCollection` and `RemoveEbookFromCollection` as well. Both are idempotent, and
       filing a work that is already filed still stamps a write — the call is idempotent to the
       reader and is not a no-op to replication
-- [ ] `feat: add ebook content upload and download streaming`
+- [x] `feat: add ebook content upload and download streaming` — the bytes are staged, checked
+      and only then stored, because the object is named by its digest and a node that streamed
+      straight through would be writing under a name that promises otherwise. The `Staging`
+      port and its temporary-file adapter land with it, as does C16 in
+      [`tcc-corrections.md`](tcc-corrections.md): the upload carries no work identifier, so
+      without a check the object store is writable by any authenticated reader
 - [ ] `feat: add library grpc handlers`
 - [ ] `test: add integration tests for library service`
 

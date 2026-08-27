@@ -546,6 +546,34 @@ names the node.
 `internal/federation/domain/server`, whose package comment carries the reasoning, and enforced
 by the known server management use cases of phase 6.
 
+### C16 — UC02 lets any authenticated reader write bytes the node cannot attribute to them
+
+**Where** UC02 (importar e-book) and, in the implementation's contract,
+`LibraryService.UploadEbookContent`.
+
+**What the TCC says** The reader imports a file; the node stores it, keyed by its digest,
+and deduplicates identical files across readers.
+
+**Why it does not hold** The upload carries the description of the file — digest, length,
+media type — and no e-book identifier, because the object is keyed by the digest and shared
+between every work that names it. That is right, and it has a consequence the specification
+does not address: the node has nothing to check the upload against. Any authenticated reader
+can stream any bytes under any digest, and the object store is then writable by anyone with
+an account, without bound and without a row anywhere that says whose file it was.
+
+The digest check is not the answer to this. It stops bytes from being stored under a name
+that lies about them; it says nothing about whether the caller had any business storing them.
+
+**Correction** State the precondition UC02 already implies and that the contract leaves
+unwritten: the bytes may be uploaded only for a digest the calling reader already has a work
+naming. A correct client is unaffected — the flow the contract describes is `CreateEbook`,
+read `content_missing`, then `UploadEbookContent`, so the work always exists first — and a
+node that checks it cannot be used as an object store by an account that holds no library.
+Record it in 4.2.2 as a precondition of UC02.
+
+**Status** open. Implemented in phase 7: the upload refuses a digest no work of the caller's
+names, with a failed precondition.
+
 ## Divergences
 
 Deliberate departures from a specification that is internally consistent. Subsection 4.2.4

@@ -90,6 +90,21 @@ type Repository interface {
 	// answered that it is already gone — and only one of those is an error.
 	GetByID(ctx context.Context, id uuid.UUID) (*Ebook, error)
 
+	// HoldsContent reports whether the reader has any work naming the digest,
+	// tombstoned or not.
+	//
+	// It is what an upload is checked against. The bytes are keyed by their
+	// digest and shared between every work that names them, so the upload
+	// carries no work identifier and the node would otherwise have nothing to
+	// decide by — any authenticated reader could stream any bytes under any
+	// digest, and the object store would be writable by anyone with an
+	// account. C16 in docs/tcc-corrections.md is the finding.
+	//
+	// Tombstoned works count. A reader who deleted a work on one device and is
+	// still uploading its file from another is describing an ordinary
+	// crossing, not an attempt to store something they have no claim to.
+	HoldsContent(ctx context.Context, userID uuid.UUID, hash ContentHash) (bool, error)
+
 	// List reads one page of a reader's collection, most recently imported
 	// first, and returns the cursor the next page continues from — zero when
 	// there is no next page.

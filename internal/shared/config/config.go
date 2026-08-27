@@ -152,6 +152,17 @@ type Storage struct {
 	// than in each section.
 	Bucket string `env:"QUIRE_STORAGE_BUCKET,required,notEmpty"`
 
+	// MaxUploadBytes is the largest file the node will accept.
+	//
+	// It is checked against the length the client declares before any of the
+	// bytes travel, which is what the contract's "description first, content
+	// after" shape exists for: a node that discovered the size by receiving it
+	// would have received it.
+	//
+	// The default is half a gigabyte, which is larger than any e-book and
+	// smaller than a disk.
+	MaxUploadBytes int64 `env:"QUIRE_STORAGE_MAX_UPLOAD_BYTES" envDefault:"536870912"`
+
 	// S3 is Amazon S3, through the AWS SDK.
 	S3 StorageS3
 	// MinIO is a self-hosted MinIO, through the MinIO SDK.
@@ -502,21 +513,25 @@ func (c *Config) validateAuth() []error {
 func (c *Config) validateStorage() []error {
 	var errs []error
 
+	if c.Storage.MaxUploadBytes < 1 {
+		errs = append(errs, errors.New("QUIRE_STORAGE_MAX_UPLOAD_BYTES: must be at least 1"))
+	}
+
 	chosen := c.Storage.providersConfigured()
 
 	switch len(chosen) {
 	case 1:
 	case 0:
-		return []error{errors.New("QUIRE_STORAGE_*: no object store was configured; set one of " +
-			"QUIRE_STORAGE_S3_REGION, QUIRE_STORAGE_MINIO_ENDPOINT or QUIRE_STORAGE_GCS_PROJECT_ID")}
+		return append(errs, errors.New("QUIRE_STORAGE_*: no object store was configured; set one of "+
+			"QUIRE_STORAGE_S3_REGION, QUIRE_STORAGE_MINIO_ENDPOINT or QUIRE_STORAGE_GCS_PROJECT_ID"))
 	default:
 		names := make([]string, 0, len(chosen))
 		for _, provider := range chosen {
 			names = append(names, string(provider))
 		}
 
-		return []error{fmt.Errorf("QUIRE_STORAGE_*: %s were all configured; a node holds its "+
-			"objects in exactly one store", strings.Join(names, " and "))}
+		return append(errs, fmt.Errorf("QUIRE_STORAGE_*: %s were all configured; a node holds its "+
+			"objects in exactly one store", strings.Join(names, " and ")))
 	}
 
 	switch chosen[0] {

@@ -19,6 +19,8 @@ package apptest
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"sort"
 	"sync"
@@ -164,6 +166,23 @@ func (r *EbookRepository) GetByID(_ context.Context, id uuid.UUID) (*ebook.Ebook
 	}
 
 	return cloneEbook(stored), nil
+}
+
+// HoldsContent reports whether the reader has any work naming the digest,
+// tombstoned works included, as the statement does.
+func (r *EbookRepository) HoldsContent(
+	_ context.Context, userID uuid.UUID, hash ebook.ContentHash,
+) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, stored := range r.records {
+		if stored.UserID == userID && stored.Hash == hash {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // List reads one page, in the order and with the cursor semantics of the
@@ -543,6 +562,11 @@ func membershipNotFound() error {
 
 // ContentRepository is an in-memory record of what this node holds.
 type ContentRepository struct {
+	// CreateErr, when set, is what Create reports without writing — for the
+	// test that needs the row to fail after the bytes have been stored, which
+	// is the one case where an upload has to remove what it put there.
+	CreateErr error
+
 	mu      sync.Mutex
 	records map[ebook.ContentHash]*content.Content
 }
@@ -559,6 +583,10 @@ func NewContentRepository() *ContentRepository {
 func (r *ContentRepository) Create(_ context.Context, stored *content.Content) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if r.CreateErr != nil {
+		return r.CreateErr
+	}
 
 	if _, held := r.records[stored.Hash]; held {
 		return errs.New(errs.KindAlreadyExists, "this node already holds that file").
@@ -596,6 +624,90 @@ func (r *ContentRepository) Has(_ context.Context, hash ebook.ContentHash) (bool
 
 	return held, nil
 }
+
+// Staging holds an incoming file in memory, which is what the real adapter
+// does on disk. It hashes as it reads, so a test that sends bytes which are
+// not the digest they were declared under takes the same path a lying client
+// would.
+type Staging struct {
+	// Err, when set, is what Stage reports without reading — for the test that
+	// needs a node which cannot hold the file.
+	Err error
+
+	mu sync.Mutex
+}
+
+// Staging satisfies the port the use cases hold.
+var _ service.Staging = (*Staging)(nil)
+
+// NewStaging returns the fake.
+func NewStaging() *Staging { return &Staging{} }
+
+// Stage reads body to its end and returns what arrived.
+func (s *Staging) Stage(_ context.Context, body io.Reader, limit int64) (service.Staged, error) {
+	s.mu.Lock()
+	err := s.Err
+	s.mu.Unlock()
+
+	if err != nil {
+		return nil, err
+	}
+
+	// One byte past the ceiling, as the adapter reads, so that a file exactly
+	// at it is accepted and the first one over is refused.
+	received, readErr := io.ReadAll(io.LimitReader(body, limit+1))
+	if readErr != nil {
+		return nil, errs.Wrap(readErr, errs.KindUnavailable, "the upload did not arrive in full").
+			WithCode(service.CodeStagingFailed)
+	}
+
+	if int64(len(received)) > limit {
+		return nil, errs.New(errs.KindResourceExhausted, "the file is larger than this node accepts").
+			WithCode(service.CodeUploadTooLarge)
+	}
+
+	digest := sha256.Sum256(received)
+
+	return &stagedBytes{bytes: received, digest: hex.EncodeToString(digest[:])}, nil
+}
+
+// stagedBytes is one staged upload held in memory.
+type stagedBytes struct {
+	bytes  []byte
+	digest string
+	read   int
+}
+
+// stagedBytes satisfies the port's view of a staged upload.
+var _ service.Staged = (*stagedBytes)(nil)
+
+// Read reads the staged bytes.
+func (s *stagedBytes) Read(p []byte) (int, error) {
+	if s.read >= len(s.bytes) {
+		return 0, io.EOF
+	}
+
+	copied := copy(p, s.bytes[s.read:])
+	s.read += copied
+
+	return copied, nil
+}
+
+// Rewind returns the reader to the first byte.
+func (s *stagedBytes) Rewind() error {
+	s.read = 0
+
+	return nil
+}
+
+// Size is how many bytes arrived.
+func (s *stagedBytes) Size() int64 { return int64(len(s.bytes)) }
+
+// Digest is the sha-256 of what arrived, as lowercase hexadecimal.
+func (s *stagedBytes) Digest() string { return s.digest }
+
+// Close releases nothing: the bytes are a slice.
+func (s *stagedBytes) Close() error { return nil }
 
 // BlobStore is an in-memory object store, so that an upload followed by a
 // download is a round trip rather than two assertions about call counts.

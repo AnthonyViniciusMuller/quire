@@ -17,10 +17,11 @@ import (
 
 // The operations reported by this file, in the form the errs package expects.
 const (
-	opCreate  = "library/ebook: create"
-	opUpdate  = "library/ebook: update"
-	opGetByID = "library/ebook: get by id"
-	opList    = "library/ebook: list"
+	opCreate       = "library/ebook: create"
+	opUpdate       = "library/ebook: update"
+	opGetByID      = "library/ebook: get by id"
+	opHoldsContent = "library/ebook: holds content"
+	opList         = "library/ebook: list"
 )
 
 // Repository reads and writes a reader's works in PostgreSQL.
@@ -121,6 +122,21 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*ebook.Ebook, e
 	}
 
 	return toDomain(&row)
+}
+
+// HoldsContent reports whether the reader has any work naming the digest.
+func (r *Repository) HoldsContent(
+	ctx context.Context, userID uuid.UUID, hash ebook.ContentHash,
+) (bool, error) {
+	holds, err := r.queries(ctx).UserHoldsContent(ctx, librarydb.UserHoldsContentParams{
+		UserID:      userID,
+		ContentHash: hash.String(),
+	})
+	if err != nil {
+		return false, persist.Classify(err, opHoldsContent)
+	}
+
+	return holds, nil
 }
 
 // List reads one page of a reader's collection and the cursor the next page

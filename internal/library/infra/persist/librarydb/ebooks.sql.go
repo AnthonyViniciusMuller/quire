@@ -258,3 +258,29 @@ func (q *Queries) UpdateEbook(ctx context.Context, arg UpdateEbookParams) (int64
 	}
 	return result.RowsAffected(), nil
 }
+
+const userHoldsContent = `-- name: UserHoldsContent :one
+SELECT EXISTS (SELECT 1
+               FROM library.ebooks
+               WHERE user_id = $1
+                 AND content_hash = $2)
+`
+
+type UserHoldsContentParams struct {
+	UserID      uuid.UUID
+	ContentHash string
+}
+
+// Whether the reader has any work naming the digest, which is what an upload
+// is checked against (C16 in docs/tcc-corrections.md).
+//
+// Tombstoned works count, and the partial index therefore does not serve this
+// statement — ebooks_content_hash_idx does. A reader who deleted a work on one
+// device while another was still uploading its file is describing an ordinary
+// crossing, not an attempt to store bytes they have no claim to.
+func (q *Queries) UserHoldsContent(ctx context.Context, arg UserHoldsContentParams) (bool, error) {
+	row := q.db.QueryRow(ctx, userHoldsContent, arg.UserID, arg.ContentHash)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}

@@ -147,6 +147,14 @@ type Querier interface {
 	// it.
 	UpdateEbook(ctx context.Context, arg UpdateEbookParams) (int64, error)
 	UpdateMembership(ctx context.Context, arg UpdateMembershipParams) (int64, error)
+	// Whether the reader has any work naming the digest, which is what an upload
+	// is checked against (C16 in docs/tcc-corrections.md).
+	//
+	// Tombstoned works count, and the partial index therefore does not serve this
+	// statement — ebooks_content_hash_idx does. A reader who deleted a work on one
+	// device while another was still uploading its file is describing an ordinary
+	// crossing, not an attempt to store bytes they have no claim to.
+	UserHoldsContent(ctx context.Context, arg UserHoldsContentParams) (bool, error)
 }
 
 var _ Querier = (*Queries)(nil)
