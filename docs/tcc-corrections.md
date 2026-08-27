@@ -420,6 +420,13 @@ and forty-four of base64), so Quadro 13 needs only its description corrected.
 `internal/shared/wellknown`, which publishes the value, and pinned by the discovery client in
 phase 6.
 
+The correction rests on one deployment fact and is only as true as that fact: cert-manager must
+not rotate the private key when it renews. Its `Certificate` defaults to keeping the key, and a
+`privateKey.rotationPolicy` of `Always` — which is what a security review recommends in general,
+and therefore what somebody will one day set here in good faith — reinstates this defect in
+full. Whoever writes the manifest in phase 11 has to know that, so the roadmap says it there
+too, and the manifest itself should carry the reason rather than the setting alone.
+
 
 ## Divergences
 

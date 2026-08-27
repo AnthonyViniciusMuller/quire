@@ -137,9 +137,18 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 - [ ] `build: add container image for the node server`
 - [ ] `build: add kustomize base manifests`
-- [ ] `build: add istio gateway and authentication policies`
-- [ ] `build: add cert manager issuer and certificate`
-- [ ] `build: add origin and replica overlays`
+- [ ] `build: add istio gateway and authentication policies` — the three paths of the HTTP
+      listener need different policies: `/.well-known` has to stay reachable by strangers,
+      since being readable without a prior relationship is its entire function, while
+      `/metrics` and `/readyz` stay inside the mesh
+- [ ] `build: add cert manager issuer and certificate` — the `Certificate` must keep its
+      private key across renewals (`privateKey.rotationPolicy` left at `Never`): the pin
+      published by discovery is over the public key, per C12 in
+      [`tcc-corrections.md`](tcc-corrections.md), and rotating the key breaks every peer's
+      pin on renewal — the exact failure C12 exists to remove
+- [ ] `build: add origin and replica overlays` — both set `QUIRE_GRPC_ADVERTISED_ADDRESS`
+      to the authority the gateway answers on, which is not the port the node listens on;
+      outside development the configuration refuses to load without it
 - [ ] `build: add kind based local cluster setup`
 - [ ] `ci: add end to end job on kind cluster`
 - [ ] `test: add grpc latency benchmark script`
