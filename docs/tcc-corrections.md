@@ -335,6 +335,47 @@ thing on every replicable entity, which is also what makes the reconciler unifor
 
 **Status** open. Implemented in `000002_library_and_reading`.
 
+### C11 — a migration that carries no device identities restarts causality
+
+**Where** RF17 and UC16, and the description of the migration in 4.2.2.
+
+**What the TCC says** The reader migrates to another origin server preserving the collection,
+the annotations and the reading progress, and — because every device keeps a complete local
+copy — the migration depends neither on the cooperation nor on the availability of the
+previous server.
+
+**Why it does not hold** The independence is real and worth keeping. Two things follow from
+it that the text does not say, and the second one is a defect only while it stays unsaid.
+
+*The devices have to travel with the reader.* Every operation names the device that authored
+it, and every vector clock is keyed by a device id. On the new node those ids have to be the
+ones the devices already hold. If the new node mints fresh ones, the imported history names
+devices that do not exist there — which the schema refuses outright, since `sync.operations`
+references `identity.devices` — and even if it did not, a device writing under a new id
+starts a second clock entry that never merges with the first. Two devices that had been in
+sync would then read as concurrent for ever, and every write between them would fall through
+to the tie-break. So migration is not "register, then push": the new node has to adopt the
+device records, ids included, before the first operation can be inserted.
+
+*The previous identity cannot be proved.* A node that needs nothing from the previous server
+has nothing with which to check that the caller was `@anthony:old.example`. It can record the
+claim; it cannot verify it. What UC16 preserves is therefore the data and not the name: the
+domain half of the identifier necessarily changes, so the identifier changes, and the new one
+is a new identity that happens to hold the old one's history. Peers that replicated the reader
+hold an authorization naming the old identity (RF16), so they are authorized again rather than
+following the reader on their own.
+
+**Correction** Say both in the description of UC16. The migration carries the device records
+with their ids; the identifier changes; the replicas are re-authorized. And state the trade-off
+rather than leaving it implicit: identity continuity is purchasable, at the price of a
+signature from the previous server — a key published in its JWKS, signing an assertion that
+the reader is moving — which reintroduces exactly the dependency on that server's availability
+that UC16 exists to remove. The thesis chooses availability over provable continuity, and that
+is a defensible choice once it is a choice.
+
+**Status** open. On the wire in `FederationService.MigrateHomeServer`, which carries the
+devices for that reason; implemented in phase 9 (`feat: add home server migration use case`).
+
 ## Divergences
 
 Deliberate departures from a specification that is internally consistent. Subsection 4.2.4
