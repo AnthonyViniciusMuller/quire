@@ -55,7 +55,10 @@ func New(
 // be invisible to the check and taken by the cascade. The three calls
 // serialize on the node they disagree about.
 func (a *AuthorizeReplica) Execute(ctx context.Context, input Input) (Output, error) {
-	var granted *replica.Replica
+	var (
+		granted *replica.Replica
+		domain  server.Domain
+	)
 
 	err := a.transaction.Within(ctx, func(ctx context.Context) error {
 		node, err := a.servers.GetByIDForUpdate(ctx, input.ServerID)
@@ -67,6 +70,7 @@ func (a *AuthorizeReplica) Execute(ctx context.Context, input Input) (Output, er
 			return refused
 		}
 
+		domain = node.Domain
 		granted, err = a.grant(ctx, input)
 
 		return err
@@ -75,7 +79,7 @@ func (a *AuthorizeReplica) Execute(ctx context.Context, input Input) (Output, er
 		return Output{}, err
 	}
 
-	return Output{Authorization: granted}, nil
+	return Output{Authorization: granted, ServerDomain: domain}, nil
 }
 
 // refuseUnsuitable reports why the node may not hold a copy, or nil.

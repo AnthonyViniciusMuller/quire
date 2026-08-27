@@ -1,26 +1,59 @@
 // Package di builds the federation slice: it constructs every adapter, wires
-// them into the use cases, and hands back what the node needs from this slice.
+// them into the use cases, wires those into the controllers, and hands back
+// what the node needs from this slice.
 //
 // It is the only place where a concrete adapter of this slice is named.
+// Everything above it holds a port, so substituting the .well-known client for
+// one that reads a fixture is a change to a constructor here and to nothing
+// else.
 //
-// What it hands back today is the catalogue itself, because another slice
-// needs it: UC14 binds a reader to the node that hosts them, so the identity
-// slice holds a LocalServer port whose whole job is to resolve this instance's
-// row in federation.servers. That row belongs here, so the adapter that
-// satisfies the port is built from this container rather than from a temporary
-// resolver of its own — which is what phase 5 had and what this replaces.
+// It hands back two things. The gRPC surface, which the node registers. And
+// the catalogue itself, because another slice needs it: UC14 binds a reader to
+// the node that hosts them, so the identity slice holds a LocalServer port
+// whose whole job is to resolve this instance's row in federation.servers.
 //
 // The direction is worth naming: the identity slice depends on a port declared
 // in this slice's domain, and on nothing in its infrastructure. Wiring the two
 // together is the node's job, in cmd/quired, and neither slice imports the
-// other's adapters.
+// other's adapters — the one exception being the authentication interceptor's
+// context key, which the identity slice owns because it is the only part of
+// the node that can verify a token, and which every slice's controllers read.
+//
+// It reads no environment variable and opens no connection. The configuration
+// arrives loaded and the pool arrives open, because both are shared with the
+// slices that follow and neither is this slice's to decide.
 package di
 
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	addserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/addserver"
+	authorizereplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/authorizereplica"
+	discoverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/discover"
+	getserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/getserver"
+	listauthorizationsusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/listauthorizations"
+	listserversusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/listservers"
+	refreshserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/refreshserver"
+	removeserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/removeserver"
+	revokereplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/revokereplica"
+	updateserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/updateserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/server"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/addknownserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/authorizereplica"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/discoverserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/getknownserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/listknownservers"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/listreplicaauthorizations"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/refreshknownserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/removeknownserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/revokereplica"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/updateknownserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/federationservice"
+	replicarepository "github.com/anthonyvsmuller/quire/internal/federation/infra/repository/replica"
 	serverrepository "github.com/anthonyvsmuller/quire/internal/federation/infra/repository/server"
+	clockservice "github.com/anthonyvsmuller/quire/internal/federation/infra/service/clock"
+	discoveryservice "github.com/anthonyvsmuller/quire/internal/federation/infra/service/discovery"
+	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 )
 
@@ -30,15 +63,48 @@ type Container struct {
 	// slice reaches it through its own port, which is what binds a reader to
 	// this node.
 	Servers server.Repository
+	// Service is the gRPC surface of the slice, ready to be registered.
+	Service *federationservice.Service
 }
 
-// Initialize builds the slice over the node's connection pool.
+// Initialize builds the slice over the node's configuration and connection
+// pool.
 //
-// It opens no connection and reads no environment variable: the pool arrives
-// open because it is shared with every other slice, and the configuration
-// arrives loaded because neither is this slice's to decide.
-func Initialize(pool *pgxpool.Pool) *Container {
+// Nothing here can fail, which is worth contrasting with the identity slice:
+// that one reads a signing key and refuses a deployment with no way to deliver
+// a password recovery, and this one holds no secret and reaches no peer until
+// a reader asks it to. A domain that does not answer is a failed call, not a
+// node that should not have started.
+func Initialize(cfg *config.Config, pool *pgxpool.Pool) *Container {
 	manager := persist.NewManager(pool)
 
-	return &Container{Servers: serverrepository.New(manager)}
+	servers := serverrepository.New(manager)
+	replicas := replicarepository.New(manager)
+
+	discovery := discoveryservice.New(&cfg.Federation)
+	clock := clockservice.New()
+
+	// The manager itself is the unit of work: its Within is the port, so no
+	// adapter stands between them.
+	transaction := manager
+
+	controllers := federationservice.Controllers{
+		DiscoverServer:     discoverserver.New(discoverusecase.New(discovery)),
+		AddKnownServer:     addknownserver.New(addserverusecase.New(servers, discovery, clock)),
+		GetKnownServer:     getknownserver.New(getserverusecase.New(servers)),
+		ListKnownServers:   listknownservers.New(listserversusecase.New(servers)),
+		UpdateKnownServer:  updateknownserver.New(updateserverusecase.New(servers, replicas, transaction)),
+		RefreshKnownServer: refreshknownserver.New(refreshserverusecase.New(servers, discovery, clock)),
+		RemoveKnownServer:  removeknownserver.New(removeserverusecase.New(servers, replicas, transaction)),
+		AuthorizeReplica: authorizereplica.New(
+			authorizereplicausecase.New(servers, replicas, clock, transaction)),
+		RevokeReplica: revokereplica.New(revokereplicausecase.New(replicas)),
+		ListReplicaAuthorizations: listreplicaauthorizations.New(
+			listauthorizationsusecase.New(servers, replicas)),
+	}
+
+	return &Container{
+		Servers: servers,
+		Service: federationservice.New(&controllers),
+	}
 }

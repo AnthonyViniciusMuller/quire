@@ -78,7 +78,7 @@ func run(ctx context.Context) error {
 	// and the row that says which node this is lives in federation.servers.
 	// Wiring the two is this file's job — neither slice imports the other's
 	// adapters.
-	federation := federationdi.Initialize(pool)
+	federation := federationdi.Initialize(cfg, pool)
 
 	// Built before the listeners, so that a deployment fault — a signing key
 	// the node cannot read, a hashing cost bcrypt refuses, no way to deliver a
@@ -111,6 +111,7 @@ func run(ctx context.Context) error {
 	defer grpcServer.Close()
 
 	identity.Service.Register(grpcServer.Registrar())
+	federation.Service.Register(grpcServer.Registrar())
 
 	// After every service is registered, so that a method nobody has called
 	// yet still has a series rather than appearing the first time it fails.

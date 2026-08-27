@@ -138,6 +138,13 @@ that holds a signing key — which is what `internal/shared/grpcx` says when it 
 interceptor its own chain does not include. What `cmd/quired` does is install it, not implement
 it.
 
+It authenticates every call the node serves, not only that slice's, so every other slice's
+controllers read the identity back from the same package: `authn.Require(ctx)` in a federation
+controller is an import of the identity slice's `infra`, and the only one any slice makes of
+another's. The alternative is a context key in `internal/shared/grpcx`, which would put "who
+the reader is" in a package that deliberately knows nothing about readers. One package
+produces the identity and every package consumes it from there.
+
 ### Repositories take a `context.Context`
 
 The reference's repository methods take none and call `context.Background()` internally. Quire

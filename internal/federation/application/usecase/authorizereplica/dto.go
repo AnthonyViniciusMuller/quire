@@ -4,6 +4,7 @@ import (
 	"uuid"
 
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/replica"
+	"github.com/anthonyvsmuller/quire/internal/federation/domain/server"
 )
 
 // Input is a reader allowing one node to hold a copy of their data.
@@ -27,4 +28,12 @@ type Output struct {
 	// Authorization is the row that was written, which is the same row as any
 	// earlier decision about this pair.
 	Authorization *replica.Replica
+	// ServerDomain is what to call the node it names.
+	//
+	// The reply carries a domain beside the identifier, and this use case has
+	// already read the catalogue row in order to check it — assembling it in
+	// the controller would have been the controller deciding something, and
+	// reading it there would have been a second statement for a value already
+	// in hand.
+	ServerDomain server.Domain
 }

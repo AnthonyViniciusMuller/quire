@@ -130,7 +130,10 @@ the thesis — corrections to the specification and deliberate divergences from 
       node-wide too; C15 in [`tcc-corrections.md`](tcc-corrections.md) records both
 - [x] `feat: add replica authorization use cases` — and the row lock that makes the two
       refusals of the previous commit hold against a grant arriving at the same moment
-- [ ] `feat: add federation grpc handlers`
+- [x] `feat: add federation grpc handlers` — ten calls and the slice's `di.Container`, which
+      already existed for the identity slice's sake and grows the gRPC surface here.
+      `MigrateHomeServer` stays Unimplemented until phase 9, and a test names it so that it
+      is a decision rather than an omission
 - [ ] `test: add integration tests for server discovery`
 
 ## Phase 7 — library slice (UC01–03)

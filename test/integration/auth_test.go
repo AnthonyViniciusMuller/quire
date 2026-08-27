@@ -37,7 +37,7 @@ func serve(t *testing.T) quirev1.AuthServiceClient {
 
 	cfg := nodeConfig(t)
 
-	container, err := identitydi.Initialize(cfg, pool, federationdi.Initialize(pool).Servers)
+	container, err := identitydi.Initialize(cfg, pool, federationdi.Initialize(cfg, pool).Servers)
 	if err != nil {
 		t.Fatalf("building the identity slice: %v", err)
 	}
