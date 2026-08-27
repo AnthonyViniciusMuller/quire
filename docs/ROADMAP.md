@@ -174,7 +174,11 @@ the thesis — corrections to the specification and deliberate divergences from 
       port and its temporary-file adapter land with it, as does C16 in
       [`tcc-corrections.md`](tcc-corrections.md): the upload carries no work identifier, so
       without a check the object store is writable by any authenticated reader
-- [ ] `feat: add library grpc handlers`
+- [x] `feat: add library grpc handlers` — fourteen calls, and the slice's `di.Container`,
+      which is where the object store adapter is chosen. The `pagetoken` and `fieldmask`
+      packages land with them: a page token is the domain's keyset in a form a client can hold,
+      and a mask naming a path the call cannot write is refused rather than ignored, because on
+      a per-field last-writer-wins entity an ignored path is a change nobody made
 - [ ] `test: add integration tests for library service`
 
 ## Phase 8 — reading slice (UC04, UC05)

@@ -23,6 +23,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/identity/application/service"
 	identitydi "github.com/anthonyvsmuller/quire/internal/identity/di"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/jwks"
+	librarydi "github.com/anthonyvsmuller/quire/internal/library/di"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/grpcx"
 	"github.com/anthonyvsmuller/quire/internal/shared/httpx"
@@ -89,6 +90,18 @@ func run(ctx context.Context) error {
 		return err
 	}
 
+	// For the same reason, and one of its own: which object store holds the
+	// readers' files is decided here, and an endpoint the SDK cannot address
+	// or a service account key the node cannot read is a deployment fault. A
+	// node that cannot store a file cannot serve UC02 at all, and should say
+	// so before it starts answering.
+	library, err := librarydi.Initialize(ctx, cfg, pool)
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = library.Close() }()
+
 	grpcServer, err := grpcx.New(ctx, &cfg.Server,
 		grpcx.WithChain(grpcx.NewChain(logger).Around(registry.GRPCServerInterceptors())),
 		// Nearest the handler, and after the chain above on purpose. A call it
@@ -112,6 +125,7 @@ func run(ctx context.Context) error {
 
 	identity.Service.Register(grpcServer.Registrar())
 	federation.Service.Register(grpcServer.Registrar())
+	library.Service.Register(grpcServer.Registrar())
 
 	// After every service is registered, so that a method nobody has called
 	// yet still has a series rather than appearing the first time it fails.
