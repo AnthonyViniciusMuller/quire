@@ -50,7 +50,7 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add reading service protobuf definition`
 - [x] `feat: add sync service protobuf definition`
 - [x] `docs: record what a home server migration has to carry`
-- [ ] `feat: add federation service protobuf definition`
+- [x] `feat: add federation service protobuf definition`
 
 ## Phase 4 — Servers
 

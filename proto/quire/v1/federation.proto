@@ -1,0 +1,269 @@
+// The reader's control over the federation: which nodes they know, which of
+// them may hold a copy of their data, and how they move to a different one.
+//
+// UC12 («CRUD» maintain the known synchronization servers), UC13 (discover a
+// server's services), UC15 (authorize replication on additional nodes) and
+// UC16 (migrate to another origin server). RF13, RF14, RF16 and RF17.
+//
+// RN03 gives the reader control over the servers used for synchronization, and
+// this service is where that control is exercised. Nothing leaves this node for
+// a peer that the reader has not named here.
+syntax = "proto3";
+
+package quire.v1;
+
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "quire/v1/auth.proto";
+
+option go_package = "github.com/anthonyvsmuller/quire/internal/gen/quire/v1;quirev1";
+
+service FederationService {
+  // UC13, RF14. Resolves a domain to the services it exposes, over
+  // /.well-known as RFC 8615 establishes, and returns what it found without
+  // storing anything. It is the lookup UC14 includes when a reader is choosing
+  // where to register, and the first half of adding a node to the catalogue.
+  rpc DiscoverServer(DiscoverServerRequest) returns (DiscoverServerResponse);
+
+  // UC12, create. Discovers the domain and records the result, pinning the
+  // certificate fingerprint that node-to-node mTLS will be checked against
+  // (RNF08). Peers belong to different operators and share no root of trust,
+  // so that fingerprint is the trust anchor and this call is where it is
+  // established.
+  rpc AddKnownServer(AddKnownServerRequest) returns (AddKnownServerResponse);
+
+  // UC12, read.
+  rpc GetKnownServer(GetKnownServerRequest) returns (GetKnownServerResponse);
+
+  // UC12, read.
+  rpc ListKnownServers(ListKnownServersRequest) returns (ListKnownServersResponse);
+
+  // UC12, update. Only whether the node takes part is editable: everything else
+  // in the record was learned from the node itself and is refreshed rather than
+  // typed.
+  rpc UpdateKnownServer(UpdateKnownServerRequest) returns (UpdateKnownServerResponse);
+
+  // UC12, update — the half that re-runs discovery. It is the only way a pinned
+  // fingerprint changes, and it is a deliberate act by the reader precisely
+  // because a node that re-pinned on its own would have no pin at all: an
+  // attacker able to answer for the domain would be accepted on the strength of
+  // answering for the domain.
+  rpc RefreshKnownServer(RefreshKnownServerRequest) returns (RefreshKnownServerResponse);
+
+  // UC12, delete. Refused while an active authorization names the node:
+  // forgetting a peer that still holds a copy would leave the reader unable to
+  // revoke it, and RN03 is the promise that they can.
+  rpc RemoveKnownServer(RemoveKnownServerRequest) returns (RemoveKnownServerResponse);
+
+  // UC15, RF16. Allows a known node to hold a copy of this reader's data, with
+  // or without their files.
+  rpc AuthorizeReplica(AuthorizeReplicaRequest) returns (AuthorizeReplicaResponse);
+
+  // UC15, RF16. Withdraws that permission. The authorization is deactivated
+  // and kept, because the record that it once existed is what explains why a
+  // peer still holds data — revoking stops the replication, it does not reach
+  // into another operator's database.
+  rpc RevokeReplica(RevokeReplicaRequest) returns (RevokeReplicaResponse);
+
+  // UC15, read. Which nodes hold a copy, which of them hold the files, and
+  // which used to.
+  rpc ListReplicaAuthorizations(ListReplicaAuthorizationsRequest) returns (ListReplicaAuthorizationsResponse);
+
+  // UC16, RF17. Addressed to the node the reader is moving *to*, by a device
+  // that already holds the whole collection locally — which is what lets the
+  // migration proceed without the previous node's cooperation or availability.
+  //
+  // The call adopts the reader's devices with the ids they already have, and
+  // C11 in docs/tcc-corrections.md is why it has to: every operation names its
+  // authoring device and every vector clock is keyed by a device id, so a node
+  // that minted fresh ones would hold a history naming devices that do not
+  // exist, and two devices that had been in sync would read as concurrent for
+  // ever.
+  //
+  // It creates the reader and returns a session, and the devices then push
+  // their local log through SyncService like any other backlog. What it cannot
+  // do is prove the previous identity: a node that needs nothing from the
+  // previous server has nothing to check the claim with, so the identifier
+  // changes and the replicas are authorized again. Also C11.
+  rpc MigrateHomeServer(MigrateHomeServerRequest) returns (MigrateHomeServerResponse);
+}
+
+// What a node publishes about itself, as discovery returns it.
+message ServerDescriptor {
+  // The authority the lookup was addressed to, and the second half of every
+  // federated identifier hosted there.
+  string domain = 1;
+
+  // Where the node actually answers. Separate from the domain on purpose: a
+  // node may be identified by one host and served from another.
+  string base_url = 2;
+
+  // Where it publishes the public keys its tokens are signed with, so that a
+  // peer can verify them without sharing a secret (RNF11).
+  optional string jwks_uri = 3;
+
+  // The certificate to pin for node-to-node mTLS (RNF08).
+  optional string certificate_fingerprint = 4;
+}
+
+// A node in this reader's catalogue.
+message Server {
+  string id = 1;
+  ServerDescriptor descriptor = 2;
+
+  // Whether this row is the node answering the call. Every node stores its own
+  // entry, because a reader points at their origin server whether it is local
+  // or remote, and at most one row may claim it.
+  bool is_local = 3;
+
+  optional google.protobuf.Timestamp discovered_at = 4;
+
+  // Whether the node takes part in replication. Clearing it stops the traffic
+  // without losing what discovery already learned.
+  bool active = 5;
+}
+
+// A reader's permission for one node to hold a copy of their data.
+message ReplicaAuthorization {
+  string id = 1;
+  string server_id = 2;
+
+  // Carried alongside the id so that a client can name the node without a
+  // second call.
+  string server_domain = 3;
+
+  google.protobuf.Timestamp authorized_at = 4;
+
+  // Whether the permission covers the e-book files as well as the metadata.
+  // Metadata without the files is the cheap replica a reader is most likely to
+  // want on a node they do not own — and it is why library.ebooks does not
+  // reference the stored objects (D02).
+  bool replicates_files = 5;
+
+  bool active = 6;
+}
+
+message DiscoverServerRequest {
+  string domain = 1;
+}
+
+message DiscoverServerResponse {
+  ServerDescriptor descriptor = 1;
+}
+
+message AddKnownServerRequest {
+  // The domain to discover. The rest of the record is what the node says about
+  // itself: a reader who could type the base URL or the fingerprint by hand
+  // could also pin the wrong one.
+  string domain = 1;
+}
+
+message AddKnownServerResponse {
+  Server server = 1;
+}
+
+message GetKnownServerRequest {
+  string server_id = 1;
+}
+
+message GetKnownServerResponse {
+  Server server = 1;
+}
+
+message ListKnownServersRequest {
+  // Nodes the reader has deactivated are hidden by default.
+  bool include_inactive = 1;
+}
+
+// Not paginated. A reader's federation is the handful of nodes they chose.
+message ListKnownServersResponse {
+  repeated Server servers = 1;
+}
+
+message UpdateKnownServerRequest {
+  string server_id = 1;
+  Server server = 2;
+
+  // Only `active` may be named.
+  google.protobuf.FieldMask update_mask = 3;
+}
+
+message UpdateKnownServerResponse {
+  Server server = 1;
+}
+
+message RefreshKnownServerRequest {
+  string server_id = 1;
+}
+
+message RefreshKnownServerResponse {
+  Server server = 1;
+
+  // True when the node now presents a different certificate from the one on
+  // record. It is reported rather than applied silently: a rotation and an
+  // interception look identical from here, and the reader is the only party
+  // that can tell them apart.
+  bool certificate_fingerprint_changed = 2;
+}
+
+message RemoveKnownServerRequest {
+  string server_id = 1;
+}
+
+message RemoveKnownServerResponse {}
+
+message AuthorizeReplicaRequest {
+  string server_id = 1;
+  bool replicates_files = 2;
+}
+
+message AuthorizeReplicaResponse {
+  ReplicaAuthorization authorization = 1;
+}
+
+message RevokeReplicaRequest {
+  string server_id = 1;
+}
+
+message RevokeReplicaResponse {}
+
+message ListReplicaAuthorizationsRequest {
+  // Revoked authorizations are hidden by default, and are what explains a peer
+  // that still holds data.
+  bool include_inactive = 1;
+}
+
+message ListReplicaAuthorizationsResponse {
+  repeated ReplicaAuthorization authorizations = 1;
+}
+
+message MigrateHomeServerRequest {
+  // The account as it will exist on this node. The local name may be the one
+  // the reader had, if it is free here; the domain half is this node, so the
+  // identifier changes either way.
+  string local_name = 1;
+  string display_name = 2;
+  string email = 3;
+  string password = 4;
+
+  // The identifier the reader is arriving from, recorded as provenance. This
+  // node cannot verify it — see C11 — and must not treat it as authenticated.
+  string previous_federated_id = 5;
+
+  // The devices to adopt, with the ids they already hold. Sending a device
+  // twice is not an error; omitting one is, and the omission surfaces later as
+  // a log this node cannot insert.
+  repeated Device devices = 6;
+}
+
+message MigrateHomeServerResponse {
+  User user = 1;
+
+  // The devices as adopted, which a client should compare against what it sent
+  // before pushing anything.
+  repeated Device devices = 2;
+
+  // For the calling device, so that it can begin pushing its local log
+  // immediately. The other devices log in as they normally would.
+  Session session = 3;
+}
