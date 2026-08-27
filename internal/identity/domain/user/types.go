@@ -13,6 +13,7 @@ const (
 	opParseLocalName    = "identity/user: parse local name"
 	opParseDisplayName  = "identity/user: parse display name"
 	opParseEmail        = "identity/user: parse email"
+	opParsePassword     = "identity/user: parse password"
 	opParseFederatedID  = "identity/user: parse federated id"
 	opParseServerDomain = "identity/user: parse server domain"
 )
@@ -29,6 +30,8 @@ const (
 	CodeInvalidDisplayName = "invalid_display_name"
 	// CodeInvalidEmail is an address this node cannot store or deliver to.
 	CodeInvalidEmail = "invalid_email"
+	// CodeInvalidPassword is a password outside the bounds the node accepts.
+	CodeInvalidPassword = "invalid_password"
 	// CodeInvalidFederatedID is an identifier that is not @local_name:domain.
 	CodeInvalidFederatedID = "invalid_federated_id"
 	// CodeInvalidServerDomain is the domain half of a federated identifier not
@@ -42,6 +45,24 @@ const (
 	maxLocalNameLength   = 64
 	maxDisplayNameLength = 120
 	maxEmailLength       = 255
+)
+
+// The bounds a password has to fall inside.
+const (
+	// minPasswordLength is eight characters, which is what NIST SP 800-63B
+	// asks of a memorized secret. It is a floor and not a composition rule:
+	// the same document withdrew the requirement for mixed character classes,
+	// on the evidence that it pushes people towards predictable substitutions
+	// and towards writing the result down.
+	minPasswordLength = 8
+	// maxPasswordLength is where the hashing algorithm shows through. bcrypt
+	// takes at most seventy-two bytes and refuses anything longer, so the rule
+	// is stated here — where a reader can be told about it in terms of their
+	// password — rather than surfacing from the crypto as an internal error.
+	//
+	// It is a byte count and not a character count, because that is what
+	// bcrypt measures.
+	maxPasswordLength = 72
 )
 
 // LocalName is the first half of a federated identifier: the anthony in
@@ -223,6 +244,39 @@ func ParseEmail(s string) (Email, error) {
 
 	return address, nil
 }
+
+// Password is a password on its way to being hashed, and nothing about a reader
+// that is ever stored.
+//
+// It exists as a type so that the policy has one home and the plaintext has a
+// name that says what it is: the value must not be logged, must not reach an
+// error message, and must not outlive the call that hashes it. What identity.users
+// holds is the digest the hashing port returns.
+type Password string
+
+// Validate reports why the password is not acceptable, or nil.
+func (p Password) Validate() error {
+	invalid := func(reason string) error {
+		return errs.New(errs.KindInvalidArgument, "the password is not acceptable").
+			WithOp(opParsePassword).
+			WithCode(CodeInvalidPassword).
+			WithField("password", reason)
+	}
+
+	switch {
+	case characterCount(string(p)) < minPasswordLength:
+		return invalid("it must be at least 8 characters long")
+	case len(p) > maxPasswordLength:
+		return invalid("it must be at most 72 bytes long")
+	default:
+		return nil
+	}
+}
+
+// String hides the password, so that it cannot reach a log line or an error
+// message through the formatting that every other type in this package invites.
+// The value is available by conversion, which is visible at the call site.
+func (p Password) String() string { return "[REDACTED]" }
 
 // ServerDomain is the domain half of a federated identifier: the authority a
 // .well-known lookup is addressed to, and the value federation.servers.domain

@@ -2,6 +2,7 @@ package user_test
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -338,5 +339,73 @@ func assertInvalidArgument(t *testing.T, err error, code, field string) {
 
 	if fields[0].Reason == "" {
 		t.Error("the named field carries no reason")
+	}
+}
+
+func TestPasswordValidate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		password user.Password
+		valid    bool
+	}{
+		{name: "at the floor", password: "12345678", valid: true},
+		{name: "a passphrase", password: "correct horse battery staple", valid: true},
+		{
+			// NIST SP 800-63B withdrew the composition rules, so a password of
+			// one character class is acceptable if it is long enough.
+			name: "no composition rule", password: "aaaaaaaaaaaaaaaa", valid: true,
+		},
+		{name: "at the ceiling", password: user.Password(strings.Repeat("a", 72)), valid: true},
+		{name: "empty", password: "", valid: false},
+		{name: "one under the floor", password: "1234567", valid: false},
+		{name: "one byte over the ceiling", password: user.Password(strings.Repeat("a", 73)), valid: false},
+		{
+			// The ceiling is bcrypt's, and bcrypt counts bytes: twenty-five
+			// accented characters are fifty bytes and fit, thirty-seven are
+			// seventy-four and do not.
+			name:     "accented characters past the ceiling in bytes",
+			password: user.Password(strings.Repeat("é", 37)), valid: false,
+		},
+		{
+			name:     "accented characters inside the ceiling",
+			password: user.Password(strings.Repeat("é", 25)), valid: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := test.password.Validate()
+
+			switch {
+			case test.valid && err != nil:
+				t.Errorf("Validate = %v, want it accepted", err)
+			case !test.valid && err == nil:
+				t.Error("Validate = nil, want it rejected")
+			case !test.valid:
+				assertInvalidArgument(t, err, user.CodeInvalidPassword, "password")
+			}
+		})
+	}
+}
+
+// TestPasswordDoesNotRenderItself is what keeps the plaintext out of a log line
+// or an error message, where every other type in this package invites
+// formatting.
+func TestPasswordDoesNotRenderItself(t *testing.T) {
+	t.Parallel()
+
+	secret := user.Password("correct horse battery staple")
+
+	if rendered := secret.String(); strings.Contains(rendered, "correct") {
+		t.Errorf("String() = %q, want the password hidden", rendered)
+	}
+
+	// Through the verb, as a log line or a wrapped error would reach it.
+	if formatted := fmt.Sprintf("password=%v", secret); strings.Contains(formatted, "correct") {
+		t.Errorf("formatted as %q, want the password hidden", formatted)
 	}
 }
