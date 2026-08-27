@@ -42,6 +42,10 @@ type Output struct {
 	Session service.Session
 	// User is the reader, as the contract returns them to themselves.
 	User *user.User
+	// FederatedID is @local_name:domain, assembled here so that the reply a
+	// device gets on logging in renders the identifier the same way the one it
+	// gets on reading its own record does.
+	FederatedID user.FederatedID
 	// Device carries the id the appliance must use in its vector clocks, which
 	// is the whole point of the binding for one being bound here for the first
 	// time.

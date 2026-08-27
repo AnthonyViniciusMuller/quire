@@ -118,7 +118,12 @@ func (l *Login) Execute(ctx context.Context, input Input) (Output, error) {
 			return issueErr
 		}
 
-		output = Output{Session: session, User: reader, Device: appliance}
+		federatedID, idErr := reader.FederatedID(l.localServer.Domain())
+		if idErr != nil {
+			return idErr
+		}
+
+		output = Output{Session: session, User: reader, Device: appliance, FederatedID: federatedID}
 
 		return nil
 	})

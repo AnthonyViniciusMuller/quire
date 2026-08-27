@@ -97,7 +97,10 @@ the thesis — corrections to the specification and deliberate divergences from 
       contract has `GetUser`, `UpdateUser`, `ChangePassword` and `DeleteUser`; without them
       the handlers of the next commit would have four methods and no use cases
 - [x] `feat: add authentication interceptor`
-- [ ] `feat: add auth grpc handlers`
+- [x] `feat: add auth grpc handlers`
+- [ ] `feat: add identity container and wiring` — not in the original plan. The handlers
+      reach the node through the slice's `di.Container`, which is what `cmd/quired` builds
+      and what installs the authentication interceptor
 - [ ] `test: add integration tests for auth service`
 
 ## Phase 6 — federation slice (UC12, UC13, UC15)
