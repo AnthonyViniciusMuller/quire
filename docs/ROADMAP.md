@@ -55,7 +55,7 @@ the thesis — corrections to the specification and deliberate divergences from 
 ## Phase 4 — Servers
 
 - [x] `feat: add grpc server bootstrap with interceptor chain`
-- [ ] `feat: add error and recovery interceptors`
+- [x] `feat: add error and recovery interceptors`
 - [ ] `feat: add request logging interceptor`
 - [ ] `feat: add http server for health and metrics`
 - [ ] `feat: add well-known discovery endpoints`
