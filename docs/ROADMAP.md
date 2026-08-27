@@ -82,7 +82,9 @@ the thesis — corrections to the specification and deliberate divergences from 
       reader has to be told about it in terms of their password
 - [x] `feat: add jwt signing service and jwks endpoint` — the opaque refresh and recovery
       credentials are minted by the same port, since a session is made of both halves
-- [ ] `feat: add register user use case`
+- [x] `feat: add register user use case` — needs this node's own row in
+      `federation.servers`, which phase 6 owns. It lands as the `LocalServer` port with a
+      temporary adapter; phase 6 replaces the adapter and the use cases do not change
 - [ ] `feat: add login and logout use cases`
 - [ ] `feat: add refresh token use case`
 - [ ] `feat: add password recovery use cases`
@@ -93,7 +95,9 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 ## Phase 6 — federation slice (UC12, UC13, UC15)
 
-- [ ] `feat: add server domain entity and repository`
+- [ ] `feat: add server domain entity and repository` — takes over
+      `internal/identity/infra/service/localserver`, the temporary adapter phase 5 needed in
+      order to bind a reader to this node (UC14)
 - [ ] `feat: add well-known discovery client` — carries the `grpc` authority and the
       `spki-sha256:` pin the endpoints publish, per D06 and C12 in
       [`tcc-corrections.md`](tcc-corrections.md); the column and the `ServerDescriptor`

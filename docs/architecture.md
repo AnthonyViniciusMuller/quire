@@ -112,6 +112,23 @@ has the key should be the one that publishes it. A slice may therefore carry an 
 but only where a standard puts the surface on a URL rather than on a method — never as a
 second way to reach something the gRPC service already serves.
 
+### A use case's `Execute` takes a `context.Context`
+
+The reference's `Usecase[In, Out]` is `Execute(In) (Out, error)`. Quire's carries a context, for
+the same reason its repositories do: the transaction travels in one, so a use case that composes
+two repositories into a unit of work cannot do it without the context, and a call nobody is
+waiting for any more cannot be cancelled. The project's linters agree — `containedctx` forbids
+the alternative of holding a context in the use case struct.
+
+### Test doubles live in one package per slice
+
+The reference has no tests. Quire's use case tests are written against fakes in
+`internal/<slice>/application/apptest`, imported only by tests, rather than against a double
+redefined in each test file: the use cases of a slice depend on the same handful of ports, and a
+double written eight times drifts eight ways. They are fakes and not mocks — the reader
+repository enforces the uniqueness of RN09, so a test can exercise the duplicate registration
+path that an index decides in production.
+
 ### Repositories take a `context.Context`
 
 The reference's repository methods take none and call `context.Background()` internally. Quire
