@@ -42,8 +42,6 @@ const (
 	//
 	//nolint:gosec // G101: this is the name of an error, not a credential.
 	CodeInvalidCredentials = "invalid_credentials"
-	// CodeUnknownDevice is a device identifier this reader has never bound.
-	CodeUnknownDevice = "unknown_device"
 	// CodeDeviceRevoked is an appliance whose binding was ended. Quadro 17 is
 	// explicit that an inactive device may not renew its credentials, and
 	// issuing it a session would be renewing them.
@@ -321,5 +319,5 @@ func (l *Login) issue(
 func unknownDevice() error {
 	return errs.New(errs.KindNotFound, "that device is not bound to this account").
 		WithOp(opExecute).
-		WithCode(CodeUnknownDevice)
+		WithCode(device.CodeNotFound)
 }

@@ -99,6 +99,13 @@ func Restore(id uuid.UUID, props *Props) *Device {
 	return &Device{ID: id, Props: *props}
 }
 
+// BelongsTo reports whether the device writes on behalf of userID.
+//
+// It is the check every call that names a device has to make. A device that
+// belongs to somebody else is answered exactly as one that does not exist, or
+// the reply would tell a reader which identifiers are somebody else's.
+func (d *Device) BelongsTo(userID uuid.UUID) bool { return d.UserID == userID }
+
 // Rename records a new name. Nothing else about a bound device is editable: its
 // platform is what it is, and its id is referenced by every clock it appears in.
 func (d *Device) Rename(name Name) error {

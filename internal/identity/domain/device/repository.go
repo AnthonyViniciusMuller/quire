@@ -5,7 +5,9 @@ import (
 	"uuid"
 )
 
-// CodeNotFound is the code a repository reports for no such device here.
+// CodeNotFound is no such device here, and also the answer to a device that
+// belongs to another reader. The two are one code because they are one fact to
+// whoever asked: that identifier is not theirs.
 const CodeNotFound = "device_not_found"
 
 // Repository is the port through which the use cases of the identity slice read

@@ -334,8 +334,8 @@ func TestExecuteRefusesAnotherReadersDevice(t *testing.T) {
 				t.Fatal("Execute = nil, want an error")
 			}
 
-			if code := errs.CodeOf(err); code != login.CodeUnknownDevice {
-				t.Errorf("code = %q, want %q for all three", code, login.CodeUnknownDevice)
+			if code := errs.CodeOf(err); code != device.CodeNotFound {
+				t.Errorf("code = %q, want %q for all three", code, device.CodeNotFound)
 			}
 		})
 	}
