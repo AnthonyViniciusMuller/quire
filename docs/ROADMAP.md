@@ -134,7 +134,8 @@ the thesis — corrections to the specification and deliberate divergences from 
       already existed for the identity slice's sake and grows the gRPC surface here.
       `MigrateHomeServer` stays Unimplemented until phase 9, and a test names it so that it
       is a decision rather than an omission
-- [ ] `test: add integration tests for server discovery`
+- [x] `test: add integration tests for server discovery` — against the same supplied
+      PostgreSQL as phase 5, and against peers that really answer a `.well-known` lookup
 
 ## Phase 7 — library slice (UC01–03)
 
@@ -174,7 +175,9 @@ the thesis — corrections to the specification and deliberate divergences from 
 ## Phase 10 — Client and end-to-end
 
 - [ ] `feat: add quirectl reference client` — and the `make build` target grows its second binary back
-- [ ] `build: add docker compose with two federated nodes`
+- [ ] `build: add docker compose with two federated nodes` — both need
+      `QUIRE_FEDERATION_ALLOW_INSECURE_DISCOVERY`, since the `.well-known` documents are
+      plain HTTP there and the discovery client refuses that without it
 - [ ] `test: add end to end suite for offline reconciliation`
 - [ ] `test: add end to end suite for cross node replication`
 - [ ] `test: add end to end suite for home server migration`

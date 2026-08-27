@@ -169,6 +169,13 @@ func nodeConfig(t *testing.T) *config.Config {
 			ShutdownTimeout:       5 * time.Second,
 		},
 		Database: config.Database{URL: config.Secret(os.Getenv(databaseURLVariable))},
+		Federation: config.Federation{
+			DiscoveryTimeout: 5 * time.Second,
+			// The peers these tests discover are httptest servers, which speak
+			// plain HTTP. It is the development profile, and the configuration
+			// refuses it outside one.
+			AllowInsecureDiscovery: true,
+		},
 		Auth: config.Auth{
 			PrivateKeyPEM: signingKey(t),
 			KeyID:         "signing-key-1",
