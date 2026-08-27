@@ -1,0 +1,87 @@
+// The types the rest of the contract is written against: how a replica says
+// what it has seen, when it wrote, and which device wrote.
+//
+// Everything here exists because Quire reconciles without a coordinator. Two
+// devices write while disconnected, meet again, and have to reach the same
+// answer with no authority to ask which write came first — so the answer has
+// to travel with the data. These three messages are what carries it.
+syntax = "proto3";
+
+package quire.v1;
+
+option go_package = "github.com/anthonyvsmuller/quire/internal/gen/quire/v1;quirev1";
+
+// VectorClock records, per device, how many events of that device a replica
+// has observed. Comparing two of them tells whether one write causally
+// precedes the other or whether the two are genuinely concurrent, which is the
+// only case a tie-break is needed for (RN02, RNF03).
+//
+// The Go side of this is internal/shared/crdt.VectorClock, whose merge is a
+// pointwise maximum — a join semilattice, proved by property test in that
+// package.
+message VectorClock {
+  // Keyed by device id, valued by the number of that device's events observed.
+  //
+  // A device absent from the map and a device mapped to zero mean the same
+  // thing: no event of that device has been observed. Senders drop the zero
+  // entries, and a receiver must treat the two forms as equal, or the same
+  // causal history would compare unequal depending on how it was built.
+  map<string, uint64> entries = 1;
+}
+
+// HybridTimestamp is the instant a write was stamped with, on the clock
+// described by C01 in docs/tcc-corrections.md.
+//
+// It is deliberately not a google.protobuf.Timestamp. The value is not a wall
+// clock: every write stamps
+//
+//   t = max(local wall clock, greatest t this replica has observed + 1µs)
+//
+// which is what makes a causally later write carry a later timestamp even when
+// the authoring device's clock runs behind. Without that, the last-writer-wins
+// tie-break has a cycle and merge stops being associative, so two nodes that
+// saw the same writes in different orders converge on different values. A
+// distinct message is what stops anything from comparing it against a real
+// clock by accident, or from rendering it to a reader as the time of day.
+//
+// Instants that *are* wall clocks — when a row was created, when a credential
+// expires — use google.protobuf.Timestamp, and the contrast is the point.
+message HybridTimestamp {
+  // Microseconds since the Unix epoch. The resolution matches the timestamptz
+  // column the value is stored in, which is also what the "+1µs" above steps
+  // by: a coarser unit on the wire would collapse two writes the database can
+  // still tell apart.
+  int64 unix_micros = 1;
+}
+
+// Revision is the replication metadata every replicable record carries: the
+// e-book, the collection, the membership of one in the other, and the
+// annotation. It is the same four fields on all of them, which is what lets one
+// reconciler serve every entity.
+//
+// Reading progress is the exception, and C05 explains why: a progress row has
+// exactly one writer, so its versions can never be concurrent and it carries
+// the clock and the timestamp without the two fields that break a tie.
+message Revision {
+  // The causal version of the record. The reconciler consults this first, and
+  // consults nothing else unless it reports the two versions concurrent.
+  VectorClock vector_clock = 1;
+
+  // The first half of the tie-break for the concurrent case.
+  HybridTimestamp updated_at = 2;
+
+  // The second half, and the reason the pair is a total order: two devices that
+  // have never heard of each other can still land on the same timestamp, and
+  // any fixed rule settles them provided every node applies the same one.
+  //
+  // It is the device whose write the record currently reflects, never the one
+  // that created it. Appendix A of the TCC describes it the other way round on
+  // anotacao, and after an edit from a second device the two are different
+  // devices — see C10.
+  string device_id = 3;
+
+  // The tombstone. A record removed outright is resurrected by the next node
+  // that had not yet heard about the deletion, so deletion is a write like any
+  // other and reconciles like one.
+  bool deleted = 4;
+}

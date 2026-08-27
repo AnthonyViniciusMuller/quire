@@ -16,7 +16,7 @@ BUF_VERSION           ?= v1.72.0
 MIGRATE_VERSION       ?= v4.19.1
 GHZ_VERSION           ?= v0.121.0
 # buf drives these two; they are the plugins that turn the contract into Go.
-PROTOC_GEN_GO_VERSION      ?= v1.36.10
+PROTOC_GEN_GO_VERSION      ?= v1.36.12
 PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.0
 
 GOLANGCI_LINT      := $(BIN)/golangci-lint

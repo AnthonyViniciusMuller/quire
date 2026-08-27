@@ -40,16 +40,23 @@ jobs:
       - name: Check formatting and lint
         run: make lint
 
+      # The contract is read by every node in the federation, including ones
+      # this repository will never build, so its own conventions are checked
+      # rather than assumed.
+      - name: Lint the protobuf definitions
+        run: make proto-lint
+
       - name: Check that go.mod is tidy
         run: |
           make tidy
           git diff --exit-code -- go.mod go.sum
 
-      # The generated code is committed, so a query edited without regenerating
-      # would compile against a stale signature and fail somewhere far away.
+      # The generated code is committed, so a query or a message edited without
+      # regenerating would compile against a stale signature and fail somewhere
+      # far away.
       - name: Check that the generated code is current
         run: |
-          make sqlc
+          make generate
           git diff --exit-code -- internal
 
   test:

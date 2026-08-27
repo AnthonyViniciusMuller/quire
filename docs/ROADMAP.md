@@ -44,7 +44,7 @@ the thesis — corrections to the specification and deliberate divergences from 
 ## Phase 3 — Protobuf contracts
 
 - [x] `build: add buf configuration for protobuf generation`
-- [ ] `feat: add shared protobuf messages and vector clock type`
+- [x] `feat: add shared protobuf messages and vector clock type`
 - [ ] `feat: add auth service protobuf definition`
 - [ ] `feat: add library service protobuf definition`
 - [ ] `feat: add reading service protobuf definition`
