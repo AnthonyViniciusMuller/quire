@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	github.com/caarlos0/env/v11 v11.4.1
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.1.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6

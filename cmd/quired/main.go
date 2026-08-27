@@ -1,5 +1,6 @@
 // Command quired is the Quire node: one gRPC server for the API and one HTTP
-// server for discovery, health and metrics, started and stopped together.
+// server for discovery, the signing keys, health and metrics, started and
+// stopped together.
 //
 // Everything the process needs is read from the environment once, at startup,
 // and handed down. Nothing below this file reads a variable, opens a listener
@@ -18,6 +19,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/anthonyvsmuller/quire/internal/identity/application/service"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/jwks"
+	identitytoken "github.com/anthonyvsmuller/quire/internal/identity/infra/service/token"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/grpcx"
 	"github.com/anthonyvsmuller/quire/internal/shared/httpx"
@@ -68,6 +72,14 @@ func run(ctx context.Context) error {
 		return err
 	}
 
+	// Built here so that a signing key the node cannot read stops it while it
+	// is still starting, rather than at the first login. The container of the
+	// identity slice takes this over when it lands.
+	authService, err := identitytoken.New(&cfg.Auth, cfg.Server.Name)
+	if err != nil {
+		return err
+	}
+
 	grpcServer, err := grpcx.New(ctx, &cfg.Server,
 		grpcx.WithChain(grpcx.NewChain(logger).Around(registry.GRPCServerInterceptors())),
 		// Reflection tells an unauthenticated caller every method the node
@@ -87,7 +99,7 @@ func run(ctx context.Context) error {
 	// from phase 5 on, and until then the node serves only what is below.
 	registry.InitializeGRPC(grpcServer)
 
-	httpServer, err := newHTTPServer(ctx, cfg, logger, registry, pool.Ping)
+	httpServer, err := newHTTPServer(ctx, cfg, logger, registry, authService, pool.Ping)
 	if err != nil {
 		return err
 	}
@@ -116,12 +128,14 @@ func run(ctx context.Context) error {
 	return nil
 }
 
-// newHTTPServer builds the listener that serves discovery, health and metrics.
+// newHTTPServer builds the listener that serves discovery, the signing keys,
+// health and metrics.
 func newHTTPServer(
 	ctx context.Context,
 	cfg *config.Config,
 	logger *slog.Logger,
 	registry *metrics.Registry,
+	authService service.AuthService,
 	databaseReady httpx.Probe,
 ) (*httpx.Server, error) {
 	options, err := wellknown.Serve(cfg)
@@ -132,6 +146,9 @@ func newHTTPServer(
 	options = append(options,
 		httpx.WithLogger(logger),
 		httpx.WithMetrics(registry.Handler()),
+		// The public half of the signing key, at the path the discovery
+		// document above points at (RNF11).
+		jwks.Serve(authService),
 		// Readiness, never liveness: a database that stopped answering must
 		// take this node out of rotation, not have it restarted in a loop.
 		httpx.WithReadinessProbe("database", databaseReady),

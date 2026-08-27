@@ -98,14 +98,19 @@ requires: `gochecknoglobals` forbids the package-level variables `infra/constant
 
 There is therefore no `infra/constants` in a Quire slice.
 
-### `infra/grpc` rather than `infra/rest`
+### `infra/grpc` rather than `infra/rest`, and an HTTP adapter where a standard demands one
 
 RNF02 makes the API gRPC, so the transport adapter of a slice is a gRPC service rather than a
 chi router. The mapping is direct: the reference's `routes.go` becomes the registration of the
 slice's generated service, and a `controller/<action>` package becomes the handler of one RPC.
 
-The node does serve plain HTTP as well — `/.well-known`, `/healthz`, `/readyz`, `/metrics` —
-but that surface belongs to no slice and lives in `internal/shared/httpx`.
+The node does serve plain HTTP as well — `/healthz`, `/readyz`, `/metrics` and the discovery
+documents — and most of that surface belongs to no slice and lives in `internal/shared/httpx`.
+The exception is a document a slice is the only holder of: the identity slice publishes its
+signing keys at `/.well-known/jwks.json` (RNF11) from `infra/jwks`, because the package that
+has the key should be the one that publishes it. A slice may therefore carry an HTTP adapter,
+but only where a standard puts the surface on a URL rather than on a method — never as a
+second way to reach something the gRPC service already serves.
 
 ### Repositories take a `context.Context`
 

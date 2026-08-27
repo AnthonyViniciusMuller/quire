@@ -80,7 +80,8 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add password hashing service` — the password policy lands with it, as
       `user.Password` in the domain: its ceiling is bcrypt's seventy-two bytes, and a
       reader has to be told about it in terms of their password
-- [ ] `feat: add jwt signing service and jwks endpoint`
+- [x] `feat: add jwt signing service and jwks endpoint` — the opaque refresh and recovery
+      credentials are minted by the same port, since a session is made of both halves
 - [ ] `feat: add register user use case`
 - [ ] `feat: add login and logout use cases`
 - [ ] `feat: add refresh token use case`
