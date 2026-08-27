@@ -38,11 +38,10 @@ help:
 
 # --- build -------------------------------------------------------------------
 
-## build: compile quired and quirectl into ./bin
+## build: compile the node server into ./bin
 .PHONY: build
 build:
 	$(GO) build -trimpath -o $(BIN)/quired ./cmd/quired
-	$(GO) build -trimpath -o $(BIN)/quirectl ./cmd/quirectl
 
 ## run: run the node server against the local environment
 .PHONY: run

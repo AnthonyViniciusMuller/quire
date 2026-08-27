@@ -59,8 +59,8 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add request logging interceptor`
 - [x] `feat: add http server for health and metrics`
 - [x] `feat: add well-known discovery endpoints`
-- [ ] `feat: add node server entrypoint` — not in the original plan, which never
-      creates `cmd/quired`, so `make build` has been failing since phase 0
+- [x] `feat: add node server entrypoint` — not in the original plan, which never
+      creates `cmd/quired`, so `make build` had been failing since phase 0
 
 ## Phase 5 — identity slice (UC06–08, UC14)
 
@@ -127,7 +127,7 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 ## Phase 10 — Client and end-to-end
 
-- [ ] `feat: add quirectl reference client`
+- [ ] `feat: add quirectl reference client` — and the `make build` target grows its second binary back
 - [ ] `build: add docker compose with two federated nodes`
 - [ ] `test: add end to end suite for offline reconciliation`
 - [ ] `test: add end to end suite for cross node replication`
