@@ -45,7 +45,7 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 - [x] `build: add buf configuration for protobuf generation`
 - [x] `feat: add shared protobuf messages and vector clock type`
-- [ ] `feat: add auth service protobuf definition`
+- [x] `feat: add auth service protobuf definition`
 - [ ] `feat: add library service protobuf definition`
 - [ ] `feat: add reading service protobuf definition`
 - [ ] `feat: add sync service protobuf definition`

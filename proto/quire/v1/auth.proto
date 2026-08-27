@@ -1,0 +1,311 @@
+// The origin server's own surface: who a reader is, how they prove it, and
+// which of their devices may write on their behalf.
+//
+// Everything here is answered by one node — the reader's origin server (RN08).
+// A node that merely replicates a user holds their row without an address and
+// without a password (C03), so it can serve none of these calls, and the
+// discovery in FederationService is how a client finds the one that can.
+//
+// UC06 (maintain the user record), UC07 (log in and out), UC08 (recover the
+// password) and UC14 (bind to an origin server). RF06 to RF09, RF11 and RF15.
+syntax = "proto3";
+
+package quire.v1;
+
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/anthonyvsmuller/quire/internal/gen/quire/v1;quirev1";
+
+// AuthService is the only service in the contract that is served by exactly one
+// node for any given reader, and the only one that ever sees a password.
+service AuthService {
+  // UC14. Creates the reader on this node and, in doing so, binds them to it:
+  // the identifier is @local_name:<this node's domain>, so the server half is
+  // not a parameter — it is which node the call was addressed to. A client
+  // finds that address with FederationService.DiscoverServer, which is the
+  // UC13 that UC14 includes.
+  rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse);
+
+  // UC06, read. Returns the caller's own record. A node never serves one
+  // reader's record to another: the address is personal data kept out of the
+  // replicated set on purpose (RN09), and the only party entitled to read it
+  // is the reader themselves.
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+
+  // UC06, update.
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+
+  // UC06, update — the credentials half, which a field mask cannot express:
+  // changing a password takes the old one as well as the new.
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+
+  // UC06, delete. Removes the reader from this node, with everything that
+  // cascades from them. It is not a migration: RF17 moves a reader to another
+  // origin server and is served by FederationService.MigrateHomeServer.
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+
+  // UC07, first half. Verifies the password, binds the calling device if it is
+  // not bound yet, and issues the session.
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // UC07, second half. Consumes the refresh credential presented, which ends
+  // the session of the device that holds it and of no other device (RN07: a
+  // reader uses several at once).
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+
+  // Exchanges a refresh credential for a new session. The access token is
+  // short-lived by RNF11, so this is the call a device makes most often after
+  // the sync ones.
+  rpc RefreshSession(RefreshSessionRequest) returns (RefreshSessionResponse);
+
+  // UC08, first half. Sends a recovery credential to the address on record.
+  rpc RequestPasswordRecovery(RequestPasswordRecoveryRequest) returns (RequestPasswordRecoveryResponse);
+
+  // UC08, second half. Consumes the recovery credential and sets the new
+  // password.
+  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
+
+  // Binds a device without logging in with it, for pairing a second
+  // application from an already authenticated one (RF11, UC10).
+  rpc RegisterDevice(RegisterDeviceRequest) returns (RegisterDeviceResponse);
+
+  // The reader's devices, which is what makes RF11 auditable: a vector clock
+  // entry is keyed by a device id, and this is where those ids get a name.
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);
+
+  // Renames a device. Nothing else about a bound device is editable — its
+  // platform is what it is, and its id is referenced by every clock it appears
+  // in.
+  rpc UpdateDevice(UpdateDeviceRequest) returns (UpdateDeviceResponse);
+
+  // Unbinds a device: it may no longer write, and its sessions end. The record
+  // itself survives, because every operation it ever authored is still keyed
+  // by its id and a clock naming a device nobody can resolve cannot be
+  // explained to the reader or checked against RN10.
+  rpc RevokeDevice(RevokeDeviceRequest) returns (RevokeDeviceResponse);
+}
+
+// A reader, as their origin server knows them.
+message User {
+  string id = 1;
+
+  // The first half of the federated identifier. Constrained to
+  // ^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$ so that it survives being embedded
+  // in a URL, in a JWT subject and in a .well-known lookup without escaping.
+  string local_name = 2;
+
+  // What the reader calls themselves, and the only name meant to be shown.
+  string display_name = 3;
+
+  // The second half of the identifier: the domain of the node that
+  // authenticates this reader (RN08).
+  string origin_server_domain = 4;
+
+  // @local_name:origin_server_domain, assembled by the server so that every
+  // client renders the identifier the same way.
+  string federated_id = 5;
+
+  // Absent on a node that only replicates this reader, and absent from every
+  // reply but the reader's own (RN09, C03).
+  optional string email = 6;
+
+  google.protobuf.Timestamp created_at = 7;
+}
+
+// A device bound to a reader's account, and the identity a vector clock entry
+// is keyed by. Binding is what makes causality resolvable: an unregistered
+// writer would introduce a clock entry no node could attribute to anybody.
+message Device {
+  string id = 1;
+  string name = 2;
+
+  // Free-form, as the schema leaves it: the set of platforms a reader may run
+  // on is not something a node should have to be redeployed to extend.
+  string platform = 3;
+
+  // The last completed synchronization, absent until the first one. It is a
+  // diagnostic only — the cursor that decides what to send is the position in
+  // SyncService, for the reason C08 sets out.
+  optional google.protobuf.Timestamp last_synced_at = 4;
+
+  // False once the device has been unbound. The row stays either way.
+  bool active = 5;
+}
+
+// What a device is issued on login, and what it presents afterwards.
+message Session {
+  // A short-lived JWT (RNF11). It is verified by signature against the keys
+  // this node publishes under /.well-known, so it is never stored on either
+  // side and cannot be revoked before it expires — which is why it is short.
+  string access_token = 1;
+  google.protobuf.Timestamp access_token_expires_at = 2;
+
+  // Opaque, and long-lived by comparison. Only its digest is stored, so a
+  // database dump hands an attacker nothing that can be replayed, and
+  // presenting it here is what revocation acts on.
+  string refresh_token = 3;
+  google.protobuf.Timestamp refresh_token_expires_at = 4;
+}
+
+// How a device names itself when it asks to be bound.
+message DeviceBinding {
+  // Set on a device that is already bound, to go on using the same identity.
+  // Omitted, a new device is created — and a device that forgets its id and
+  // omits it starts a second clock entry that never merges with the first.
+  optional string device_id = 1;
+
+  string name = 2;
+  string platform = 3;
+}
+
+message RegisterUserRequest {
+  string local_name = 1;
+  string display_name = 2;
+  string email = 3;
+  string password = 4;
+}
+
+message RegisterUserResponse {
+  User user = 1;
+}
+
+message GetUserRequest {}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+message UpdateUserRequest {
+  // Only display_name and email are writable. Everything else about a reader
+  // is either their identity or derived from it.
+  User user = 1;
+
+  // Which fields of user to apply. Absence is not emptiness: a client that
+  // sends no mask and a client that means to clear a field look identical
+  // without one.
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message UpdateUserResponse {
+  User user = 1;
+}
+
+message ChangePasswordRequest {
+  // Proves the session belongs to the reader and not merely to a device left
+  // unlocked.
+  string current_password = 1;
+
+  string new_password = 2;
+}
+
+message ChangePasswordResponse {}
+
+message DeleteUserRequest {
+  // For the same reason ChangePassword asks for it.
+  string password = 1;
+}
+
+message DeleteUserResponse {}
+
+message LoginRequest {
+  // Either half of what identifies the reader to their own node. The local
+  // name cannot contain an @ and an address must, so the two never collide —
+  // but a oneof says which was meant rather than leaving a server to parse it.
+  oneof login_id {
+    string local_name = 1;
+    string email = 2;
+  }
+
+  string password = 3;
+
+  // The device the session is for. A session always belongs to one, because
+  // the refresh credential is revoked with it and because RN10 checks every
+  // operation against it.
+  DeviceBinding device = 4;
+}
+
+message LoginResponse {
+  Session session = 1;
+  User user = 2;
+
+  // Carries the id the device must use in its vector clocks from now on,
+  // which is the whole point of the binding for a device being bound here for
+  // the first time.
+  Device device = 3;
+}
+
+message LogoutRequest {
+  // Presented rather than inferred from the session: a device whose access
+  // token has already expired can still end its session, and does not have to
+  // refresh in order to do so.
+  string refresh_token = 1;
+}
+
+message LogoutResponse {}
+
+message RefreshSessionRequest {
+  string refresh_token = 1;
+}
+
+message RefreshSessionResponse {
+  // The refresh credential is rotated, not reused: the one presented is
+  // consumed and the reply carries its replacement. A credential that reappears
+  // after being consumed is a credential that was copied.
+  Session session = 1;
+}
+
+message RequestPasswordRecoveryRequest {
+  string email = 1;
+}
+
+// Empty, and empty on purpose. The call reports the same outcome whether or not
+// the address is registered here, so that it cannot be used to find out who is.
+message RequestPasswordRecoveryResponse {}
+
+message ResetPasswordRequest {
+  string recovery_token = 1;
+  string new_password = 2;
+}
+
+// Every session of every device ends with the reset. The reader is recovering
+// precisely because they may not be the only party holding the old password.
+message ResetPasswordResponse {}
+
+message RegisterDeviceRequest {
+  string name = 1;
+  string platform = 2;
+}
+
+message RegisterDeviceResponse {
+  Device device = 1;
+}
+
+message ListDevicesRequest {
+  // Unbound devices are hidden by default and readable on request: their rows
+  // survive revocation, and they are what explains a clock entry the reader no
+  // longer recognizes.
+  bool include_inactive = 1;
+}
+
+// Not paginated. A reader has as many devices as they have hands, and a page
+// token here would be a parameter no client ever sets.
+message ListDevicesResponse {
+  repeated Device devices = 1;
+}
+
+message UpdateDeviceRequest {
+  string device_id = 1;
+  Device device = 2;
+  google.protobuf.FieldMask update_mask = 3;
+}
+
+message UpdateDeviceResponse {
+  Device device = 1;
+}
+
+message RevokeDeviceRequest {
+  string device_id = 1;
+}
+
+message RevokeDeviceResponse {}
