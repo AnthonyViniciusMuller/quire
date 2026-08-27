@@ -58,7 +58,7 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add error and recovery interceptors`
 - [x] `feat: add request logging interceptor`
 - [x] `feat: add http server for health and metrics`
-- [ ] `feat: add well-known discovery endpoints`
+- [x] `feat: add well-known discovery endpoints`
 - [ ] `feat: add node server entrypoint` — not in the original plan, which never
       creates `cmd/quired`, so `make build` has been failing since phase 0
 
@@ -80,7 +80,10 @@ the thesis — corrections to the specification and deliberate divergences from 
 ## Phase 6 — federation slice (UC12, UC13, UC15)
 
 - [ ] `feat: add server domain entity and repository`
-- [ ] `feat: add well-known discovery client`
+- [ ] `feat: add well-known discovery client` — carries the `grpc` authority and the
+      `spki-sha256:` pin the endpoints publish, per D06 and C12 in
+      [`tcc-corrections.md`](tcc-corrections.md); the column and the `ServerDescriptor`
+      field land with it
 - [ ] `feat: add discover server use case`
 - [ ] `feat: add known server management use cases`
 - [ ] `feat: add replica authorization use cases`

@@ -376,6 +376,51 @@ is a defensible choice once it is a choice.
 **Status** open. On the wire in `FederationService.MigrateHomeServer`, which carries the
 devices for that reason; implemented in phase 9 (`feat: add home server migration use case`).
 
+### C12 — a fingerprint pinned over the certificate breaks the federation on a schedule
+
+**Where** RNF08, the description of the four channels in subsection 4.3 (Figura 19), and
+`servidor.impressao_cert` in Quadro 13.
+
+**What the TCC says** Node-to-node communication "emprega mTLS com verificação da impressão
+digital do certificado obtida no processo de descobrimento", and `impressao_cert` holds "a
+impressão digital fixada para a comunicação em mTLS". The same subsection states that
+cert-manager obtains and renews the gateway certificates through ACME.
+
+**Why it does not hold** Those two statements are about the same certificate. An ACME
+certificate is issued for ninety days and renewed at sixty, and a renewal is a *new*
+certificate: new serial number, new validity, new signature, and therefore a different
+digest. A peer that pinned the digest during discovery stops matching it on the day of the
+first renewal, and what it then refuses is the replication itself. Node-to-node
+synchronization would break about every sixty days, for every pair of nodes in the
+federation, permanently, with nobody having done anything wrong.
+
+Worse than the outage is what it teaches. A fingerprint mismatch is precisely what a node
+presenting a substituted certificate looks like, so routine renewal and the attack the pin
+exists to detect produce the same signal. An operator who sees that signal every two months
+and clears it by re-pinning has been trained to re-pin without checking — which is the same
+security posture as not pinning at all, arrived at by a route that looks diligent.
+
+**Correction** Pin the public key rather than the certificate. The digest is taken over the
+SubjectPublicKeyInfo, and the published value says so: `spki-sha256:<base64>`, which is the
+form and the recipe of RFC 7469. cert-manager reuses the private key across renewals unless
+the Certificate asks it not to, so a renewed certificate carries the same key and the pin
+still matches. It changes only when the key is deliberately rotated — which is the deliberate
+act that `FederationService.RefreshKnownServer` was written for, and which an operator has
+reason to look at.
+
+The trade-off belongs in the text rather than in a footnote: a pin that survives renewal is a
+key that outlives the certificates carrying it. The alternative is a pin every peer must
+renew by hand every sixty days, which no operator sustains — and RNF08 only guarantees
+anything while the check is one somebody still reads. Say which was chosen and why.
+
+`impressao_cert varchar(128)` is wide enough for the new form (twelve characters of prefix
+and forty-four of base64), so Quadro 13 needs only its description corrected.
+
+**Status** settled 2026-08-27: the public key, as above. Implemented in
+`internal/shared/wellknown`, which publishes the value, and pinned by the discovery client in
+phase 6.
+
+
 ## Divergences
 
 Deliberate departures from a specification that is internally consistent. Subsection 4.2.4
@@ -408,3 +453,22 @@ Mentioned in section 2.6 but absent from RNF12 and from the deployment diagram.
 
 Needed to exercise the end-to-end suites without the Flutter application, and used to
 demonstrate the system to the examining board.
+
+### D06 — discovery publishes an explicit gRPC authority
+
+The MER gives `servidor` a single `url_base`, "o endpoint efetivo obtido pelo descobrimento".
+In the Kubernetes deployment that is enough: one Istio gateway answers for the domain on 443
+and separates gRPC from HTTP by ALPN, so both endpoints share an authority and one field
+addresses both.
+
+They are not the same everywhere. The `.well-known` documents are plain HTTP because RFC 8615
+requires it, and the API is gRPC; in the two-node `docker compose` federation of phase 10, and
+in any deployment without a mesh in front, those listen on different ports. A peer that
+learned only `url_base` has nowhere to dial for replication.
+
+The discovery documents therefore carry the gRPC authority explicitly, as `grpc`, alongside
+the base URL. Subsection 4.2.4 has to record that `servidor` gains a column for it and that
+`ServerDescriptor` carries it: without it the federation works only where a mesh happens to
+collapse the two endpoints into one address, which is an accident of deployment and not a
+property of the protocol. The column and the protobuf field land with the discovery client in
+phase 6; this entry is what stops that from being rediscovered there.
