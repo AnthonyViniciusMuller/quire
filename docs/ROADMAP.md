@@ -93,7 +93,7 @@ the thesis — corrections to the specification and deliberate divergences from 
       [`tcc-corrections.md`](tcc-corrections.md). The port lands with one adapter, which
       writes to the log and refuses to be built outside development
 - [x] `feat: add device management use cases`
-- [ ] `feat: add user profile use cases` — not in the original plan. UC06 is «CRUD» and the
+- [x] `feat: add user profile use cases` — not in the original plan. UC06 is «CRUD» and the
       contract has `GetUser`, `UpdateUser`, `ChangePassword` and `DeleteUser`; without them
       the handlers of the next commit would have four methods and no use cases
 - [ ] `feat: add authentication interceptor`

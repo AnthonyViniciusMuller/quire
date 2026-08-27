@@ -466,6 +466,39 @@ a node that printed a reader's recovery credential to its logs in production wou
 whoever reads them. Until the transport lands, that refusal is what stops the gap from being
 shipped by accident.
 
+### C14 — UC06 lets a session change the recovery address without proving the reader is present
+
+**Where** UC06 and the `UpdateUser` call of the contract, against UC08.
+
+**What the TCC says** UC06 is «CRUD»: the reader maintains their registration data, the address
+among them. Changing the password is a separate act, and the contract asks for the current
+password when it happens — because a session proves that a device is unlocked, not that the
+reader is at it.
+
+**Why it does not hold** The address is not one registration field among others. It is the
+channel UC08 recovers an account through, so whoever can change it can have a recovery
+credential sent to an address of their choosing, and then set the password. A session that may
+change the address is therefore a session that may take the account, and the check the
+specification already applies to the password — prove you are the reader, not merely a device
+somebody left unlocked — is missing from the one field that makes the password replaceable.
+
+The gap is not theoretical: a device left unlocked for a minute is the exact threat the
+password check on `ChangePassword` was written for, and this path goes around it.
+
+**Correction** Ask for the current password when the address changes, as `ChangePassword`
+already does. In the contract that is either a `password` field on `UpdateUserRequest`, applied
+only when the mask carries `email`, or a `ChangeEmail` call beside `ChangePassword` — the
+second reads better, since the field mask of a general update has no way to say "this one field
+needs a credential".
+
+Sending a notice to the *previous* address is worth stating alongside it, and is the part that
+survives a compromise: it is how a reader finds out. It needs the delivery component C13 is
+about.
+
+**Status** open, and **not yet implemented** — the use case follows the contract as it stands,
+because the contract has no field to carry the password. The change belongs with the contract
+amendment.
+
 ## Divergences
 
 Deliberate departures from a specification that is internally consistent. Subsection 4.2.4

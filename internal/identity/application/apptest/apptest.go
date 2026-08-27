@@ -121,8 +121,42 @@ func (r *UserRepository) Create(_ context.Context, record *user.User) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if err := r.conflict(record); err != nil {
+		return err
+	}
+
+	r.records[record.ID] = clone(record)
+
+	return nil
+}
+
+// Update writes back the mutable fields.
+//
+// It checks uniqueness too, because the index does: RN09 holds however the
+// address got there, and a fake that only checked on insert would let a use
+// case take another reader's address in a test and fail in production.
+func (r *UserRepository) Update(_ context.Context, record *user.User) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, found := r.records[record.ID]; !found {
+		return notFound()
+	}
+
+	if err := r.conflict(record); err != nil {
+		return err
+	}
+
+	r.records[record.ID] = clone(record)
+
+	return nil
+}
+
+// conflict reports which of the two uniqueness rules of RN09 record breaks
+// against the readers already stored, ignoring the reader's own row.
+func (r *UserRepository) conflict(record *user.User) error {
 	for _, stored := range r.records {
-		if stored.OriginServerID != record.OriginServerID {
+		if stored.ID == record.ID || stored.OriginServerID != record.OriginServerID {
 			continue
 		}
 
@@ -138,22 +172,6 @@ func (r *UserRepository) Create(_ context.Context, record *user.User) error {
 				WithField("email", "it is already in use here")
 		}
 	}
-
-	r.records[record.ID] = clone(record)
-
-	return nil
-}
-
-// Update writes back the mutable fields.
-func (r *UserRepository) Update(_ context.Context, record *user.User) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, found := r.records[record.ID]; !found {
-		return notFound()
-	}
-
-	r.records[record.ID] = clone(record)
 
 	return nil
 }
