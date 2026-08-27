@@ -159,7 +159,10 @@ the thesis — corrections to the specification and deliberate divergences from 
       section of `QUIRE_STORAGE_*` the deployment filled in. The `ebook_contents` entity and
       its repository land here, because the row and the object are the same fact — this node
       has the bytes (D02). The cost is measured and recorded in D08: 25 modules to 86
-- [ ] `feat: add ebook management use cases`
+- [x] `feat: add ebook management use cases` — five of them, one per method of UC01, and the
+      slice's `command.Usecase` shape, its `Clock` and `Transaction` ports and its `apptest`
+      doubles land with them. The clock adapter is a wall clock and the entity applies the
+      per-record half of C01 over it; phase 9 replaces the adapter behind the same port
 - [ ] `feat: add collection management use cases`
 - [ ] `feat: add ebook content upload and download streaming`
 - [ ] `feat: add library grpc handlers`
