@@ -160,6 +160,12 @@ func New(ctx context.Context, cfg *config.Server, opts ...Option) (*Server, erro
 // reaching for the server's lifecycle.
 func (s *Server) Registrar() grpc.ServiceRegistrar { return s.server }
 
+// GetServiceInfo reports the services registered, which is what a metric
+// registry needs in order to publish a zero for a method nobody has called
+// yet. The name is the one google.golang.org/grpc/reflection.ServiceInfoProvider
+// requires, so that the server satisfies it.
+func (s *Server) GetServiceInfo() map[string]grpc.ServiceInfo { return s.server.GetServiceInfo() }
+
 // Addr is the address the server is listening on, which is the one a
 // configuration of port zero only learns after binding.
 func (s *Server) Addr() net.Addr { return s.listener.Addr() }

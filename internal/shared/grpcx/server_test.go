@@ -132,12 +132,7 @@ func TestServerRegistersReflectionOnlyWhenAsked(t *testing.T) {
 			}
 			defer server.Close()
 
-			registrar, ok := server.Registrar().(*grpc.Server)
-			if !ok {
-				t.Fatalf("the registrar is %T, want *grpc.Server", server.Registrar())
-			}
-
-			_, registered := registrar.GetServiceInfo()[reflectionService]
+			_, registered := server.GetServiceInfo()[reflectionService]
 			if registered != enabled {
 				t.Errorf("reflection registered is %t, want %t", registered, enabled)
 			}
