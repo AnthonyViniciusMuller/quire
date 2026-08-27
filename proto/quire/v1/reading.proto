@@ -1,0 +1,185 @@
+// What the reader wrote in a work, and where they stopped in it.
+//
+// UC04 («CRUD» maintain annotations) and UC05 (synchronize reading progress).
+// RF02, RF03 and RN01.
+//
+// As in LibraryService, these RPCs are the connected path to a change and the
+// server stamps the revision — the same change made offline arrives later
+// through SyncService, authored by the device itself, and the two have to be
+// indistinguishable once applied.
+//
+// The two entities here reconcile differently, and the difference is the one
+// C05 in docs/tcc-corrections.md establishes. An annotation can be edited from
+// any of the reader's devices, so two versions of it can be concurrent and the
+// full Revision is needed to settle them. A progress row belongs to one device
+// and is written by that device alone, so its versions are totally ordered by
+// that device's own counter and can never conflict. Reading progress is
+// conflict-free by construction; the clock on it is a version counter for
+// deduplication during replication, not a conflict resolver.
+syntax = "proto3";
+
+package quire.v1;
+
+import "google/protobuf/field_mask.proto";
+import "quire/v1/common.proto";
+
+option go_package = "github.com/anthonyvsmuller/quire/internal/gen/quire/v1;quirev1";
+
+service ReadingService {
+  // UC04, create.
+  rpc CreateAnnotation(CreateAnnotationRequest) returns (CreateAnnotationResponse);
+
+  // UC04, read.
+  rpc GetAnnotation(GetAnnotationRequest) returns (GetAnnotationResponse);
+
+  // UC04, read — everything written in one work.
+  rpc ListAnnotations(ListAnnotationsRequest) returns (ListAnnotationsResponse);
+
+  // UC04, update. An annotation edited from a second device is why
+  // Revision.device_id has to mean the last writer rather than the originator
+  // (C10): after this call the two are different devices, and the tie-break
+  // needs the one whose write the record reflects.
+  rpc UpdateAnnotation(UpdateAnnotationRequest) returns (UpdateAnnotationResponse);
+
+  // UC04, delete. A tombstone, so that a node which had not yet heard about the
+  // deletion cannot resurrect the annotation by replying with its own copy.
+  rpc DeleteAnnotation(DeleteAnnotationRequest) returns (DeleteAnnotationResponse);
+
+  // UC05. Records where the calling device has reached in a work, creating the
+  // row on first use and overwriting it afterwards — one row per work and
+  // device, as Quadro 21 specifies.
+  //
+  // A device writes its own position and no other device's. RN10 already
+  // requires that of every operation, and here it is also what makes the entity
+  // conflict-free.
+  rpc UpdateReadingProgress(UpdateReadingProgressRequest) returns (UpdateReadingProgressResponse);
+
+  // UC05, RN01. Every device's position in one work, which is what a client
+  // needs to decide what to show the reader: the furthest position, the most
+  // recent one, or a prompt asking which to resume from. That decision belongs
+  // to the client, so the server does not make it by returning only one row.
+  rpc ListReadingProgress(ListReadingProgressRequest) returns (ListReadingProgressResponse);
+}
+
+// What kind of mark the reader left. A note is text the reader wrote; a
+// highlight and a bookmark are about the passage and carry text only if they
+// were given one.
+enum AnnotationKind {
+  ANNOTATION_KIND_UNSPECIFIED = 0;
+  ANNOTATION_KIND_NOTE = 1;
+  ANNOTATION_KIND_HIGHLIGHT = 2;
+  ANNOTATION_KIND_BOOKMARK = 3;
+}
+
+// Something the reader wrote, and the passage it is attached to.
+message Annotation {
+  string id = 1;
+  string ebook_id = 2;
+  AnnotationKind kind = 3;
+
+  // Required for a note, which is otherwise an empty note; optional on the
+  // other two.
+  optional string text = 4;
+
+  // The passage, expressed so that it survives the format: a CFI in an EPUB, a
+  // page in a PDF. The same form a reading position uses, because the two
+  // answer the same question about the same document.
+  string locator = 5;
+
+  Revision revision = 6;
+}
+
+// Where one device stopped in one work.
+message ReadingProgress {
+  string ebook_id = 1;
+
+  // The device the position belongs to, and half of the row's natural key. It
+  // is not a tie-break here: nothing ever ties.
+  string device_id = 2;
+
+  string locator = 3;
+
+  // How far through, 0 to 100, to two decimal places. Derived from the locator
+  // and stored anyway, so that a client can show progress without having to
+  // resolve a position it may not be able to interpret — a device that cannot
+  // open a DjVu can still report that the reader is 40% through it.
+  optional double percent = 4;
+
+  // A version counter rather than a conflict resolver, per C05. It still
+  // travels: replication uses it to recognize a position it has already seen.
+  VectorClock vector_clock = 5;
+
+  HybridTimestamp updated_at = 6;
+}
+
+message CreateAnnotationRequest {
+  Annotation annotation = 1;
+}
+
+message CreateAnnotationResponse {
+  Annotation annotation = 1;
+}
+
+message GetAnnotationRequest {
+  string annotation_id = 1;
+}
+
+message GetAnnotationResponse {
+  Annotation annotation = 1;
+}
+
+message ListAnnotationsRequest {
+  string ebook_id = 1;
+
+  // Zero asks the server to choose.
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+// Tombstoned annotations are not listed. A client rebuilding its local state
+// wants them and gets them from SyncService, where the history is.
+message ListAnnotationsResponse {
+  repeated Annotation annotations = 1;
+  string next_page_token = 2;
+}
+
+message UpdateAnnotationRequest {
+  string annotation_id = 1;
+  Annotation annotation = 2;
+
+  // Per-field last-writer-wins: the mask is the set of fields this write claims
+  // and leaves every other field to whichever device wrote it last.
+  google.protobuf.FieldMask update_mask = 3;
+}
+
+message UpdateAnnotationResponse {
+  Annotation annotation = 1;
+}
+
+message DeleteAnnotationRequest {
+  string annotation_id = 1;
+}
+
+message DeleteAnnotationResponse {}
+
+// The device is not a field: the position belongs to the caller, taken from the
+// authenticated session. A request that could name a device would be a request
+// that could move another device's bookmark.
+message UpdateReadingProgressRequest {
+  string ebook_id = 1;
+  string locator = 2;
+  optional double percent = 3;
+}
+
+message UpdateReadingProgressResponse {
+  ReadingProgress progress = 1;
+}
+
+message ListReadingProgressRequest {
+  string ebook_id = 1;
+}
+
+// Not paginated: one row per device the reader has ever read this work on.
+message ListReadingProgressResponse {
+  repeated ReadingProgress progress = 1;
+}
