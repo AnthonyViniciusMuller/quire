@@ -120,18 +120,19 @@ func (r *Repository) Update(ctx context.Context, node *server.Server) error {
 	return nil
 }
 
-// Delete forgets the peer.
-func (r *Repository) Delete(ctx context.Context, id uuid.UUID) error {
-	rows, err := r.queries(ctx).DeleteServer(ctx, id)
+// Delete forgets the peer, and reports whether the row went.
+//
+// A zero is not an error here. The statement carries both refusals — this
+// instance, and a node somebody still authorizes — so a row that did not go is
+// a row one of them protected, and only the caller has read enough to say
+// which.
+func (r *Repository) Delete(ctx context.Context, id uuid.UUID) (bool, error) {
+	rows, err := r.queries(ctx).DeleteServerIfUnused(ctx, id)
 	if err != nil {
-		return persist.Classify(err, opDelete)
+		return false, persist.Classify(err, opDelete)
 	}
 
-	if rows == 0 {
-		return notFound(nil, opDelete)
-	}
-
-	return nil
+	return rows > 0, nil
 }
 
 // GetByID reads a node by primary key, active or not.

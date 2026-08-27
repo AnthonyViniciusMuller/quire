@@ -64,9 +64,27 @@ SET base_url                = $2,
     active                  = $7
 WHERE id = $1;
 
--- name: DeleteServer :execrows
+-- Forgetting a node, with both refusals in the statement rather than beside
+-- it.
+--
+-- is_local, because every reader hosted here references that row. And no
+-- active authorization, because forgetting a node somebody still replicates to
+-- would leave that reader unable to revoke a peer holding their data, which is
+-- the whole of RN03 — and the foreign key cascades, so a delete that got past
+-- the check would take their authorization with it rather than being refused
+-- by the database.
+--
+-- The caller reads the row first, so that it can say which of the two refused
+-- it. This statement is what makes the refusal hold anyway: a check the caller
+-- ran a moment earlier is a check something could have invalidated since.
+-- name: DeleteServerIfUnused :execrows
 DELETE FROM federation.servers
-WHERE id = $1;
+WHERE federation.servers.id = $1
+  AND NOT federation.servers.is_local
+  AND NOT EXISTS (SELECT 1
+                  FROM federation.user_replicas
+                  WHERE federation.user_replicas.server_id = federation.servers.id
+                    AND federation.user_replicas.active);
 
 -- name: GetServerByID :one
 SELECT id, domain, base_url, jwks_uri, certificate_fingerprint, is_local, discovered_at, active,

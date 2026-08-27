@@ -527,7 +527,15 @@ C12 again.
 *Removing.* Forgetting a node is not a private act. A node another reader still replicates to
 must not be removable, or that reader would be left unable to revoke a peer that holds their
 data — and RN03 is the promise that they can. The check is over every reader's
-authorizations, not the caller's.
+authorizations, not the caller's. It is worse than an oversight would suggest, because
+`replica_usuario` cascades on the deletion of `servidor`: a removal that got past the check
+would not be refused by the database, it would take that reader's authorization with it.
+
+*Deactivating.* `servidor.ativo` is node-wide for the same reason the rest of the row is, so
+clearing it stops the replication of every reader who authorized the node and not only of the
+one who cleared it. UC12's update therefore carries the same check as its delete. What a
+reader may do alone is revoke their own authorization, which is UC15 — and stating that
+contrast is what keeps the two use cases from looking like two ways to do one thing.
 
 **Correction** State in 4.2.4 that `servidor` is a catalogue of the node and `replica_usuario`
 is the decision of the reader: knowing that a node exists is shared, permission for it to hold

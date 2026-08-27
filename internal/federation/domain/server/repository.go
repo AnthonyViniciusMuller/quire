@@ -9,6 +9,11 @@ import (
 const (
 	// CodeNotFound is no such node in the catalogue.
 	CodeNotFound = "server_not_found"
+	// CodeServerInUse is an operation on a node some reader still allows to
+	// hold a copy of their data. It is raised where a server is written and
+	// not where an authorization is, because it is the server call that is
+	// being refused.
+	CodeServerInUse = "server_in_use"
 	// CodeDomainKnown is a domain the catalogue already holds. It is not an
 	// error the reader caused: the catalogue is node-wide, so another reader
 	// here may have added it first, and the reply is what tells them to use
@@ -48,10 +53,17 @@ type Repository interface {
 	// allows exactly one of.
 	Update(ctx context.Context, node *Server) error
 
-	// Delete forgets the peer. The caller has to have established that no
-	// active authorization names it — the foreign key would refuse the row
-	// anyway, but as a constraint violation rather than as an explanation.
-	Delete(ctx context.Context, id uuid.UUID) error
+	// Delete forgets the peer, and reports whether the row went.
+	//
+	// It refuses this instance, and a node any reader still authorizes, in the
+	// statement itself rather than beside it: a check the caller ran a moment
+	// earlier is a check something could have invalidated since, and the
+	// foreign key cascades — a delete that got past the check would take that
+	// reader's authorization with it rather than being refused.
+	//
+	// A false is therefore not an error but a refusal, and the caller is the
+	// one that has read enough to say which of the two refused it.
+	Delete(ctx context.Context, id uuid.UUID) (bool, error)
 
 	// GetByID reads a node by primary key, active or not.
 	GetByID(ctx context.Context, id uuid.UUID) (*Server, error)

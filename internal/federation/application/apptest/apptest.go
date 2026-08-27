@@ -13,9 +13,14 @@ package apptest
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"sync"
+	"time"
+	"uuid"
 
 	"github.com/anthonyvsmuller/quire/internal/federation/application/service"
+	"github.com/anthonyvsmuller/quire/internal/federation/domain/replica"
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/server"
 	"github.com/anthonyvsmuller/quire/internal/shared/errs"
 	"github.com/anthonyvsmuller/quire/internal/shared/wellknown"
@@ -95,4 +100,324 @@ func Descriptor(domain server.Domain) *server.Descriptor {
 		CertificateFingerprint: server.Fingerprint(wellknown.PinPrefix + "Zm9vYmFyCg=="),
 		GRPCAuthority:          server.GRPCAuthority(domain.String() + ":9090"),
 	}
+}
+
+// Clock is a clock that does not move unless a test moves it.
+type Clock struct {
+	mu      sync.Mutex
+	instant time.Time
+}
+
+// NewClock returns a clock stopped at instant.
+func NewClock(instant time.Time) *Clock { return &Clock{instant: instant} }
+
+// Now is the instant the clock is stopped at.
+func (c *Clock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.instant
+}
+
+// Advance moves the clock forward, for a test that needs two instants.
+func (c *Clock) Advance(by time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.instant = c.instant.Add(by)
+}
+
+// ServerRepository is an in-memory catalogue that enforces what the table
+// enforces: one row per domain, and at most one row claiming to be this
+// instance.
+type ServerRepository struct {
+	mu      sync.Mutex
+	records map[uuid.UUID]*server.Server
+}
+
+// ServerRepository satisfies the port the use cases hold.
+var _ server.Repository = (*ServerRepository)(nil)
+
+// NewServerRepository returns an empty catalogue.
+func NewServerRepository() *ServerRepository {
+	return &ServerRepository{records: map[uuid.UUID]*server.Server{}}
+}
+
+// EnsureLocal creates or refreshes the row that says which node this is.
+func (r *ServerRepository) EnsureLocal(
+	_ context.Context,
+	descriptor *server.Descriptor,
+) (*server.Server, error) {
+	if err := descriptor.Validate(); err != nil {
+		return nil, err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, stored := range r.records {
+		if stored.Domain != descriptor.Domain {
+			continue
+		}
+
+		stored.Descriptor = *descriptor
+		stored.IsLocal = true
+		stored.Active = true
+
+		return cloneServer(stored), nil
+	}
+
+	local := server.Restore(uuid.New(), &server.Props{
+		Descriptor: *descriptor,
+		IsLocal:    true,
+		Active:     true,
+	})
+	r.records[local.ID] = local
+
+	return cloneServer(local), nil
+}
+
+// Create records a peer, or reports the domain as already known.
+func (r *ServerRepository) Create(_ context.Context, node *server.Server) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, stored := range r.records {
+		if stored.Domain == node.Domain {
+			return errs.New(errs.KindAlreadyExists, "that node is already in the catalogue").
+				WithCode(server.CodeDomainKnown).
+				WithField("domain", "it is already known here")
+		}
+	}
+
+	r.records[node.ID] = cloneServer(node)
+
+	return nil
+}
+
+// Update writes back what a refresh learned and whether the node takes part.
+func (r *ServerRepository) Update(_ context.Context, node *server.Server) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, found := r.records[node.ID]; !found {
+		return serverNotFound()
+	}
+
+	r.records[node.ID] = cloneServer(node)
+
+	return nil
+}
+
+// Delete forgets the peer, refusing this instance as the statement does. It
+// cannot see the authorizations, so the guard over those is the one the
+// integration suite covers.
+func (r *ServerRepository) Delete(_ context.Context, id uuid.UUID) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	stored, found := r.records[id]
+	if !found || stored.IsLocal {
+		return false, nil
+	}
+
+	delete(r.records, id)
+
+	return true, nil
+}
+
+// GetByID reads a node by primary key.
+func (r *ServerRepository) GetByID(_ context.Context, id uuid.UUID) (*server.Server, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	stored, found := r.records[id]
+	if !found {
+		return nil, serverNotFound()
+	}
+
+	return cloneServer(stored), nil
+}
+
+// GetByDomain reads a node by the authority it is known as.
+func (r *ServerRepository) GetByDomain(_ context.Context, domain server.Domain) (*server.Server, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, stored := range r.records {
+		if stored.Domain == domain {
+			return cloneServer(stored), nil
+		}
+	}
+
+	return nil, serverNotFound()
+}
+
+// List reads the catalogue, ordered as the statement orders it.
+func (r *ServerRepository) List(_ context.Context, includeInactive bool) ([]*server.Server, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	found := make([]*server.Server, 0, len(r.records))
+
+	for _, stored := range r.records {
+		if !stored.Active && !includeInactive {
+			continue
+		}
+
+		found = append(found, cloneServer(stored))
+	}
+
+	slices.SortFunc(found, func(a, b *server.Server) int {
+		return strings.Compare(string(a.Domain), string(b.Domain))
+	})
+
+	return found, nil
+}
+
+// Count is how many nodes the catalogue holds, for a test that asserts a
+// refused addition wrote nothing.
+func (r *ServerRepository) Count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return len(r.records)
+}
+
+// cloneServer copies the entity, so that a caller mutating what it stored or
+// read does not reach into the catalogue — which is what a row would not allow
+// either.
+func cloneServer(node *server.Server) *server.Server {
+	copied := *node
+
+	return &copied
+}
+
+// serverNotFound is the answer to a node that is not in the catalogue.
+func serverNotFound() error {
+	return errs.New(errs.KindNotFound, "no such node in the catalogue").WithCode(server.CodeNotFound)
+}
+
+// ReplicaRepository is an in-memory authorization repository, with the one row
+// per pair the unique constraint enforces.
+type ReplicaRepository struct {
+	mu      sync.Mutex
+	records map[uuid.UUID]*replica.Replica
+}
+
+// ReplicaRepository satisfies the port the use cases hold.
+var _ replica.Repository = (*ReplicaRepository)(nil)
+
+// NewReplicaRepository returns an empty repository.
+func NewReplicaRepository() *ReplicaRepository {
+	return &ReplicaRepository{records: map[uuid.UUID]*replica.Replica{}}
+}
+
+// Create grants a permission that did not exist.
+func (r *ReplicaRepository) Create(_ context.Context, authorization *replica.Replica) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, stored := range r.records {
+		if stored.UserID == authorization.UserID && stored.ServerID == authorization.ServerID {
+			return errs.New(errs.KindAlreadyExists, "that node is already authorized for this reader").
+				WithCode(replica.CodePairKnown).
+				WithField("server_id", "one row holds the whole history of this decision, and it exists")
+		}
+	}
+
+	r.records[authorization.ID] = cloneReplica(authorization)
+
+	return nil
+}
+
+// Update writes back the three columns a decision changes.
+func (r *ReplicaRepository) Update(_ context.Context, authorization *replica.Replica) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, found := r.records[authorization.ID]; !found {
+		return replicaNotFound()
+	}
+
+	r.records[authorization.ID] = cloneReplica(authorization)
+
+	return nil
+}
+
+// GetByPair reads the authorization of one reader for one node.
+func (r *ReplicaRepository) GetByPair(
+	_ context.Context,
+	userID, serverID uuid.UUID,
+) (*replica.Replica, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, stored := range r.records {
+		if stored.UserID == userID && stored.ServerID == serverID {
+			return cloneReplica(stored), nil
+		}
+	}
+
+	return nil, replicaNotFound()
+}
+
+// ListByUser reads a reader's authorizations, ordered as the statement orders
+// them.
+func (r *ReplicaRepository) ListByUser(
+	_ context.Context,
+	userID uuid.UUID,
+	includeInactive bool,
+) ([]*replica.Replica, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	found := make([]*replica.Replica, 0, len(r.records))
+
+	for _, stored := range r.records {
+		if stored.UserID != userID || (!stored.Active && !includeInactive) {
+			continue
+		}
+
+		found = append(found, cloneReplica(stored))
+	}
+
+	slices.SortFunc(found, func(a, b *replica.Replica) int {
+		if byTime := b.AuthorizedAt.Compare(a.AuthorizedAt); byTime != 0 {
+			return byTime
+		}
+
+		return a.ID.Compare(b.ID)
+	})
+
+	return found, nil
+}
+
+// CountActiveForServer is how many readers still allow the node to hold a copy.
+func (r *ReplicaRepository) CountActiveForServer(_ context.Context, serverID uuid.UUID) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var count int64
+
+	for _, stored := range r.records {
+		if stored.ServerID == serverID && stored.Active {
+			count++
+		}
+	}
+
+	return count, nil
+}
+
+// cloneReplica copies the entity, for the reason cloneServer does.
+func cloneReplica(authorization *replica.Replica) *replica.Replica {
+	copied := *authorization
+
+	return &copied
+}
+
+// replicaNotFound is the answer to an authorization that is not here.
+func replicaNotFound() error {
+	return errs.New(errs.KindNotFound, "that node holds nothing of this reader's").
+		WithCode(replica.CodeNotFound)
 }
