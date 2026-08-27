@@ -224,6 +224,12 @@ func annotationNotFound() error {
 // pair uniqueness of C05, so that the path where two calls from one device
 // cross is a path a test can take.
 type ProgressRepository struct {
+	// BeforeCreate, when set, runs once just before the next create is
+	// attempted. It is how a test puts a crossing call between the read and
+	// the write, which is the only way to reach the path where the constraint
+	// refuses an insert the caller had every reason to make.
+	BeforeCreate func()
+
 	mu      sync.Mutex
 	records map[uuid.UUID]*progress.Progress
 }
@@ -238,6 +244,11 @@ func NewProgressRepository() *ProgressRepository {
 
 // Create records a first position, refusing a pair that already has one.
 func (r *ProgressRepository) Create(_ context.Context, position *progress.Progress) error {
+	if crossing := r.BeforeCreate; crossing != nil {
+		r.BeforeCreate = nil
+		crossing()
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

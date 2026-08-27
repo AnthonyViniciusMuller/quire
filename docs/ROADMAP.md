@@ -207,7 +207,13 @@ the thesis — corrections to the specification and deliberate divergences from 
       establishing whose a mark is means reading a row this slice does not own. It answers one
       question — may this reader see it — on the pattern the identity slice's `LocalServer`
       set. There is no `Transaction`: no call in this slice writes two rows
-- [ ] `feat: add reading progress use cases`
+- [x] `feat: add reading progress use cases` — two of them, one per method of UC05.
+      `UpdateProgress` takes no device from the request and neither does the entity: the row
+      has one writer and it is the one the row names, which is C05 expressed in the types
+      rather than in a check somebody has to remember. The pair constraint plus one retry is
+      what settles two calls from a device crossing, since there is no row to lock the first
+      time through and an `ON CONFLICT DO UPDATE` would be a second copy of C01's stamping
+      rule in SQL
 - [ ] `feat: add reading grpc handlers`
 - [ ] `test: add integration tests for reading service`
 
