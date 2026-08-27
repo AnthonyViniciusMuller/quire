@@ -163,7 +163,11 @@ the thesis — corrections to the specification and deliberate divergences from 
       slice's `command.Usecase` shape, its `Clock` and `Transaction` ports and its `apptest`
       doubles land with them. The clock adapter is a wall clock and the entity applies the
       per-record half of C01 over it; phase 9 replaces the adapter behind the same port
-- [ ] `feat: add collection management use cases`
+- [x] `feat: add collection management use cases` — seven of them: five for the grouping
+      itself and two for what is filed under it, since UC03 is a «CRUD» whose contract has
+      `AddEbookToCollection` and `RemoveEbookFromCollection` as well. Both are idempotent, and
+      filing a work that is already filed still stamps a write — the call is idempotent to the
+      reader and is not a no-op to replication
 - [ ] `feat: add ebook content upload and download streaming`
 - [ ] `feat: add library grpc handlers`
 - [ ] `test: add integration tests for library service`
