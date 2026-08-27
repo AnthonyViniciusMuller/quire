@@ -20,8 +20,8 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/anthonyvsmuller/quire/internal/identity/application/service"
+	identitydi "github.com/anthonyvsmuller/quire/internal/identity/di"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/jwks"
-	identitytoken "github.com/anthonyvsmuller/quire/internal/identity/infra/service/token"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/grpcx"
 	"github.com/anthonyvsmuller/quire/internal/shared/httpx"
@@ -72,16 +72,24 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	// Built here so that a signing key the node cannot read stops it while it
-	// is still starting, rather than at the first login. The container of the
-	// identity slice takes this over when it lands.
-	authService, err := identitytoken.New(&cfg.Auth, cfg.Server.Name)
+	// Built before the listeners, so that a deployment fault — a signing key
+	// the node cannot read, a hashing cost bcrypt refuses, no way to deliver a
+	// password recovery — stops the node while it is still starting rather than
+	// at the first call that needs it.
+	identity, err := identitydi.Initialize(cfg, pool)
 	if err != nil {
 		return err
 	}
 
 	grpcServer, err := grpcx.New(ctx, &cfg.Server,
 		grpcx.WithChain(grpcx.NewChain(logger).Around(registry.GRPCServerInterceptors())),
+		// Nearest the handler, and after the chain above on purpose. A call it
+		// rejects is still counted, still carries the request identifier, is
+		// still logged, and is still translated into a status by the
+		// interceptors it sits inside — and a panic in it is recovered like any
+		// other, which it would not be if it sat outside recovery.
+		grpcx.WithUnaryInterceptors(identity.Interceptor.Unary()),
+		grpcx.WithStreamInterceptors(identity.Interceptor.Stream()),
 		// Reflection tells an unauthenticated caller every method the node
 		// exposes, which is a convenience while developing and a description
 		// of the attack surface in production.
@@ -94,12 +102,13 @@ func run(ctx context.Context) error {
 
 	defer grpcServer.Close()
 
+	identity.Service.Register(grpcServer.Registrar())
+
 	// After every service is registered, so that a method nobody has called
-	// yet still has a series. There are none yet: the slices register theirs
-	// from phase 5 on, and until then the node serves only what is below.
+	// yet still has a series rather than appearing the first time it fails.
 	registry.InitializeGRPC(grpcServer)
 
-	httpServer, err := newHTTPServer(ctx, cfg, logger, registry, authService, pool.Ping)
+	httpServer, err := newHTTPServer(ctx, cfg, logger, registry, identity.Auth, pool.Ping)
 	if err != nil {
 		return err
 	}

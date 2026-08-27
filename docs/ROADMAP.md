@@ -98,7 +98,7 @@ the thesis — corrections to the specification and deliberate divergences from 
       the handlers of the next commit would have four methods and no use cases
 - [x] `feat: add authentication interceptor`
 - [x] `feat: add auth grpc handlers`
-- [ ] `feat: add identity container and wiring` — not in the original plan. The handlers
+- [x] `feat: add identity container and wiring` — not in the original plan. The handlers
       reach the node through the slice's `di.Container`, which is what `cmd/quired` builds
       and what installs the authentication interceptor
 - [ ] `test: add integration tests for auth service`

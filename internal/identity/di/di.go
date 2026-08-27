@@ -1,0 +1,141 @@
+// Package di builds the identity slice: it constructs every adapter, wires them
+// into the use cases, wires those into the controllers, and hands back the
+// three things the node needs from this slice.
+//
+// It is the only place where a concrete adapter is named. Everything above it
+// holds a port, so substituting bcrypt for another hashing algorithm, or the
+// temporary catalogue resolver for the federation slice's repository, is a
+// change to a constructor here and to nothing else.
+//
+// It reads no environment variable and opens no connection. The configuration
+// arrives loaded and the pool arrives open, because both are shared with the
+// slices that follow and neither is this slice's to decide.
+package di
+
+import (
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/anthonyvsmuller/quire/internal/identity/application/service"
+	changepasswordusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/changepassword"
+	deleteuserusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/deleteuser"
+	getuserusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/getuser"
+	listdevicesusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/listdevices"
+	loginusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/login"
+	logoutusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/logout"
+	refreshusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/refresh"
+	registerusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/register"
+	registerdeviceusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/registerdevice"
+	requestrecoveryusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/requestrecovery"
+	resetpasswordusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/resetpassword"
+	revokedeviceusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/revokedevice"
+	updatedeviceusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/updatedevice"
+	updateuserusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/updateuser"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/authn"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/authservice"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/changepassword"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/deleteuser"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/getuser"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/listdevices"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/login"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/logout"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/refreshsession"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/registerdevice"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/registeruser"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/requestpasswordrecovery"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/resetpassword"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/revokedevice"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/updatedevice"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/updateuser"
+	credentialrepository "github.com/anthonyvsmuller/quire/internal/identity/infra/repository/credential"
+	devicerepository "github.com/anthonyvsmuller/quire/internal/identity/infra/repository/device"
+	userrepository "github.com/anthonyvsmuller/quire/internal/identity/infra/repository/user"
+	clockservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/clock"
+	hashservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/hash"
+	localserverservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/localserver"
+	mailerservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/mailer"
+	tokenservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/token"
+	"github.com/anthonyvsmuller/quire/internal/shared/config"
+	"github.com/anthonyvsmuller/quire/internal/shared/persist"
+)
+
+// Container is what the node takes from this slice.
+type Container struct {
+	// Auth issues and verifies the credentials of RNF11. The node needs it
+	// beyond this slice: the JWKS endpoint publishes the public half of the
+	// key it signs with.
+	Auth service.AuthService
+	// Interceptor authenticates every call the node serves, not only this
+	// slice's — it is the only component that can verify a token, and the
+	// methods of the slices to come are authenticated by default.
+	Interceptor *authn.Interceptor
+	// Service is the gRPC surface of the slice, ready to be registered.
+	Service *authservice.Service
+}
+
+// Initialize builds the slice over the node's configuration and connection
+// pool.
+//
+// It fails rather than degrades. A signing key the node cannot read, a hashing
+// cost bcrypt refuses, or a deployment with no way to deliver a password
+// recovery are all deployment faults, and each of them is better as a node that
+// does not start than as a call that fails once somebody depends on it.
+func Initialize(cfg *config.Config, pool *pgxpool.Pool) (*Container, error) {
+	manager := persist.NewManager(pool)
+
+	users := userrepository.New(manager)
+	devices := devicerepository.New(manager)
+	credentials := credentialrepository.New(manager)
+
+	hasher, err := hashservice.New(cfg.Auth.BcryptCost)
+	if err != nil {
+		return nil, err
+	}
+
+	auth, err := tokenservice.New(&cfg.Auth, cfg.Server.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	// C13 in docs/tcc-corrections.md: the architecture has no component that
+	// can deliver a recovery to an address, and the one adapter there is
+	// refuses to be built outside development rather than write a reader's
+	// credential to the logs.
+	notifier, err := mailerservice.New(cfg.Environment)
+	if err != nil {
+		return nil, err
+	}
+
+	clock := clockservice.New()
+	localServer := localserverservice.New(manager, &cfg.Server)
+
+	// The manager itself is the unit of work: its Within is the port, so no
+	// adapter stands between them.
+	transaction := manager
+
+	controllers := authservice.Controllers{
+		RegisterUser: registeruser.New(registerusecase.New(users, hasher, localServer, clock)),
+		GetUser:      getuser.New(getuserusecase.New(users, localServer)),
+		UpdateUser:   updateuser.New(updateuserusecase.New(users, localServer, clock)),
+		ChangePassword: changepassword.New(
+			changepasswordusecase.New(users, credentials, hasher, clock, transaction)),
+		DeleteUser: deleteuser.New(deleteuserusecase.New(users, hasher)),
+		Login: login.New(
+			loginusecase.New(users, devices, credentials, hasher, auth, localServer, clock, transaction)),
+		Logout:         logout.New(logoutusecase.New(credentials, auth)),
+		RefreshSession: refreshsession.New(refreshusecase.New(credentials, devices, auth, clock, transaction)),
+		RequestPasswordRecovery: requestpasswordrecovery.New(
+			requestrecoveryusecase.New(users, credentials, auth, notifier, localServer, clock, transaction)),
+		ResetPassword: resetpassword.New(
+			resetpasswordusecase.New(users, credentials, hasher, auth, clock, transaction)),
+		RegisterDevice: registerdevice.New(registerdeviceusecase.New(devices)),
+		ListDevices:    listdevices.New(listdevicesusecase.New(devices)),
+		UpdateDevice:   updatedevice.New(updatedeviceusecase.New(devices)),
+		RevokeDevice:   revokedevice.New(revokedeviceusecase.New(devices, credentials, transaction)),
+	}
+
+	return &Container{
+		Auth:        auth,
+		Interceptor: authn.New(auth, clock, authn.PublicMethods()),
+		Service:     authservice.New(&controllers),
+	}, nil
+}
