@@ -1,0 +1,45 @@
+# The protobuf module: what buf lints, formats and checks for breaking changes.
+#
+# The contract lives in proto/, one package per version (quire.v1), and it is
+# the only description of the protocol a peer needs. Everything Go-specific —
+# where the stubs land, what they are called — is in buf.gen.yaml, so that a
+# client written in another language reads this directory and nothing else.
+#
+# The module is empty until the commit that adds the first messages: buf fails
+# on a module with no .proto files, which is why `make proto` and the CI steps
+# that run it arrive with `feat: add shared protobuf messages and vector clock
+# type`. See docs/ROADMAP.md.
+version: v2
+
+modules:
+  - path: proto
+
+lint:
+  # STANDARD is buf's own set. Two of its rules would otherwise be a review
+  # comment on every service added from here on.
+  #
+  # An RPC takes a <Rpc>Request and returns a <Rpc>Response, and no two RPCs
+  # share them: requests that start out identical stop being identical the
+  # moment one of them grows a field, and a shared message makes that a
+  # breaking change for the other.
+  #
+  # An enum's zero value is spelled <ENUM>_UNSPECIFIED and means nothing. An
+  # absent field and an explicitly zero one are the same bytes on the wire, so
+  # a zero value that meant something real could not be told apart from a field
+  # the sender never set — which, across a federation of nodes built at
+  # different times, is the common case rather than a corner one.
+  use:
+    - STANDARD
+
+breaking:
+  # WIRE_JSON is the guarantee the federation needs. Nodes are operated by
+  # different people and upgraded on different days, so what a field number and
+  # a field name mean has to be fixed for good; what may still change is
+  # everything invisible on the wire, such as where the Go stubs are generated.
+  #
+  # There is no CI step for it yet, because there is no released baseline to
+  # compare against — the contract is still being written. It becomes one when
+  # the first node is deployed, checked against the tag that node was built
+  # from.
+  use:
+    - WIRE_JSON

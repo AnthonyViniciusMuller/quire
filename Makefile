@@ -15,12 +15,17 @@ SQLC_VERSION          ?= v1.31.1
 BUF_VERSION           ?= v1.72.0
 MIGRATE_VERSION       ?= v4.19.1
 GHZ_VERSION           ?= v0.121.0
+# buf drives these two; they are the plugins that turn the contract into Go.
+PROTOC_GEN_GO_VERSION      ?= v1.36.10
+PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.0
 
-GOLANGCI_LINT := $(BIN)/golangci-lint
-SQLC          := $(BIN)/sqlc
-BUF           := $(BIN)/buf
-MIGRATE       := $(BIN)/migrate
-GHZ           := $(BIN)/ghz
+GOLANGCI_LINT      := $(BIN)/golangci-lint
+SQLC               := $(BIN)/sqlc
+BUF                := $(BIN)/buf
+MIGRATE            := $(BIN)/migrate
+GHZ                := $(BIN)/ghz
+PROTOC_GEN_GO      := $(BIN)/protoc-gen-go
+PROTOC_GEN_GO_GRPC := $(BIN)/protoc-gen-go-grpc
 
 export PATH := $(BIN):$(PATH)
 
@@ -113,14 +118,19 @@ generate: proto sqlc
 
 ## proto: generate the go stubs from proto/quire/v1
 .PHONY: proto
-proto: $(BUF)
+proto: $(BUF) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC)
 	$(BUF) generate
 
-## proto-lint: lint and check the protobuf definitions for breaking changes
+## proto-lint: lint the protobuf definitions and check their formatting
 .PHONY: proto-lint
 proto-lint: $(BUF)
 	$(BUF) lint
 	$(BUF) format --diff --exit-code
+
+## proto-fmt: rewrite the protobuf definitions in buf's canonical format
+.PHONY: proto-fmt
+proto-fmt: $(BUF)
+	$(BUF) format --write
 
 ## sqlc: generate the query code from the sql sources
 .PHONY: sqlc
@@ -176,7 +186,7 @@ kind-down:
 
 ## tools: install the pinned development tools into ./bin
 .PHONY: tools
-tools: $(GOLANGCI_LINT) $(SQLC) $(BUF) $(MIGRATE) $(GHZ)
+tools: $(GOLANGCI_LINT) $(SQLC) $(BUF) $(MIGRATE) $(GHZ) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC)
 
 $(GOLANGCI_LINT):
 	GOBIN=$(BIN) $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
@@ -192,6 +202,12 @@ $(MIGRATE):
 
 $(GHZ):
 	GOBIN=$(BIN) $(GO) install github.com/bojand/ghz/cmd/ghz@$(GHZ_VERSION)
+
+$(PROTOC_GEN_GO):
+	GOBIN=$(BIN) $(GO) install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
+
+$(PROTOC_GEN_GO_GRPC):
+	GOBIN=$(BIN) $(GO) install google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOC_GEN_GO_GRPC_VERSION)
 
 ## clean: remove the build artifacts and the installed tools
 .PHONY: clean

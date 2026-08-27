@@ -1,0 +1,40 @@
+# Generation of the Go stubs from proto/.
+#
+# Managed mode is deliberately off. It sets file options — go_package above all
+# — from this file instead of from the .proto, which means the import path of
+# the generated code is invisible to somebody reading the contract. Each file
+# declares its own go_package, so proto/quire/v1/auth.proto says where its
+# stubs live and buf only says how to build them.
+#
+# The stubs are generated under internal/, not into a public gen/ directory, on
+# the same reasoning: a peer implements the protocol from the .proto files, not
+# by importing this node's Go types. What is public here is the contract.
+version: v2
+
+# Wipe the output directories before generating. A message deleted from the
+# contract would otherwise leave its stub behind, compiling and importable, and
+# the CI drift check would not notice — it compares what generation produced
+# against what is committed, and a stale file is present in both.
+clean: true
+
+plugins:
+  # Both plugins are the pinned binaries in ./bin that `make tools` installs,
+  # found through the PATH the Makefile exports. Nothing is fetched at
+  # generation time, so the output depends on the versions in the Makefile and
+  # on nothing else.
+  - local: protoc-gen-go
+    out: internal/gen
+    # quire/v1/auth.proto generates internal/gen/quire/v1/auth.pb.go. Without
+    # this the plugin would nest the full go_package under out, and the stubs
+    # would land in internal/gen/github.com/anthonyvsmuller/quire/...
+    opt: paths=source_relative
+
+  - local: protoc-gen-go-grpc
+    out: internal/gen
+    opt:
+      - paths=source_relative
+      # The generated server interface embeds a Unimplemented struct that a
+      # handler must embed in turn. It is what makes adding an RPC a
+      # compile-time non-event for the handlers that do not implement it yet —
+      # and this contract grows an RPC in almost every phase that follows.
+      - require_unimplemented_servers=true
