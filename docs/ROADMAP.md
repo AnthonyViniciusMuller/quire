@@ -200,7 +200,13 @@ the thesis — corrections to the specification and deliberate divergences from 
       0.3 ms, and the last page costs what the first does. `revision` moves from the library
       slice into `internal/shared/persist`, because what a NULL `device_id` means is now a
       question four repositories ask
-- [ ] `feat: add annotation management use cases`
+- [x] `feat: add annotation management use cases` — five of them, one per method of UC04, and
+      the slice's `command.Usecase` shape, its `Clock` and `Works` ports and its `apptest`
+      doubles land with them. `Works` is the one port no earlier slice needed: everything here
+      hangs off a work, `reading.annotations` references the work and not the reader, so
+      establishing whose a mark is means reading a row this slice does not own. It answers one
+      question — may this reader see it — on the pattern the identity slice's `LocalServer`
+      set. There is no `Transaction`: no call in this slice writes two rows
 - [ ] `feat: add reading progress use cases`
 - [ ] `feat: add reading grpc handlers`
 - [ ] `test: add integration tests for reading service`
