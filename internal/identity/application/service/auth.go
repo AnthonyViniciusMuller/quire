@@ -62,6 +62,22 @@ type Secret struct {
 	ExpiresAt time.Time
 }
 
+// Session is what a device is issued when it logs in, and what it presents
+// afterwards. It is the pair of the two mechanisms below, which is why more
+// than one use case returns it: logging in produces one, and refreshing
+// replaces one with another.
+type Session struct {
+	// AccessToken is the signed assertion of RNF11.
+	AccessToken string
+	// AccessTokenExpiresAt is when it stops being accepted, and it is soon.
+	AccessTokenExpiresAt time.Time
+	// RefreshToken is the opaque credential, handed over once and never stored.
+	RefreshToken string
+	// RefreshTokenExpiresAt bounds how long a device may stay away before it
+	// has to authenticate again.
+	RefreshTokenExpiresAt time.Time
+}
+
 // AuthService issues and checks the two things a session is made of: the
 // short-lived access token of RNF11, and the opaque credentials that outlive a
 // single call.

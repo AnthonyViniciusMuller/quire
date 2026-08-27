@@ -85,7 +85,7 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add register user use case` — needs this node's own row in
       `federation.servers`, which phase 6 owns. It lands as the `LocalServer` port with a
       temporary adapter; phase 6 replaces the adapter and the use cases do not change
-- [ ] `feat: add login and logout use cases`
+- [x] `feat: add login and logout use cases`
 - [ ] `feat: add refresh token use case`
 - [ ] `feat: add password recovery use cases`
 - [ ] `feat: add device management use cases`
