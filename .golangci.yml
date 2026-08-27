@@ -160,6 +160,13 @@ linters:
       - path: ^cmd/quirectl/
         linters:
           - forbidigo
+      # The domain packages are named after the entity they own — user.User,
+      # device.Device — which is the layout docs/architecture.md follows. Only
+      # the stutter check is excluded; the rest of revive still applies there.
+      - path: ^internal/[a-z]+/domain/
+        linters:
+          - revive
+        text: stutters
       # errs.Kind is an enum that doubles as an errors.Is target, not a set of
       # sentinel error variables, so the ErrXxx naming convention does not
       # apply to its constants.

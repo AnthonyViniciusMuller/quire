@@ -72,7 +72,9 @@ the thesis — corrections to the specification and deliberate divergences from 
       slice layout is
       [`College-Redberry/open-adoption`](https://github.com/College-Redberry/open-adoption),
       and it had never been written down beyond the four layer names in the readme
-- [ ] `feat: add user and device domain entities`
+- [x] `feat: add user and device domain entities` — the credential entity lands here as
+      well: it is the third entity the slice owns, and login, refresh and recovery all
+      write through it
 - [ ] `feat: add user and device repositories with postgres`
 - [ ] `feat: add password hashing service`
 - [ ] `feat: add jwt signing service and jwks endpoint`
