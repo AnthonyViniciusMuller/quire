@@ -104,6 +104,9 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `test: add integration tests for auth service` — against a PostgreSQL the runner
       supplies rather than one a container library starts; the reasoning is in
       `test/integration`
+- [x] `docs: record the questions phase 5 left open` — not in the original plan. The slice
+      raised five questions whose answer belongs in the thesis, and a question that stays in
+      the session that found it is a question nobody answers
 
 ## Phase 6 — federation slice (UC12, UC13, UC15)
 
@@ -191,9 +194,43 @@ before the commit that depends on them. A question stays here only while it is o
 is answered it becomes an entry in [`tcc-corrections.md`](tcc-corrections.md), so that the
 answer travels with the correction it produced rather than with the doubt it started as.
 
-**None open.** The last one — whether `updated_at` could break ties as a wall clock — was
-settled on 2026-08-26 as C01: it cannot, and it becomes a hybrid logical clock. The
-counterexample and the argument are in that entry.
+Five are open, all found while implementing phase 5. Each names what the answer changes, so
+that answering it is a decision rather than an archaeology.
+
+**Should the contract carry a password on the call that changes an address?** C13 aside, this
+is the one with a security consequence: a session may change the address, the address is the
+channel UC08 recovers an account through, so a device left unlocked for a minute is an account
+takeover — and the specification already applies the check that would stop it, to the password
+and not to the field that makes the password replaceable. C14 has the two shapes the fix can
+take. It is not implemented, because `UpdateUserRequest` has no field to carry the password;
+answering this is a contract amendment and the check that follows it.
+
+**Should a node without a way to deliver a recovery start at all?** The delivery adapter of
+C13 refuses to be built outside development, and the container fails when it does, so the node
+does not start under `QUIRE_ENV=production`. That is honest — UC08 would otherwise be broken
+in silence — and it blocks phase 11 until a transport exists. The alternative is a node that
+starts and answers `RequestPasswordRecovery` with a failed precondition.
+
+**Is the reuse trade of D07 the right way round?** A device whose reply was lost on a mobile
+network retries with the credential it still holds and is logged out for it, which on an
+offline-first system is not rare. The implementation follows the OAuth 2.0 Security BCP; the
+alternative — a grace window — needs `token_acesso` to record which credential replaced it,
+which is a change to Appendix A.
+
+**Testcontainers or a database the runner supplies?** The integration suite takes the second,
+for the 87 modules the first costs against a `go.mod` of twelve direct dependencies. The
+Makefile comment from phase 0 promised the first and now says otherwise. The same question
+returns in phase 7, which needs MinIO for the blob store, so answering it once settles both.
+
+**Should changing a password end the session that changed it?** The contract says only that
+resetting one ends every session. The implementation makes changing one do the same, on the
+reasoning that a reader who changes their password is responding to a suspicion. Sparing the
+calling device is implementable — the access token names it — and needs one more statement on
+the credential repository.
+
+The last question settled was whether `updated_at` could break ties as a wall clock, on
+2026-08-26: it cannot, and it becomes a hybrid logical clock. The counterexample and the
+argument are in C01.
 
 ## Divergences from the thesis specification
 
