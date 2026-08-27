@@ -101,7 +101,9 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add identity container and wiring` — not in the original plan. The handlers
       reach the node through the slice's `di.Container`, which is what `cmd/quired` builds
       and what installs the authentication interceptor
-- [ ] `test: add integration tests for auth service`
+- [x] `test: add integration tests for auth service` — against a PostgreSQL the runner
+      supplies rather than one a container library starts; the reasoning is in
+      `test/integration`
 
 ## Phase 6 — federation slice (UC12, UC13, UC15)
 

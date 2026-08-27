@@ -82,10 +82,31 @@ vet:
 test:
 	$(GO) test -race -shuffle=on ./...
 
-## test-integration: integration tests (testcontainers: postgres and minio)
+# The suite needs a PostgreSQL and owns it: it drops every schema the node
+# declares before applying them. TEST_DATABASE_URL therefore points at a
+# throwaway one, never at DATABASE_URL, and `test-db-up` brings one up on a port
+# nothing else uses.
+TEST_DATABASE_URL ?= postgres://quire:quire@127.0.0.1:55433/quire?sslmode=disable
+TEST_DB_CONTAINER := quire-test-db
+
+## test-integration: integration tests against TEST_DATABASE_URL
 .PHONY: test-integration
 test-integration:
-	$(GO) test -race -tags=integration -timeout=15m ./test/integration/...
+	QUIRE_TEST_DATABASE_URL="$(TEST_DATABASE_URL)" \
+		$(GO) test -race -tags=integration -timeout=15m ./test/integration/...
+
+## test-db-up: start the throwaway postgres the integration tests run against
+.PHONY: test-db-up
+test-db-up:
+	docker run --rm -d --name $(TEST_DB_CONTAINER) -p 127.0.0.1:55433:5432 \
+		-e POSTGRES_USER=quire -e POSTGRES_PASSWORD=quire -e POSTGRES_DB=quire postgres:17-alpine
+	@until docker exec $(TEST_DB_CONTAINER) pg_isready -U quire >/dev/null 2>&1; do sleep 1; done
+	@echo "$(TEST_DB_CONTAINER) is ready on 55433"
+
+## test-db-down: stop it
+.PHONY: test-db-down
+test-db-down:
+	docker rm -f $(TEST_DB_CONTAINER)
 
 ## test-e2e: end-to-end tests against the two federated nodes
 .PHONY: test-e2e

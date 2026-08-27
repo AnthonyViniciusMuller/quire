@@ -86,11 +86,17 @@ func New(
 
 // Execute spends the credential presented and issues its replacement.
 //
-// Spending comes first and the whole of it is one unit of work. The repository
-// spends in a single statement that refuses one already spent, so two devices
-// presenting the same credential at the same instant cannot both be answered
-// with a session: the second finds no row to update, and the unit it was doing
-// its work in is rolled back with it.
+// The unit of work holds the spending and the issuing, and nothing before them.
+// That boundary is not a detail: the reuse path revokes the device's sessions
+// and then returns an error, so inside a unit of work the revocation would be
+// rolled back by the very error it was raised with — the node would report the
+// reuse and forget it in the same breath. Establishing what was presented
+// happens outside, where its writes commit on their own.
+//
+// Spending is safe outside a unit too, because the statement that spends
+// refuses one already spent: two devices presenting the same credential at the
+// same instant cannot both be answered with a session, whatever they read
+// first.
 func (r *Refresh) Execute(ctx context.Context, input Input) (Output, error) {
 	if input.RefreshToken == "" {
 		return Output{}, errs.New(errs.KindInvalidArgument, "the request presents no credential").
@@ -99,22 +105,24 @@ func (r *Refresh) Execute(ctx context.Context, input Input) (Output, error) {
 			WithField("refresh_token", "it must carry the credential the session is renewed with")
 	}
 
+	presented, err := r.present(ctx, input.RefreshToken)
+	if err != nil {
+		return Output{}, err
+	}
+
 	var output Output
 
-	err := r.transaction.Within(ctx, func(ctx context.Context) error {
-		presented, err := r.present(ctx, input.RefreshToken)
-		if err != nil {
-			return err
+	// The spending and the issuing are one: a node that spent the credential
+	// and then failed to store its replacement would have ended a session and
+	// handed back nothing.
+	err = r.transaction.Within(ctx, func(ctx context.Context) error {
+		if consumeErr := r.credentials.Consume(ctx, presented.ID); consumeErr != nil {
+			return consumeErr
 		}
 
-		err = r.credentials.Consume(ctx, presented.ID)
-		if err != nil {
-			return err
-		}
-
-		session, err := r.issue(ctx, presented)
-		if err != nil {
-			return err
+		session, issueErr := r.issue(ctx, presented)
+		if issueErr != nil {
+			return issueErr
 		}
 
 		output = Output{Session: session}

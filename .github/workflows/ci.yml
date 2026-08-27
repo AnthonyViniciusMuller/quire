@@ -85,3 +85,39 @@ jobs:
           name: coverage
           path: bin/coverage.out
           if-no-files-found: error
+
+  integration:
+    name: integration tests
+    runs-on: ubuntu-latest
+
+    # The suite runs against a real PostgreSQL rather than a fake, because what
+    # it covers is the statements and the indexes. The runner supplies one, so
+    # the repository takes no dependency on a container library in order to
+    # start it — see the note in test/integration.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: quire
+          POSTGRES_PASSWORD: quire
+          POSTGRES_DB: quire
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U quire"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Integration tests
+        run: make test-integration
+        env:
+          TEST_DATABASE_URL: postgres://quire:quire@127.0.0.1:5432/quire?sslmode=disable

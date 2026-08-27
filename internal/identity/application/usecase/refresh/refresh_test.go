@@ -26,6 +26,7 @@ type fixture struct {
 	devices     *apptest.DeviceRepository
 	auth        *apptest.AuthService
 	clock       *apptest.Clock
+	transaction *apptest.Transaction
 	phone       login.Output
 	tablet      login.Output
 }
@@ -71,12 +72,15 @@ func newFixture(t *testing.T) fixture {
 		t.Fatalf("logging in the tablet: %v", err)
 	}
 
+	transaction := apptest.NewTransaction()
+
 	return fixture{
-		usecase:     refresh.New(credentials, devices, auth, clock, apptest.NewTransaction()),
+		usecase:     refresh.New(credentials, devices, auth, clock, transaction),
 		credentials: credentials,
 		devices:     devices,
 		auth:        auth,
 		clock:       clock,
+		transaction: transaction,
 		phone:       phone,
 		tablet:      tablet,
 	}
@@ -141,6 +145,8 @@ func TestExecuteRefusesAReusedCredentialAndEndsTheDevicesSessions(t *testing.T) 
 		t.Fatalf("the first refresh: %v", err)
 	}
 
+	unitsBefore := f.transaction.Calls()
+
 	// Whoever copied the credential presents it afterwards.
 	_, err = f.usecase.Execute(t.Context(), refresh.Input{RefreshToken: stolen})
 	if err == nil {
@@ -164,6 +170,14 @@ func TestExecuteRefusesAReusedCredentialAndEndsTheDevicesSessions(t *testing.T) 
 
 	if held.Usable(now()) {
 		t.Error("the replacement survived the reuse, so the copy could go on refreshing beside the reader")
+	}
+
+	// The revocation must not have happened inside a unit of work. Reuse ends
+	// with an error, and an error rolls a unit back — so a node that revoked
+	// inside one would report the reuse and forget it in the same breath. The
+	// integration suite is what caught that; this is what keeps it caught.
+	if opened := f.transaction.Calls() - unitsBefore; opened != 0 {
+		t.Errorf("the reuse path opened %d units of work, want none: the revocation would be rolled back", opened)
 	}
 
 	// And no further than that device. The reader's other appliance is not
