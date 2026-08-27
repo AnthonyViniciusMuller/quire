@@ -5,6 +5,22 @@ import (
 	"uuid"
 )
 
+// The stable machine-readable codes a repository reports, which is where the
+// two uniqueness rules of RN09 become something a client can tell apart: a
+// duplicate local name and a duplicate address both arrive from the driver as
+// the same unique violation, and only the constraint that was broken says
+// which.
+const (
+	// CodeLocalNameTaken is the identifier already belonging to somebody on
+	// this origin server.
+	CodeLocalNameTaken = "local_name_taken"
+	// CodeEmailRegistered is the address already registered on this origin
+	// server.
+	CodeEmailRegistered = "email_registered"
+	// CodeNotFound is no such reader here.
+	CodeNotFound = "user_not_found"
+)
+
 // Repository is the port through which the use cases of the identity slice read
 // and write readers. It belongs to the domain; what satisfies it lives in
 // internal/identity/infra/repository/user.

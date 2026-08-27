@@ -2,9 +2,8 @@
 #
 # One block per slice, each generating into the slice that owns it. The blocks
 # appear as their slices do: a block whose queries directory is empty makes the
-# whole run fail, so the four still missing — identity, federation, library and
-# reading — are added by the phases that write their first query. See
-# docs/ROADMAP.md.
+# whole run fail, so the three still missing — federation, library and reading —
+# are added by the phases that write their first query. See docs/ROADMAP.md.
 #
 # The schema is the migrations directory, whole. sqlc reads it as the catalogue
 # every query is checked against, and skips the .down.sql files on its own, so
@@ -15,11 +14,11 @@ version: "2"
 sql:
   - engine: postgresql
     schema: migrations
-    queries: internal/sync/infra/persist/queries
+    queries: internal/identity/infra/persist/queries
     gen:
       go:
-        package: syncdb
-        out: internal/sync/infra/persist/syncdb
+        package: identitydb
+        out: internal/identity/infra/persist/identitydb
         sql_package: pgx/v5
 
         # The generated Querier is what a repository is written against, and
@@ -41,6 +40,20 @@ sql:
         omit_unused_structs: true
 
         overrides: &overrides
+          # uuid.UUID from the standard library rather than pgtype.UUID. Go
+          # 1.27 serves the type, pgx encodes and scans it on its own — it is
+          # an array of sixteen bytes underneath, which the driver recognizes —
+          # and the domain then holds an identifier that cannot be confused
+          # with another entity's, instead of a string parsed in the data
+          # layer.
+          - db_type: "uuid"
+            go_type: "uuid.UUID"
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              type: "uuid.UUID"
+              pointer: true
+
           # time.Time rather than pgtype.Timestamptz. The driver type buys
           # nothing here: a non-null column is always valid, and a nullable one
           # is already a pointer.
@@ -74,3 +87,19 @@ sql:
             go_type: *vectorclock
           - column: "reading.annotations.vector_clock"
             go_type: *vectorclock
+
+  # The sync slice. Its overrides are the same set, so it takes the anchor
+  # above rather than a copy that could drift from it.
+  - engine: postgresql
+    schema: migrations
+    queries: internal/sync/infra/persist/queries
+    gen:
+      go:
+        package: syncdb
+        out: internal/sync/infra/persist/syncdb
+        sql_package: pgx/v5
+        emit_interface: true
+        emit_empty_slices: true
+        emit_pointers_for_null_types: true
+        omit_unused_structs: true
+        overrides: *overrides

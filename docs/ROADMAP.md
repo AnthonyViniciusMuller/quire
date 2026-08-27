@@ -75,7 +75,8 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add user and device domain entities` — the credential entity lands here as
       well: it is the third entity the slice owns, and login, refresh and recovery all
       write through it
-- [ ] `feat: add user and device repositories with postgres`
+- [x] `feat: add user and device repositories with postgres` — the credential repository
+      lands with them, for the reason its entity did
 - [ ] `feat: add password hashing service`
 - [ ] `feat: add jwt signing service and jwks endpoint`
 - [ ] `feat: add register user use case`

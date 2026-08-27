@@ -5,6 +5,9 @@ import (
 	"uuid"
 )
 
+// CodeNotFound is the code a repository reports for no such device here.
+const CodeNotFound = "device_not_found"
+
 // Repository is the port through which the use cases of the identity slice read
 // and write devices. It belongs to the domain; what satisfies it lives in
 // internal/identity/infra/repository/device.

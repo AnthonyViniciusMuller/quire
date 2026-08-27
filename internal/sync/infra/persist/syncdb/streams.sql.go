@@ -8,7 +8,7 @@ package syncdb
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"uuid"
 )
 
 const allocatePosition = `-- name: AllocatePosition :one
@@ -36,7 +36,7 @@ RETURNING last_position
 // It has to run inside the same transaction as the INSERT into sync.operations.
 // Allocated in one transaction and used in another, the lock is released before
 // the operation is visible and the guarantee is gone.
-func (q *Queries) AllocatePosition(ctx context.Context, userID pgtype.UUID) (int64, error) {
+func (q *Queries) AllocatePosition(ctx context.Context, userID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, allocatePosition, userID)
 	var last_position int64
 	err := row.Scan(&last_position)

@@ -6,6 +6,18 @@ import (
 	"uuid"
 )
 
+// The stable machine-readable codes a repository reports.
+const (
+	// CodeNotFound is a digest matching no credential. It is what a caller
+	// presenting a credential this node never issued gets, and it says nothing
+	// about whether one was ever issued to anybody.
+	CodeNotFound = "credential_not_found"
+	// CodeSpent is a credential that is no longer available: already used,
+	// revoked, or gone. The three are one answer on purpose — telling a holder
+	// which would be telling them about somebody else's account.
+	CodeSpent = "credential_spent"
+)
+
 // Repository is the port through which the use cases of the identity slice
 // issue, present and revoke credentials. It belongs to the domain; what
 // satisfies it lives in internal/identity/infra/repository/credential.
