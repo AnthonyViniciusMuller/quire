@@ -139,7 +139,13 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 ## Phase 7 — library slice (UC01–03)
 
-- [ ] `feat: add ebook and collection domain entities`
+- [x] `feat: add ebook and collection domain entities` — the membership entity lands here as
+      well: it is the third entity the slice owns, and it is an entity rather than a list held
+      inside a collection because it replicates on its own terms (C06). So does
+      `crdt.Revision`, in the shared core rather than in the slice, because three slices hold
+      one — the library writes it, the reading slice will, and the sync reconciler is written
+      against it. Its `UpdatedAt` is stamped with the per-record half of C01's rule; the
+      node-wide hybrid logical clock of phase 9 strengthens that without changing it
 - [ ] `feat: add ebook and collection repositories with postgres`
 - [ ] `feat: add blob store port with s3 adapter`
 - [ ] `feat: add ebook management use cases`
