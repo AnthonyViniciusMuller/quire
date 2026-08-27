@@ -98,5 +98,5 @@ type Repository interface {
 	// needs them and gets them from the sync service, which is where the
 	// history lives; this call answers what the collection is, not how it got
 	// that way.
-	List(ctx context.Context, query Query) ([]*Ebook, Cursor, error)
+	List(ctx context.Context, query *Query) ([]*Ebook, Cursor, error)
 }

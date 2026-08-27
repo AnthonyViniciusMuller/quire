@@ -146,7 +146,14 @@ the thesis — corrections to the specification and deliberate divergences from 
       one — the library writes it, the reading slice will, and the sync reconciler is written
       against it. Its `UpdatedAt` is stamped with the per-record half of C01's rule; the
       node-wide hybrid logical clock of phase 9 strengthens that without changing it
-- [ ] `feat: add ebook and collection repositories with postgres`
+- [x] `feat: add ebook and collection repositories with postgres` — the membership repository
+      lands with them, for the reason its entity did, and so does
+      `000006_library_pagination_index`: listing is keyset paginated and the index the schema
+      shipped with covered only `user_id`, so every page sorted the whole collection. Clearing
+      the filings of a deleted work is a loop over rows rather than one `UPDATE` with a
+      `jsonb_set` expression — the stamping rule of C01 exists once, in `crdt.Revision`, and a
+      `SET` clause that recomputed it would be a second copy in a language it could not be
+      tested against
 - [ ] `feat: add blob store port with s3 adapter`
 - [ ] `feat: add ebook management use cases`
 - [ ] `feat: add collection management use cases`

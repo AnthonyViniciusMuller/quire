@@ -2,8 +2,8 @@
 #
 # One block per slice, each generating into the slice that owns it. The blocks
 # appear as their slices do: a block whose queries directory is empty makes the
-# whole run fail, so the two still missing — library and reading — are added by
-# the phases that write their first query. See docs/ROADMAP.md.
+# whole run fail, so the one still missing — reading — is added by the phase
+# that writes its first query. See docs/ROADMAP.md.
 #
 # The schema is the migrations directory, whole. sqlc reads it as the catalogue
 # every query is checked against, and skips the .down.sql files on its own, so
@@ -87,6 +87,23 @@ sql:
             go_type: *vectorclock
           - column: "reading.annotations.vector_clock"
             go_type: *vectorclock
+
+  # The library slice, on the same terms as the federation block below. Its
+  # queries are checked against the whole catalogue, which is what makes a page
+  # of works that joins library.ebook_collections a compile-time question.
+  - engine: postgresql
+    schema: migrations
+    queries: internal/library/infra/persist/queries
+    gen:
+      go:
+        package: librarydb
+        out: internal/library/infra/persist/librarydb
+        sql_package: pgx/v5
+        emit_interface: true
+        emit_empty_slices: true
+        emit_pointers_for_null_types: true
+        omit_unused_structs: true
+        overrides: *overrides
 
   # The federation slice. Its overrides are the same set, so it takes the
   # anchor above rather than a copy that could drift from it.

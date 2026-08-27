@@ -6,9 +6,16 @@ import (
 	"uuid"
 )
 
-// CodeNotFound is no such filing, which is what a pair that has never been
-// written looks like.
-const CodeNotFound = "membership_not_found"
+// The stable machine-readable codes a repository reports.
+const (
+	// CodeNotFound is no such filing, which is what a pair that has never been
+	// written looks like.
+	CodeNotFound = "membership_not_found"
+	// CodeAlreadyFiled is a pair the table already holds. It is not an error
+	// the reader caused: the row is a register, so the caller answers it by
+	// reading the row and setting that register rather than by failing.
+	CodeAlreadyFiled = "membership_already_exists"
+)
 
 // Repository is the port through which the use cases of the library slice read
 // and write what is filed where. It belongs to the domain; what satisfies it
