@@ -428,6 +428,44 @@ full. Whoever writes the manifest in phase 11 has to know that, so the roadmap s
 too, and the manifest itself should carry the reason rather than the setting alone.
 
 
+### C13 — RF09 requires delivering a credential, and nothing in the architecture can deliver one
+
+**Where** RF09 and UC08, against the deployment described in subsection 4.3 (Figura 19).
+
+**What the TCC says** The reader recovers their password; `token_acesso` holds a recovery
+credential with an expiry, so the flow is a credential sent to the reader and presented back.
+The deployment diagram holds a gateway, a service mesh, cert-manager, the node, PostgreSQL and
+object storage.
+
+**Why it does not hold** None of those can deliver a credential to a reader's address. The
+recovery of UC08 begins by sending something to the address on record, and the address is the
+only channel the reader has left — that is what makes it a recovery rather than a login. With
+no component for it, the first half of UC08 has no implementation and the second half has
+nothing to consume.
+
+Two things are missing, not one.
+
+*A transport.* An SMTP relay or a delivery provider, with the configuration a node needs in
+order to reach it. `internal/shared/config` has no section for one, because none was specified.
+
+*A queue.* The reply to a recovery request is deliberately the same whether or not the address
+is registered here, so that the call cannot be used to find out who is. The time it takes is
+not the same: an address that exists costs a delivery and one that does not costs nothing, and
+a delivery is the slowest thing in the call. Closing that channel means handing the delivery to
+something else and answering immediately, which is a queue — the same component the transport
+needs in order to retry a provider that is down.
+
+**Correction** State in 4.3 that the origin server needs an outbound delivery component and
+that the recovery notification is queued rather than awaited, and add its configuration to the
+node. The alternative is to say plainly that UC08 is specified but not deployed, which is a
+weaker position than naming the component.
+
+**Status** open. The implementation defines the delivery port and ships one adapter, which
+writes the credential to the log and **refuses to be built outside the development profile** —
+a node that printed a reader's recovery credential to its logs in production would hand it to
+whoever reads them. Until the transport lands, that refusal is what stops the gap from being
+shipped by accident.
+
 ## Divergences
 
 Deliberate departures from a specification that is internally consistent. Subsection 4.2.4

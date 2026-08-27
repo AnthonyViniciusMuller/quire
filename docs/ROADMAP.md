@@ -88,7 +88,10 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add login and logout use cases`
 - [x] `feat: add refresh token use case` — rotation, and reuse of a spent credential ends
       the device's sessions, per D07 in [`tcc-corrections.md`](tcc-corrections.md)
-- [ ] `feat: add password recovery use cases`
+- [x] `feat: add password recovery use cases` — RF09 needs a credential delivered to an
+      address and the architecture has no component that can deliver one, per C13 in
+      [`tcc-corrections.md`](tcc-corrections.md). The port lands with one adapter, which
+      writes to the log and refuses to be built outside development
 - [ ] `feat: add device management use cases`
 - [ ] `feat: add authentication interceptor`
 - [ ] `feat: add auth grpc handlers`

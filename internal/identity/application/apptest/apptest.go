@@ -622,3 +622,38 @@ func cloneCredential(issued *credential.Credential) *credential.Credential {
 
 	return &copied
 }
+
+// Mailer records what it was asked to deliver instead of delivering it.
+type Mailer struct {
+	mu   sync.Mutex
+	sent []service.RecoveryMessage
+
+	// Err, when set, is what SendPasswordRecovery reports — for the test that
+	// needs a transport that is down.
+	Err error
+}
+
+// NewMailer returns the fake transport.
+func NewMailer() *Mailer { return &Mailer{} }
+
+// SendPasswordRecovery records the message.
+func (m *Mailer) SendPasswordRecovery(_ context.Context, message service.RecoveryMessage) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Err != nil {
+		return m.Err
+	}
+
+	m.sent = append(m.sent, message)
+
+	return nil
+}
+
+// Sent is everything the transport was asked to deliver, in order.
+func (m *Mailer) Sent() []service.RecoveryMessage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.sent)
+}
