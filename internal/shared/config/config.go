@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -86,8 +87,16 @@ type Server struct {
 	// plain HTTP paths.
 	HTTPAddress string `env:"QUIRE_HTTP_ADDRESS" envDefault:":8080"`
 	// GRPCAdvertisedAddress is the host:port peers should dial for gRPC. It is
-	// published in the .well-known document and defaults to Name with the port
-	// taken from GRPCAddress.
+	// published in the .well-known document, so it is the address on which the
+	// whole federation reaches this node.
+	//
+	// In development it defaults to Name with the port taken from GRPCAddress,
+	// which is where a node behind nothing does answer. Outside development it
+	// is required, because there the two are routinely different: a node behind
+	// a gateway listens on 9090 and is reached on 443, and a default derived
+	// from the listen port would publish an address no peer can connect to —
+	// a failure that looks like an unreachable peer rather than like a
+	// misconfigured one.
 	GRPCAdvertisedAddress string `env:"QUIRE_GRPC_ADVERTISED_ADDRESS"`
 	// ShutdownTimeout bounds the graceful shutdown of both servers.
 	ShutdownTimeout time.Duration `env:"QUIRE_SHUTDOWN_TIMEOUT" envDefault:"15s"`
@@ -233,9 +242,12 @@ func (c *Config) resolveDerived() {
 		c.Auth.Issuer = c.Server.BaseURL.String()
 	}
 
-	if c.Server.GRPCAdvertisedAddress == "" && c.Server.Name != "" {
-		if _, port, found := strings.Cut(c.Server.GRPCAddress, ":"); found {
-			c.Server.GRPCAdvertisedAddress = c.Server.Name + ":" + port
+	if c.Server.GRPCAdvertisedAddress == "" && c.Server.Name != "" && !c.Environment.IsProduction() {
+		// net.SplitHostPort and not a cut at the first colon: a listen address
+		// of [::]:9090 has four of them, and cutting at the first one would
+		// publish quire-a.example::]:9090 to every peer in the federation.
+		if _, port, err := net.SplitHostPort(c.Server.GRPCAddress); err == nil {
+			c.Server.GRPCAdvertisedAddress = net.JoinHostPort(c.Server.Name, port)
 		}
 	}
 }
@@ -294,6 +306,19 @@ func (c *Config) validateServer() []error {
 
 	if c.Server.ShutdownTimeout <= 0 {
 		errs = append(errs, errors.New("QUIRE_SHUTDOWN_TIMEOUT: must be positive"))
+	}
+
+	switch {
+	case c.Server.GRPCAdvertisedAddress == "" && c.Environment.IsProduction():
+		errs = append(errs, errors.New(
+			"QUIRE_GRPC_ADVERTISED_ADDRESS: required outside development, "+
+				"since it is what peers dial and a gateway rarely publishes the listen port"))
+	case c.Server.GRPCAdvertisedAddress == "":
+	default:
+		if _, _, err := net.SplitHostPort(c.Server.GRPCAdvertisedAddress); err != nil {
+			errs = append(errs, fmt.Errorf("QUIRE_GRPC_ADVERTISED_ADDRESS: %q must be host:port: %w",
+				c.Server.GRPCAdvertisedAddress, err))
+		}
 	}
 
 	return errs

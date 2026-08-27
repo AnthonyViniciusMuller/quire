@@ -116,6 +116,70 @@ func TestLoadFromDerivesValuesFromTheServerName(t *testing.T) {
 	}
 }
 
+// The advertised address is what every peer in the federation dials, and it
+// is published in the .well-known document, so a derivation that mangles the
+// port is not a cosmetic defect.
+func TestLoadFromDerivesTheAdvertisedAddressFromAnyListenAddress(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"the default listen address":          ":9090",
+		"bound to one interface":              "0.0.0.0:9090",
+		"bound to every interface, over ipv6": "[::]:9090",
+		"bound to the ipv6 loopback":          "[::1]:9090",
+	}
+
+	for name, listen := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := load(t, envWith(t, map[string]string{"QUIRE_GRPC_ADDRESS": listen}))
+
+			if got, want := cfg.Server.GRPCAdvertisedAddress, "quire-a.example:9090"; got != want {
+				t.Errorf("GRPCAdvertisedAddress = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// Outside development the listen port and the port peers dial are routinely
+// different — a node behind a gateway listens on 9090 and is reached on 443 —
+// so a derived value would publish an address nobody can connect to.
+func TestValidateRequiresTheAdvertisedAddressOutsideDevelopment(t *testing.T) {
+	t.Parallel()
+
+	reported := loadErr(t, envWith(t, map[string]string{"QUIRE_ENV": "production"}))
+
+	if !strings.Contains(reported, "QUIRE_GRPC_ADVERTISED_ADDRESS") {
+		t.Errorf("LoadFrom() error = %q, which does not name the variable at fault", reported)
+	}
+}
+
+func TestValidateAcceptsAnAdvertisedAddressGivenExplicitly(t *testing.T) {
+	t.Parallel()
+
+	cfg := load(t, envWith(t, map[string]string{
+		"QUIRE_ENV":                     "production",
+		"QUIRE_GRPC_ADVERTISED_ADDRESS": "quire-a.example:443",
+	}))
+
+	if got, want := cfg.Server.GRPCAdvertisedAddress, "quire-a.example:443"; got != want {
+		t.Errorf("GRPCAdvertisedAddress = %q, want %q", got, want)
+	}
+}
+
+func TestValidateRejectsAnAdvertisedAddressWithoutAPort(t *testing.T) {
+	t.Parallel()
+
+	reported := loadErr(t, envWith(t, map[string]string{
+		"QUIRE_GRPC_ADVERTISED_ADDRESS": "quire-a.example",
+	}))
+
+	if !strings.Contains(reported, "QUIRE_GRPC_ADVERTISED_ADDRESS") {
+		t.Errorf("LoadFrom() error = %q, which does not name the variable at fault", reported)
+	}
+}
+
 func TestLoadFromKeepsExplicitValuesOverDerivedOnes(t *testing.T) {
 	t.Parallel()
 
