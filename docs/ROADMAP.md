@@ -525,7 +525,13 @@ the thesis — corrections to the specification and deliberate divergences from 
       number and not a percentile, so the script reads it at the 95th and says so. Against
       the compose federation on 2026-08-28: p95 of **3.15 ms** for the pull and **4.53 ms**
       for the push, against a budget of 200 ms
-- [ ] `docs: add deployment and operations guide`
+- [x] `docs: add deployment and operations guide` — [`deployment.md`](deployment.md), which the
+      readme has been pointing at since phase 0. What it is mostly about is the two things a
+      reader of the manifests would otherwise have to reconstruct: why the federation port is
+      not terminated (C23) and why one of the two private keys may never rotate (C12). It also
+      says plainly what a real deployment replaces — the dependency stack, the authority, and
+      the relay — because a reference deployment that does not name its own local
+      accommodations is one somebody copies whole
 
 ## Design decisions to settle
 
