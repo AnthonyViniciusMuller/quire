@@ -705,6 +705,42 @@ does not — but either way it has to be written down, because it is not derivab
 **Status** open. Implemented as the first device in the list. Add the sentence to 4.2.2, and
 to the comment on the `devices` field of the request.
 
+### C21 — a change made through the API produces no operation, so it replicates to nobody
+
+**Where** RF10, RF12, RN06, UC09 and UC10, against UC01 to UC05.
+
+**What the TCC says** Changes are propagated between a reader's devices and between nodes as
+`operacao_sync` rows, delivered after a cursor (RN06). It also gives the reader full CRUD over
+their collection, their groupings, their annotations and their reading position, over the API.
+
+**Why the two do not meet** Nothing writes an operation except the calls that receive one. A
+device that is online and edits a work through `UpdateEbook` changes `library.ebooks` and
+appends nothing to `sync.operations`, so the reader's other devices — which learn about
+changes by pulling the log — never hear about it, and neither does any authorized replica.
+The same change made offline and pushed later reaches all of them. The propagation of a
+change therefore depends on whether the device that made it happened to be connected, which
+is the opposite of what an offline-first design promises.
+
+It is not visible from either side on its own. Every use case of UC01 to UC05 is correct
+about the row it writes, and every use case of UC09 to UC11 is correct about the log it
+reads; what is missing is that the first set does not feed the second, and the specification
+never says it must because it never says where an operation comes from.
+
+**Correction** State it in 4.2.4: an operation is written by every call that changes a
+replicable record, and not only by the synchronization service. The shape is an outbox — the
+operation is appended in the same transaction as the change, from the same revision the
+entity just stamped, so that a change committed without its operation is impossible rather
+than merely unlikely. The delta is the fields the call claimed, which the field mask already
+names, and the target is the record it wrote.
+
+**Why it is not implemented here.** It touches every write use case of the library and
+reading slices and the port they would append through, which is a larger change than the
+phase that found it. It is recorded rather than done, and what makes that tolerable rather
+than a silent gap is that the client the specification describes writes to its own SQLite
+first and pushes — the online path is the convenience, not the mechanism.
+
+**Status** open. Found while implementing phase 9. Nothing in the code implements it yet.
+
 ## Divergences
 
 Deliberate departures from a specification that is internally consistent. Subsection 4.2.4

@@ -316,6 +316,14 @@ the thesis — corrections to the specification and deliberate divergences from 
       hand rather than taken from the container, because what the container hands back is a
       loop around a timer and a test that waited for one would be testing the timer
 
+- [x] `docs: record what phase 9 found and did not fix` — not in the original plan. Writing
+      the log made it visible that nothing else writes to it: a change made through the API
+      while a device is online produces no operation, so it reaches neither the reader's
+      other devices nor an authorized replica, while the same change made offline reaches
+      both. C21 in [`tcc-corrections.md`](tcc-corrections.md) records the finding and the
+      shape of the fix, which is an outbox in every write use case of the library and reading
+      slices — a larger change than the phase that found it
+
 ## Phase 10 — Client and end-to-end
 
 - [ ] `feat: add quirectl reference client` — and the `make build` target grows its second binary back
