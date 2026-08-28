@@ -516,7 +516,15 @@ the thesis — corrections to the specification and deliberate divergences from 
       test waits, because the manifests declare the production replication interval of thirty
       seconds and the compose file overrides it to five. Everything else is the same suite,
       seen through a mesh instead of through a bridge network
-- [ ] `test: add grpc latency benchmark script`
+- [x] `test: add grpc latency benchmark script` — [`scripts/bench.sh`](../scripts/bench.sh),
+      which measures the call a device actually waits on, with a real session, against a
+      running node: `PullOperations` from the beginning, which is the largest answer that
+      call ever gives, and an empty `PushOperations` beside it. The session is the point —
+      every call is verified, logged, counted and translated, and a benchmark that skipped
+      the token would be measuring a node this repository does not build. RNF06 states a
+      number and not a percentile, so the script reads it at the 95th and says so. Against
+      the compose federation on 2026-08-28: p95 of **3.15 ms** for the pull and **4.53 ms**
+      for the push, against a budget of 200 ms
 - [ ] `docs: add deployment and operations guide`
 
 ## Design decisions to settle
