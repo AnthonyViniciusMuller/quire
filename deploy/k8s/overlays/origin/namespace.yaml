@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quire-a
+  labels:
+    # What tells the mesh to inject a proxy into every pod here. It is on the
+    # namespace rather than on each pod because a workload that joined the mesh
+    # by remembering to ask is a workload that will one day forget.
+    istio-injection: enabled

@@ -1,0 +1,113 @@
+# The relay a password recovery is submitted to.
+#
+# It is Mailpit, which keeps every message and delivers none: the point of a
+# local federation is that UC08 can be walked end to end, and a relay that
+# actually sent mail to the address on record would be a demonstration nobody
+# should run twice.
+#
+# It speaks STARTTLS, which is not decoration either. The node runs under
+# QUIRE_ENV=production, which refuses to submit a recovery credential in the
+# clear — the credential replaces a password, so the connection carrying it is
+# held to the standard the password is. The certificate is issued by the same
+# cluster authority as everything else here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quire-mail
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: quire
+      app.kubernetes.io/component: mail
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: quire
+        app.kubernetes.io/component: mail
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          env:
+            - name: MP_SMTP_BIND_ADDR
+              value: "0.0.0.0:1025"
+            - name: MP_UI_BIND_ADDR
+              value: "0.0.0.0:8025"
+            - name: MP_SMTP_TLS_CERT
+              value: /certs/tls.crt
+            - name: MP_SMTP_TLS_KEY
+              value: /certs/tls.key
+            # In memory, because what is being kept is a development credential
+            # whose whole life is the minute between requesting a recovery and
+            # using it.
+            - name: MP_DATABASE
+              value: ""
+          ports:
+            - name: smtp
+              containerPort: 1025
+            - name: ui
+              containerPort: 8025
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: ui
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+      volumes:
+        - name: certs
+          secret:
+            secretName: quire-mail-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quire-mail
+spec:
+  selector:
+    app.kubernetes.io/name: quire
+    app.kubernetes.io/component: mail
+  ports:
+    - name: smtp
+      port: 587
+      targetPort: smtp
+    - name: http-ui
+      port: 8025
+      targetPort: ui
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: quire-mail-tls
+spec:
+  secretName: quire-mail-tls
+  duration: 2160h
+  renewBefore: 360h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages: [server auth]
+  dnsNames:
+    - quire-mail
+  issuerRef:
+    name: quire-ca
+    kind: ClusterIssuer
+    group: cert-manager.io

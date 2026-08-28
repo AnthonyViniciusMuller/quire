@@ -1,0 +1,17 @@
+# The three values that make this deployment quire-b.example and not a node.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quire-node
+data:
+  QUIRE_SERVER_NAME: quire-b.example
+  # The origin of the discovery documents, which is the gateway and not the
+  # node: a peer fetches them over HTTPS from the domain, and the domain
+  # resolves to the gateway that answers for it.
+  QUIRE_SERVER_BASE_URL: https://quire-b.example
+  # And the authority peers dial for gRPC, which is neither the port the node
+  # listens on nor the port the documents are served from. 9443 is passed
+  # through untouched, because the federation connection is pinned at both ends
+  # and a gateway that terminated it would break both — C23 in
+  # docs/tcc-corrections.md.
+  QUIRE_GRPC_ADVERTISED_ADDRESS: quire-b.example:9443

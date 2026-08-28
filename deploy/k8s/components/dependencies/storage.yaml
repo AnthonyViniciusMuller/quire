@@ -1,0 +1,167 @@
+# The object store, and it speaks TLS.
+#
+# Not decoration: the node runs under QUIRE_ENV=production, which refuses a
+# plain connection to the object store, and the bytes of every reader's library
+# cross it. The certificate comes from the same cluster authority the nodes'
+# do, and MinIO expects it under two particular names, which is what the
+# projection below is for.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quire-storage
+spec:
+  replicas: 1
+  strategy:
+    # One pod, one volume: a rolling update would start the second before
+    # stopping the first, and both would want the disk.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: quire
+      app.kubernetes.io/component: storage
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: quire
+        app.kubernetes.io/component: storage
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: minio
+          image: quay.io/minio/minio:latest
+          args: [server, /data, --certs-dir, /certs]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: quire-storage
+                  key: QUIRE_STORAGE_MINIO_ACCESS_KEY_ID
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: quire-storage
+                  key: QUIRE_STORAGE_MINIO_SECRET_ACCESS_KEY
+          ports:
+            - name: https
+              containerPort: 9000
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: https
+              scheme: HTTPS
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: quire-storage
+        - name: certs
+          secret:
+            secretName: quire-storage-tls
+            # MinIO reads public.crt and private.key and nothing else, so the
+            # keys cert-manager writes are projected onto the names it looks
+            # for rather than copied into a second secret.
+            items:
+              - key: tls.crt
+                path: public.crt
+              - key: tls.key
+                path: private.key
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: quire-storage
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 4Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quire-storage
+spec:
+  selector:
+    app.kubernetes.io/name: quire
+    app.kubernetes.io/component: storage
+  ports:
+    - name: https
+      port: 9000
+      targetPort: https
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: quire-storage-tls
+spec:
+  secretName: quire-storage-tls
+  duration: 2160h
+  renewBefore: 360h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages: [server auth]
+  dnsNames:
+    # The service name, because that is what the node dials it by. The endpoint
+    # is not a domain anybody outside this namespace resolves.
+    - quire-storage
+  issuerRef:
+    name: quire-ca
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# The node does not create its bucket: a node that created one would have the
+# right to, which is more than a node needs in order to store a file in it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: quire-bucket
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: quire
+        app.kubernetes.io/component: bucket
+      annotations:
+        sidecar.istio.io/inject: "true"
+        proxy.istio.io/config: '{"holdApplicationUntilProxyStarts": true}'
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: quay.io/minio/mc:latest
+          command: [sh, -c]
+          args:
+            - |
+              mc --insecure alias set node "https://quire-storage:9000" "$QUIRE_STORAGE_MINIO_ACCESS_KEY_ID" "$QUIRE_STORAGE_MINIO_SECRET_ACCESS_KEY" &&
+              mc --insecure mb --ignore-existing node/quire-contents
+          envFrom:
+            - secretRef:
+                name: quire-storage
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi

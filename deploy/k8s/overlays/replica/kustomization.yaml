@@ -1,0 +1,82 @@
+# quire-b.example, as a deployment.
+#
+# The overlay says four things and nothing else: which namespace, which domain,
+# what the node needs beside it, and what signs its certificates. Everything
+# about how a Quire node is deployed is in the base and in the two components,
+# and is identical for both nodes — which is the point of two overlays rather
+# than two copies.
+#
+# It contains no secret. quire-database, quire-postgres, quire-signing-key,
+# quire-storage and quire-mail are created by whoever deploys this;
+# scripts/kind-up.sh generates throwaway ones for the local cluster. A key in
+# this directory would be a key in every clone of this repository.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: quire-b
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+components:
+  # The mesh: the node's own gateway, the two ports and how each is terminated,
+  # and who may reach which path.
+  - ../../istio
+  # The certificates, and the trust the local authority needs.
+  - ../../certmanager
+  # A PostgreSQL, an object store and a mail relay, because this cluster
+  # supplies none. This is the component a real deployment deletes.
+  - ../../components/dependencies
+
+patches:
+  # The three values that make this deployment quire-b.example.
+  - path: configuration.yaml
+
+  # And the domain, written into every resource that asserts one. These are
+  # JSON patches and not merges because each target is an element of a list: a
+  # merge appends a second host beside the placeholder rather than replacing
+  # it, and a gateway that also answers for quire.example is a gateway
+  # answering for a domain nobody owns.
+  - target:
+      kind: Certificate
+      name: quire-federation-tls
+    patch: |-
+      - op: replace
+        path: /spec/dnsNames/0
+        value: quire-b.example
+  - target:
+      kind: Certificate
+      name: quire-gateway-tls
+    patch: |-
+      - op: replace
+        path: /spec/dnsNames/0
+        value: quire-b.example
+  - target:
+      kind: VirtualService
+      name: quire-discovery
+    patch: |-
+      - op: replace
+        path: /spec/hosts/0
+        value: quire-b.example
+  - target:
+      kind: VirtualService
+      name: quire-federation
+    patch: |-
+      - op: replace
+        path: /spec/hosts/0
+        value: quire-b.example
+      - op: replace
+        path: /spec/tls/0/match/0/sniHosts/0
+        value: quire-b.example
+
+  # The principal in the authorization policy names this node's own gateway,
+  # which is a service account in this namespace — so the namespace has to
+  # reach the string, and a namespace transformer does not rewrite strings.
+  - target:
+      kind: AuthorizationPolicy
+      name: quire
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/from/0/source/principals/0
+        value: cluster.local/ns/quire-b/sa/quire-gateway

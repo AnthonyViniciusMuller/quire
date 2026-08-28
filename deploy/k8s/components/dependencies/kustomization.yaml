@@ -1,0 +1,21 @@
+# What a node needs beside it, on a cluster that supplies none of it.
+#
+# This is the component a real deployment deletes. A PostgreSQL, an object store
+# and a mail relay are what an operator already has — managed, backed up, and
+# addressed by the secrets the node reads — and running them here is a
+# statement about a laptop rather than about the architecture. Removing the
+# component and pointing quire-database, quire-storage and quire-mail at real
+# services is the whole of the difference.
+#
+# What is not a laptop convenience is that all three speak TLS. The node runs
+# under QUIRE_ENV=production, which refuses a plain connection to the object
+# store and refuses to submit a recovery credential in the clear, and a
+# dependency stack that made the node relax those checks would be a deployment
+# testing something else.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - postgres.yaml
+  - storage.yaml
+  - mail.yaml

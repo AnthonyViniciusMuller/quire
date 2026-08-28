@@ -486,9 +486,16 @@ the thesis — corrections to the specification and deliberate divergences from 
       document server presents is pinned by nobody and rotates on every renewal. The
       authority they come from is cluster-scoped and applied once, and is the one thing here
       a real deployment replaces rather than copies — two operators share none
-- [ ] `build: add origin and replica overlays` — both set `QUIRE_GRPC_ADVERTISED_ADDRESS`
+- [x] `build: add origin and replica overlays` — both set `QUIRE_GRPC_ADVERTISED_ADDRESS`
       to the authority the gateway answers on, which is not the port the node listens on;
-      outside development the configuration refuses to load without it
+      outside development the configuration refuses to load without it — and after C23 it is
+      not even the port the documents are served from, since the federation port is passed
+      through and 443 is terminated. An overlay says four things and nothing else: the
+      namespace, the domain, what the node needs beside it and what signs its certificates.
+      The dependencies land here as a component that a real deployment deletes — a
+      PostgreSQL, an object store and a mail relay, all three speaking TLS, because the node
+      runs under `QUIRE_ENV=production` and a dependency stack that made it relax those
+      checks would be a deployment testing something else. No overlay contains a secret
 - [ ] `build: add kind based local cluster setup`
 - [ ] `ci: add end to end job on kind cluster`
 - [ ] `test: add grpc latency benchmark script`

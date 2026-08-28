@@ -14,3 +14,8 @@ kind: Component
 
 resources:
   - certificate.yaml
+
+# And the one consequence the certificates have for the node: it has to verify
+# this authority, which a cluster-local one is not in any system trust store.
+patches:
+  - path: trust.yaml

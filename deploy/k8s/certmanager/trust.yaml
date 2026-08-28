@@ -1,0 +1,30 @@
+# What the node verifies the local authority with.
+#
+# cert-manager writes the issuing authority into ca.crt beside every certificate
+# it signs, so the bundle is already mounted: it arrives in the same secret as
+# the federation certificate, at the same path. Nothing extra is projected.
+#
+# SSL_CERT_FILE is read by Go's certificate verification and replaces the
+# system trust store rather than adding to it, which is exactly right here and
+# would be exactly wrong in a real deployment. Here the node verifies four
+# things and all four are signed by this authority: the peer's discovery
+# document over HTTPS (C23), the object store, the mail relay, and the peer's
+# gRPC listener — though that last one is pinned rather than trusted, so the
+# store does not decide it. There, the discovery documents are behind publicly
+# trusted certificates and the store has to be the system's.
+#
+# This is why the file lives with the authority rather than in the base: a
+# deployment that keeps the base and drops this directory gets the system trust
+# store, which is the correct default for everywhere that is not one machine.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quire
+spec:
+  template:
+    spec:
+      containers:
+        - name: quired
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/quire/tls/ca.crt
