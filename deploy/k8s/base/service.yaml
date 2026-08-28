@@ -1,0 +1,23 @@
+# What reaches the node inside the cluster.
+#
+# The port names are what the mesh reads: Istio decides how to treat a port from
+# the prefix of its name, so a gRPC port not named grpc is a port it treats as
+# opaque TCP — no per-method telemetry, no per-method authorization policy, and
+# the whole of what the mesh is here for silently absent.
+apiVersion: v1
+kind: Service
+metadata:
+  name: quire
+spec:
+  selector:
+    app.kubernetes.io/name: quire
+    app.kubernetes.io/component: node
+  ports:
+    - name: grpc
+      port: 9090
+      targetPort: grpc
+      appProtocol: grpc
+    - name: http
+      port: 8080
+      targetPort: http
+      appProtocol: http

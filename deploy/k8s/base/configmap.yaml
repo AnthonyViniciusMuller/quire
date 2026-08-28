@@ -1,0 +1,36 @@
+# What every node is configured with, and nothing that identifies one.
+#
+# The domain, the advertised address and the base URL are per node and are set
+# by the overlay; everything secret is in a Secret. What is left is the shape of
+# the deployment, which is the same for the origin and for the replica.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quire-node
+data:
+  # Production, and it is not a formality: it refuses plain HTTP discovery,
+  # refuses a plain connection to the object store, refuses to submit a recovery
+  # credential in the clear, turns off gRPC reflection, and requires the
+  # advertised address below rather than deriving one. Until phase 11 the node
+  # could not run under it at all, because it had no way to deliver a password
+  # recovery — C13 in docs/tcc-corrections.md, and the two commits that answer
+  # it.
+  QUIRE_ENV: production
+
+  QUIRE_GRPC_ADDRESS: ":9090"
+  # 8080 and not 80. RFC 8615 puts the discovery documents on a path of the
+  # domain and a domain carries no port, so somebody has to answer on 80 — and
+  # in a cluster that somebody is the gateway, which is why the pod may drop
+  # every capability and why its image has nothing to bind a low port with.
+  QUIRE_HTTP_ADDRESS: ":8080"
+  QUIRE_SHUTDOWN_TIMEOUT: 20s
+
+  QUIRE_STORAGE_BUCKET: quire-contents
+  QUIRE_STORAGE_MINIO_USE_TLS: "true"
+
+  QUIRE_FEDERATION_TLS_CERT_FILE: /etc/quire/tls/tls.crt
+  QUIRE_FEDERATION_TLS_KEY_FILE: /etc/quire/tls/tls.key
+  QUIRE_FEDERATION_REPLICATION_INTERVAL: 30s
+
+  QUIRE_LOG_FORMAT: json
+  QUIRE_LOG_LEVEL: info

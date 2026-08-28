@@ -97,3 +97,34 @@ USER nonroot:nonroot
 EXPOSE 8080 9090
 
 ENTRYPOINT ["/usr/local/bin/quired"]
+
+# --- the schema --------------------------------------------------------------
+
+# The migrations, as an image the cluster can run.
+#
+# On a laptop the compose file mounts the directory, which is right there: the
+# files are on the machine that is running them, and editing one and restarting
+# is the whole loop. A cluster has neither the directory nor a way to reach it,
+# and the two alternatives are worse than a five-line image. A ConfigMap holds
+# a megabyte, which the schema does not exceed today and is not a bound anybody
+# should have to remember; and it can only be generated from files under the
+# kustomization root, which the schema is not and should not have to be moved
+# under.
+#
+# What this buys beyond that is that the schema is versioned with the binary
+# that expects it: one tag names both, and a node deployed from a commit runs
+# the migrations of that commit rather than of whatever the cluster last
+# applied.
+FROM migrate/migrate:v4.19.1 AS migrate
+
+ARG VERSION=dev
+ARG REVISION=unknown
+
+LABEL org.opencontainers.image.title="quire-migrate" \
+      org.opencontainers.image.description="The Quire schema, applied by golang-migrate." \
+      org.opencontainers.image.source="https://github.com/anthonyvsmuller/quire" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}"
+
+COPY migrations /migrations

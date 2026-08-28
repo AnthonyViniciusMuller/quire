@@ -15,8 +15,10 @@ KIND_CLUSTER    ?= quire
 # impossible exactly when it matters.
 IMAGE_REGISTRY  ?= ghcr.io/anthonyvsmuller
 IMAGE_NAME      ?= quired
+MIGRATE_IMAGE_NAME ?= quire-migrate
 IMAGE_TAG       ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 IMAGE           := $(IMAGE_REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
+MIGRATE_IMAGE   := $(IMAGE_REGISTRY)/$(MIGRATE_IMAGE_NAME):$(IMAGE_TAG)
 DATABASE_URL    ?= postgres://quire:quire@localhost:5432/quire?sslmode=disable
 MIGRATIONS      := $(CURDIR)/migrations
 
@@ -71,10 +73,27 @@ image:
 		--build-arg REVISION="$$(git rev-parse HEAD 2>/dev/null || echo unknown)" \
 		-f deploy/docker/Dockerfile -t $(IMAGE) .
 
-## image-name: print the tag the manifests refer to
+## migrate-image: build the image that applies the schema in a cluster
+#
+# The schema travels as an image rather than as a mounted directory because a
+# cluster has no directory to mount, and it carries the same tag as the node so
+# that one tag names the binary and the schema it expects.
+.PHONY: migrate-image
+migrate-image:
+	docker build --target migrate --load \
+		--build-arg VERSION="$(IMAGE_TAG)" \
+		--build-arg REVISION="$$(git rev-parse HEAD 2>/dev/null || echo unknown)" \
+		-f deploy/docker/Dockerfile -t $(MIGRATE_IMAGE) .
+
+## images: build both images the cluster runs
+.PHONY: images
+images: image migrate-image
+
+## image-name: print the tags the manifests refer to
 .PHONY: image-name
 image-name:
 	@echo $(IMAGE)
+	@echo $(MIGRATE_IMAGE)
 
 ## run: run the node server against the local environment
 .PHONY: run

@@ -450,7 +450,15 @@ the thesis — corrections to the specification and deliberate divergences from 
       exactly when it matters. `.dockerignore` lands with it: the context carried `bin`,
       which would have copied the host'"'"'s binaries over the ones the build produces, and
       `deploy/docker/certs`, which has no business inside an image
-- [ ] `build: add kustomize base manifests`
+- [x] `build: add kustomize base manifests` — [`deploy/k8s/base`](../deploy/k8s/base): the
+      workload, what reaches it, the identity it runs as, the schema job, and the
+      configuration every node shares. What it deliberately holds none of is a namespace, a
+      domain, an advertised address or a secret — those are what make a deployment *this*
+      node. The pod drops every capability, runs read-only and non-root, and can do all of
+      that because the cluster image binds nothing privileged. The schema became a second
+      image rather than a generated `ConfigMap`: kustomize will only generate one from files
+      under its own root, which `migrations/` is not and should not be moved under, and an
+      image versions the schema with the binary that expects it — one tag names both
 - [ ] `build: add istio gateway and authentication policies` — the three paths of the HTTP
       listener need different policies: `/.well-known` has to stay reachable by strangers,
       since being readable without a prior relationship is its entire function, while

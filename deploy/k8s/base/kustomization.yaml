@@ -1,0 +1,36 @@
+# The node, and nothing that identifies one.
+#
+# What this base holds is the shape of a Quire deployment: the workload, what
+# reaches it, the identity it runs as, the schema job and the configuration
+# every node shares. What it deliberately does not hold is a namespace, a
+# domain, an advertised address or a single secret — those are what make a
+# deployment *this* node, and they live in the overlay that deploys it.
+#
+# The secrets it refers to and does not contain are quire-database,
+# quire-signing-key, quire-storage and quire-mail. An overlay supplies them, and
+# the local cluster script generates throwaway ones; a key in this directory
+# would be a key in every clone of this repository. The fifth,
+# quire-federation-tls, is written by cert-manager rather than by anybody.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - serviceaccount.yaml
+  - configmap.yaml
+  - service.yaml
+  - deployment.yaml
+  - migrate-job.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: quire
+      app.kubernetes.io/part-of: quire
+
+# One tag for both, set by the overlay or by the local cluster script. They move
+# together because the schema is versioned with the binary that expects it.
+images:
+  - name: ghcr.io/anthonyvsmuller/quired
+    newTag: dev
+  - name: ghcr.io/anthonyvsmuller/quire-migrate
+    newTag: dev

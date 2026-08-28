@@ -1,0 +1,122 @@
+# The node.
+#
+# One container and no sidecar of this repository's own: the mesh injects its
+# proxy, and everything else the node needs — the schema, the bucket — is
+# established before it starts rather than beside it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quire
+spec:
+  # One replica in the base, and the overlays do not raise it. Nothing in the
+  # node forbids a second — the schema is applied by a job rather than on
+  # startup for exactly that reason, and every write goes through PostgreSQL —
+  # but the replication worker of the sync slice ticks per process, so two
+  # replicas offer the same log to the same peer twice. The peer is idempotent
+  # about it and the traffic is not; raising this is a decision that belongs
+  # with a measurement, and there is none yet.
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: quire
+      app.kubernetes.io/component: node
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: quire
+        app.kubernetes.io/component: node
+    spec:
+      serviceAccountName: quire
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: quired
+          image: ghcr.io/anthonyvsmuller/quired:dev
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          # The cluster image binds nothing privileged, so the pod drops every
+          # capability there is — including the one the laptop image needs in
+          # order to answer discovery on 80. Here that address belongs to the
+          # gateway.
+          ports:
+            - name: grpc
+              containerPort: 9090
+            - name: http
+              containerPort: 8080
+          envFrom:
+            # The order matters only where two of them name the same variable,
+            # and none of them do: the map holds what is public and each secret
+            # holds one thing that is not.
+            - configMapRef:
+                name: quire-node
+            - secretRef:
+                name: quire-database
+            - secretRef:
+                name: quire-signing-key
+            - secretRef:
+                name: quire-storage
+            - secretRef:
+                name: quire-mail
+          volumeMounts:
+            - name: federation-tls
+              mountPath: /etc/quire/tls
+              readOnly: true
+          # Liveness on /healthz and readiness on /readyz, which are different
+          # questions and are answered differently by the node: a database that
+          # stopped answering takes this pod out of rotation and does not have
+          # it restarted in a loop, because restarting a node whose database is
+          # down fixes nothing and loses every connection it was holding.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+          # A startup probe as well, because the node opens its pool and parses
+          # its signing key before it serves anything, and a liveness probe that
+          # began counting during that would restart a node that was merely
+          # starting.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          # No CPU limit, deliberately. A limit throttles rather than kills, and
+          # a node throttled mid-request answers slowly for reasons no log
+          # explains; the memory limit is a limit because memory is the one that
+          # cannot be given back.
+      # The node writes nothing to its own filesystem, which is what makes the
+      # root filesystem read-only above. The certificate arrives as a volume
+      # because cert-manager writes it into a Secret, and the pin a peer checks
+      # is computed from the file this node presents.
+      volumes:
+        - name: federation-tls
+          secret:
+            secretName: quire-federation-tls
+      # Long enough for the graceful shutdown both listeners implement, and for
+      # the delivery worker to drain what it accepted. QUIRE_SHUTDOWN_TIMEOUT
+      # bounds the node's half of it and is lower, so the node stops before the
+      # kubelet stops waiting.
+      terminationGracePeriodSeconds: 30

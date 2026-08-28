@@ -1,0 +1,67 @@
+# The schema, applied once per deployment.
+#
+# It is a job and not something the node does on startup, for the reason the
+# compose file gives: a node that migrated as it started would have two of them
+# racing for one database the first time a deployment ran two replicas.
+#
+# The schema travels inside the image rather than as a mounted map, so this job
+# and the node it precedes carry the same tag: a deployment of one commit
+# applies the migrations of that commit. deploy/docker/Dockerfile says what the
+# alternatives were.
+#
+# A Job is immutable in the fields that matter, so re-applying this after the
+# migrations change fails until the finished one is deleted. That is on purpose
+# rather than a rough edge: deleting it is a deliberate act, and applying a
+# schema change is not something that should happen because a manifest was
+# re-applied.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: quire-migrate
+  annotations:
+    # The overlays and the local cluster script delete this before applying, so
+    # the annotation is documentation for whoever does it by hand.
+    quire.example/replace: "delete this job before applying a schema change"
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: quire
+        app.kubernetes.io/component: migrate
+      annotations:
+        # The job has to be able to finish. A pod whose proxy keeps running
+        # after the container exits is a Job that never completes, and a mesh
+        # that has not started yet is a container that cannot reach the
+        # database — so the proxy is asked to start first and to stop when the
+        # container does.
+        sidecar.istio.io/inject: "true"
+        proxy.istio.io/config: '{"holdApplicationUntilProxyStarts": true}'
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: quire
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: ghcr.io/anthonyvsmuller/quire-migrate:dev
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          args:
+            - -path=/migrations
+            # Kubernetes expands $(VAR) in args against the container's own
+            # environment, which is what keeps the connection string out of
+            # this file and out of `kubectl describe`: it arrives from the
+            # Secret below and is never written down here.
+            - -database=$(QUIRE_DATABASE_URL)
+            - up
+          envFrom:
+            - secretRef:
+                name: quire-database
