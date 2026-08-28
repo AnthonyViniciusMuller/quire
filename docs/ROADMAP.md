@@ -412,7 +412,11 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 ## Phase 11 — Kubernetes and delivery
 
-- [ ] `build: add container image for the node server`
+- [ ] `build: add container image for the node server` — phase 10 already built one, in
+      [`deploy/docker/Dockerfile`](../deploy/docker/Dockerfile), because a compose file that
+      cannot build the node is not a federation. What is left here is whatever a cluster
+      needs of it that a laptop does not: a base without a shell if the deployment wants
+      one, the labels, and the tag the manifests refer to
 - [ ] `build: add kustomize base manifests`
 - [ ] `build: add istio gateway and authentication policies` — the three paths of the HTTP
       listener need different policies: `/.well-known` has to stay reachable by strangers,
