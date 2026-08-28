@@ -17,6 +17,8 @@
 package di
 
 import (
+	"log/slog"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/server"
@@ -57,6 +59,7 @@ import (
 	devicerepository "github.com/anthonyvsmuller/quire/internal/identity/infra/repository/device"
 	userrepository "github.com/anthonyvsmuller/quire/internal/identity/infra/repository/user"
 	clockservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/clock"
+	deferredservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/deferred"
 	hashservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/hash"
 	localserverservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/localserver"
 	mailerservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/mailer"
@@ -79,6 +82,12 @@ type Container struct {
 	// Service is the gRPC surface of the slice, ready to be registered.
 	Service *authservice.Service
 
+	// Deliveries is the worker that delivers the password recoveries this
+	// slice issues. It is here for the reason the replication worker is in the
+	// sync slice's container: nobody calls it, so nothing would start it, and
+	// the node is what starts the things that run on their own.
+	Deliveries *deferredservice.Service
+
 	// Migration serves FederationService.MigrateHomeServer (UC16, RF17).
 	//
 	// It is this slice's controller and the federation slice's method, because
@@ -96,7 +105,9 @@ type Container struct {
 // cost bcrypt refuses, or a deployment with no way to deliver a password
 // recovery are all deployment faults, and each of them is better as a node that
 // does not start than as a call that fails once somebody depends on it.
-func Initialize(cfg *config.Config, pool *pgxpool.Pool, servers server.Repository) (*Container, error) {
+func Initialize(
+	cfg *config.Config, pool *pgxpool.Pool, servers server.Repository, logger *slog.Logger,
+) (*Container, error) {
 	manager := persist.NewManager(pool)
 
 	users := userrepository.New(manager)
@@ -113,10 +124,17 @@ func Initialize(cfg *config.Config, pool *pgxpool.Pool, servers server.Repositor
 		return nil, err
 	}
 
-	notifier, err := mailer(cfg)
+	transport, err := mailer(cfg)
 	if err != nil {
 		return nil, err
 	}
+
+	// The transport is reached through the queue and never directly. C13 in
+	// docs/tcc-corrections.md names both as missing, and the queue is what
+	// makes RequestPasswordRecovery take the same time for an address that
+	// exists as for one that does not — which the uniform reply on its own
+	// cannot do.
+	notifier := deferredservice.New(transport, &cfg.Mail, logger)
 
 	clock := clockservice.New()
 
@@ -157,6 +175,7 @@ func Initialize(cfg *config.Config, pool *pgxpool.Pool, servers server.Repositor
 		Auth:        auth,
 		Interceptor: authn.New(auth, clock, authn.PublicMethods()),
 		Service:     authservice.New(&controllers),
+		Deliveries:  notifier,
 		Migration:   migratehomeserver.New(migration),
 	}, nil
 }

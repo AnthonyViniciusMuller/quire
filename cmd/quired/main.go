@@ -97,7 +97,7 @@ func run(ctx context.Context) error {
 	// the node cannot read, a hashing cost bcrypt refuses, no way to deliver a
 	// password recovery — stops the node while it is still starting rather than
 	// at the first call that needs it.
-	identity, err := identitydi.Initialize(cfg, pool, catalogue)
+	identity, err := identitydi.Initialize(cfg, pool, catalogue, logger)
 	if err != nil {
 		return err
 	}
@@ -213,6 +213,12 @@ func run(ctx context.Context) error {
 	// start it — and it stops with the two listeners because a node that kept
 	// replicating after it stopped answering would be half a node.
 	group.Go(func() error { return synchronization.Worker.Run(serving) })
+	// Nor is the fourth. A password recovery is handed to this worker instead
+	// of being delivered on the call that asked for one, so that the call takes
+	// the same time whether or not the address is registered here — C13 in
+	// docs/tcc-corrections.md, and the whole of why the delivery is not simply
+	// awaited where it is requested.
+	group.Go(func() error { return identity.Deliveries.Run(serving) })
 
 	if err := group.Wait(); err != nil {
 		return err

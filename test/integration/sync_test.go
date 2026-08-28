@@ -71,7 +71,7 @@ func serveSync(t *testing.T) synchronization {
 	cfg := nodeConfig(t)
 	clock := hlc.New()
 
-	identityContainer, err := identitydi.Initialize(cfg, pool, federationdi.Catalogue(pool))
+	identityContainer, err := identitydi.Initialize(cfg, pool, federationdi.Catalogue(pool), logging.Discard())
 	if err != nil {
 		t.Fatalf("building the identity slice: %v", err)
 	}

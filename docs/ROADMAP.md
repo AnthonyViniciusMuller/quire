@@ -425,6 +425,16 @@ the thesis — corrections to the specification and deliberate divergences from 
       whether the library is the code the service's own documentation describes. The `di`
       picks the adapter by which section of the configuration is filled in, never by a
       variable naming the transport, as the object store already does
+- [x] `feat: hand a password recovery to a worker instead of awaiting it` — the second half of
+      C13, and the one the uniform reply cannot do on its own: `RequestPasswordRecovery`
+      answers the same way whether or not the address is registered here, but not in the same
+      time, and a delivery is by far the slowest thing on that path. The queue is a decorator
+      over the port rather than a behaviour of the transport, because the difference belongs to
+      the call and not to the way the message travels — the node that writes the credential to
+      its log has exactly the same one. A full queue is refused rather than waited on, since a
+      call that blocked would take longest when the node is least able to deliver anything, and
+      what was already accepted is drained when the node is asked to stop. It is not durable
+      and does not claim to be
 - [ ] `build: add container image for the node server` — phase 10 already built one, in
       [`deploy/docker/Dockerfile`](../deploy/docker/Dockerfile), because a compose file that
       cannot build the node is not a federation. What is left here is whatever a cluster
@@ -455,7 +465,7 @@ before the commit that depends on them. A question stays here only while it is o
 is answered it becomes an entry in [`tcc-corrections.md`](tcc-corrections.md), so that the
 answer travels with the correction it produced rather than with the doubt it started as.
 
-Four are open, all found while implementing phase 5. Each names what the answer changes, so
+Three are open, all found while implementing phase 5. Each names what the answer changes, so
 that answering it is a decision rather than an archaeology.
 
 **Should the contract carry a password on the call that changes an address?** C13 aside, this
@@ -465,12 +475,6 @@ takeover — and the specification already applies the check that would stop it,
 and not to the field that makes the password replaceable. C14 has the two shapes the fix can
 take. It is not implemented, because `UpdateUserRequest` has no field to carry the password;
 answering this is a contract amendment and the check that follows it.
-
-**Should a node without a way to deliver a recovery start at all?** The delivery adapter of
-C13 refuses to be built outside development, and the container fails when it does, so the node
-does not start under `QUIRE_ENV=production`. That is honest — UC08 would otherwise be broken
-in silence — and it blocks phase 11 until a transport exists. The alternative is a node that
-starts and answers `RequestPasswordRecovery` with a failed precondition.
 
 **Is the reuse trade of D07 the right way round?** A device whose reply was lost on a mobile
 network retries with the credential it still holds and is logged out for it, which on an
@@ -484,11 +488,13 @@ reasoning that a reader who changes their password is responding to a suspicion.
 calling device is implementable — the access token names it — and needs one more statement on
 the credential repository.
 
-Two have been settled since. Whether `updated_at` could break ties as a wall clock, on
+Three have been settled since. Whether `updated_at` could break ties as a wall clock, on
 2026-08-26: it cannot, and it becomes a hybrid logical clock — the counterexample and the
-argument are in C01. And whether the integration suite should have a container library start
-its dependencies, on 2026-08-27: it should not, and phase 7 confirmed it rather than
-reopening it. That second one leaves no entry in
+argument are in C01. Whether a node with no way to deliver a recovery should start at all, on
+2026-08-28: the question was the wrong way round, and the missing component was built instead —
+the transport and the queue are both in C13, which is now settled, and 4.3 gains a component.
+And whether the integration suite should have a container library start its dependencies, on
+2026-08-27: it should not, and phase 7 confirmed it rather than reopening it. That second one leaves no entry in
 [`tcc-corrections.md`](tcc-corrections.md), because it is a question about this project's
 tooling and not about the specification — the suite now needs a MinIO as well as a
 PostgreSQL, `make test-up` brings both up, and the 87 modules testcontainers costs are

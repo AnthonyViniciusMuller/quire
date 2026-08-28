@@ -106,7 +106,7 @@ func serveFederation(t *testing.T) federation {
 
 	cfg := nodeConfig(t)
 
-	identityContainer, err := identitydi.Initialize(cfg, pool, federationdi.Catalogue(pool))
+	identityContainer, err := identitydi.Initialize(cfg, pool, federationdi.Catalogue(pool), logging.Discard())
 	if err != nil {
 		t.Fatalf("building the identity slice: %v", err)
 	}

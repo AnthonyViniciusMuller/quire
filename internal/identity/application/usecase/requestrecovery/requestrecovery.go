@@ -8,11 +8,13 @@
 // thing to learn about somebody than a local name, since it identifies them
 // off this node as well.
 //
-// What that uniformity does not cover is how long the call takes, and C13 in
-// docs/tcc-corrections.md is where that is written down: delivering to an
-// address that exists costs a delivery, and closing the difference needs the
-// delivery to be queued rather than awaited. This node has no queue, so the
-// channel is named rather than pretended shut.
+// What the uniform reply does not cover on its own is how long the call takes:
+// delivering to an address that exists costs a delivery and one that does not
+// costs nothing, and a delivery is by far the slowest thing on this path. That
+// is why the port this holds is reached through a queue — the adapter in
+// internal/identity/infra/service/deferred, which accepts the message and
+// returns — so that the call takes the same time either way. C13 in
+// docs/tcc-corrections.md is where both halves are written down.
 package requestrecovery
 
 import (
@@ -175,13 +177,15 @@ func (r *RequestRecovery) issue(ctx context.Context, reader *user.User) (service
 	}, nil
 }
 
-// deliver sends the message, and reports a failure to the log rather than to
-// the caller.
+// deliver hands the message over, and reports a failure to the log rather than
+// to the caller.
 //
-// A delivery can only fail for an address that exists, so an error passed on
-// would be exactly the distinction the empty reply exists to remove. What the
-// reader loses is one recovery attempt, which they can repeat; what an operator
-// gets is the record, which is where a broken transport should show up.
+// Handing it over can only fail for an address that exists — there is nothing
+// to hand over for one that does not — so an error passed on would be exactly
+// the distinction the empty reply exists to remove. What the reader loses is one
+// recovery attempt, which they can repeat; what an operator gets is the record,
+// which is where a queue that is full, or a transport that is broken, should
+// show up.
 func (r *RequestRecovery) deliver(ctx context.Context, message service.RecoveryMessage) {
 	err := r.mailer.SendPasswordRecovery(ctx, message)
 	if err == nil {

@@ -473,11 +473,31 @@ that the recovery notification is queued rather than awaited, and add its config
 node. The alternative is to say plainly that UC08 is specified but not deployed, which is a
 weaker position than naming the component.
 
-**Status** open. The implementation defines the delivery port and ships one adapter, which
-writes the credential to the log and **refuses to be built outside the development profile** —
-a node that printed a reader's recovery credential to its logs in production would hand it to
-whoever reads them. Until the transport lands, that refusal is what stops the gap from being
-shipped by accident.
+**Status** settled 2026-08-28: the node needs both, and it has both. The question was whether a
+node with no way to deliver a recovery should start at all — it had been refusing to, which
+blocked phase 11, since a manifest declaring the production profile declared a container that
+exits. The answer is that the component the thesis is missing should exist rather than that the
+refusal should be relaxed.
+
+Implemented in phase 11. The transport is `internal/identity/infra/service/smtp`, configured by
+the `QUIRE_MAIL_*` section of `internal/shared/config`, and the `di` picks it by which section
+the deployment filled in — a node with none still gets the adapter that writes to the log and
+still refuses production, which is the refusal that made the gap visible and is kept for the
+same reason. The queue is `internal/identity/infra/service/deferred`, a decorator over the port
+rather than a behaviour of the transport, because the timing difference belongs to the call and
+not to the way the message travels: every adapter of the port has it. Its worker runs beside
+the two listeners in `cmd/quired` and drains what was already accepted when the node is asked to
+stop.
+
+What the queue does not claim is durability. It is in memory, so a node that is killed loses
+what it was holding and the reader repeats the request — which is what they would do had the
+relay been down for those seconds. A durable one is a table and the worker pattern the sync
+slice already has; what it buys is one recovery attempt across a restart.
+
+**4.3 has to gain the component and the sentence.** The deployment diagram needs the outbound
+relay beside the gateway, the mesh and the object store, and the text has to say that the
+recovery notification is queued rather than awaited, and why: the uniform reply closes the
+channel in what the caller reads, and only the queue closes it in what the caller can time.
 
 ### C14 — UC06 lets a session change the recovery address without proving the reader is present
 
