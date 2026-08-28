@@ -85,21 +85,24 @@ func run(ctx context.Context) error {
 	// process would be a second answer to what "after" means here.
 	clock := hlc.New()
 
-	// The federation slice comes first because the identity slice needs the
-	// catalogue from it: a reader is bound to the node that hosts them (UC14),
-	// and the row that says which node this is lives in federation.servers.
-	// Wiring the two is this file's job — neither slice imports the other's
-	// adapters.
-	federation := federationdi.Initialize(cfg, pool)
+	// The two slices need each other, and the catalogue is what breaks the
+	// knot. The identity slice binds a reader to the node that hosts them
+	// (UC14) and needs the catalogue to do it; the federation slice serves
+	// UC16, whose controller the identity slice holds because the work is an
+	// account, its devices and a session. Wiring the two is this file's job —
+	// neither slice imports the other's container.
+	catalogue := federationdi.Catalogue(pool)
 
 	// Built before the listeners, so that a deployment fault — a signing key
 	// the node cannot read, a hashing cost bcrypt refuses, no way to deliver a
 	// password recovery — stops the node while it is still starting rather than
 	// at the first call that needs it.
-	identity, err := identitydi.Initialize(cfg, pool, federation.Servers)
+	identity, err := identitydi.Initialize(cfg, pool, catalogue)
 	if err != nil {
 		return err
 	}
+
+	federation := federationdi.Initialize(cfg, pool, identity.Migration)
 
 	// For the same reason, and one of its own: which object store holds the
 	// readers' files is decided here, and an endpoint the SDK cannot address

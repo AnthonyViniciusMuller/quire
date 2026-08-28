@@ -45,6 +45,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/getknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/listknownservers"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/listreplicaauthorizations"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/migratehomeserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/refreshknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/removeknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/revokereplica"
@@ -73,15 +74,36 @@ type Container struct {
 	Service *federationservice.Service
 }
 
+// Catalogue is the node catalogue over the pool, and the one piece of this
+// slice that can be built before the rest of the node.
+//
+// It exists because two slices need each other and neither can be second. The
+// identity slice binds a reader to this node (UC14) and needs the catalogue to
+// do it; this slice serves UC16, whose controller the identity slice holds
+// because the work is an account, its devices and a session. Building the
+// catalogue on its own breaks the knot: the identity container takes this, and
+// this container takes the controller that came out of it.
+//
+// What it costs is nothing. The repository is a value over the pool with no
+// state of its own, so the one this returns and the one Initialize builds are
+// the same thing built twice — and the alternative is a container handed out
+// half-built, which is a worse thing to have in a program than a constructor
+// called twice.
+func Catalogue(pool *pgxpool.Pool) server.Repository {
+	return serverrepository.New(persist.NewManager(pool))
+}
+
 // Initialize builds the slice over the node's configuration and connection
-// pool.
+// pool, and the controller the identity slice supplies for UC16.
 //
 // Nothing here can fail, which is worth contrasting with the identity slice:
 // that one reads a signing key and refuses a deployment with no way to deliver
 // a password recovery, and this one holds no secret and reaches no peer until
 // a reader asks it to. A domain that does not answer is a failed call, not a
 // node that should not have started.
-func Initialize(cfg *config.Config, pool *pgxpool.Pool) *Container {
+func Initialize(
+	cfg *config.Config, pool *pgxpool.Pool, migration *migratehomeserver.MigrateHomeServer,
+) *Container {
 	manager := persist.NewManager(pool)
 
 	servers := serverrepository.New(manager)
@@ -107,6 +129,7 @@ func Initialize(cfg *config.Config, pool *pgxpool.Pool) *Container {
 		RevokeReplica: revokereplica.New(revokereplicausecase.New(replicas)),
 		ListReplicaAuthorizations: listreplicaauthorizations.New(
 			listauthorizationsusecase.New(servers, replicas)),
+		MigrateHomeServer: migration,
 	}
 
 	return &Container{

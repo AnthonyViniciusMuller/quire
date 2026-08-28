@@ -11,14 +11,14 @@
 // phase, and a handler that did not compile until it implemented one would
 // make every such phase start with unrelated work. What that costs is that a
 // forgotten method answers Unimplemented instead of failing to build, so a
-// test calls all ten and refuses that answer.
+// test calls all eleven and refuses that answer.
 //
-// MigrateHomeServer is the eleventh, and it is deliberately not served here.
-// UC16 belongs to phase 9: it creates a reader, adopts their devices with the
-// identifiers those devices already hold (C11) and issues a session, none of
-// which this slice can do — and answering it with Unimplemented until then is
-// the honest reply. The test that refuses Unimplemented names it as the
-// exception, so that it stays a decision rather than an omission.
+// MigrateHomeServer is the eleventh, and it is the one whose controller belongs
+// to another slice. What UC16 changes is which node a reader belongs to, which
+// is a fact about the federation; what it writes is an account, its devices and
+// a session, which the identity slice is the only holder of. So the method is
+// served here and the work is done there, and the container is where the two
+// meet.
 package federationservice
 
 import (
@@ -32,6 +32,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/getknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/listknownservers"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/listreplicaauthorizations"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/migratehomeserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/refreshknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/removeknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/revokereplica"
@@ -55,6 +56,8 @@ type Controllers struct {
 	AuthorizeReplica          *authorizereplica.AuthorizeReplica
 	RevokeReplica             *revokereplica.RevokeReplica
 	ListReplicaAuthorizations *listreplicaauthorizations.ListReplicaAuthorizations
+	// The one that serves UC16, whose use case is the identity slice's.
+	MigrateHomeServer *migratehomeserver.MigrateHomeServer
 }
 
 // Service is the gRPC surface of the federation slice.
@@ -146,4 +149,11 @@ func (s *Service) ListReplicaAuthorizations(
 	ctx context.Context, request *quirev1.ListReplicaAuthorizationsRequest,
 ) (*quirev1.ListReplicaAuthorizationsResponse, error) {
 	return s.controllers.ListReplicaAuthorizations.Handle(ctx, request)
+}
+
+// MigrateHomeServer takes a reader in from another origin server (UC16, RF17).
+func (s *Service) MigrateHomeServer(
+	ctx context.Context, request *quirev1.MigrateHomeServerRequest,
+) (*quirev1.MigrateHomeServerResponse, error) {
+	return s.controllers.MigrateHomeServer.Handle(ctx, request)
 }

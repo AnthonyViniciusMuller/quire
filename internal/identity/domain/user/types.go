@@ -16,6 +16,7 @@ const (
 	opParsePassword     = "identity/user: parse password"
 	opParseFederatedID  = "identity/user: parse federated id"
 	opParseServerDomain = "identity/user: parse server domain"
+	opParseProvenance   = "identity/user: parse provenance"
 )
 
 // The stable machine-readable codes this package attaches to the errors it
@@ -37,6 +38,8 @@ const (
 	// CodeInvalidServerDomain is the domain half of a federated identifier not
 	// being a host.
 	CodeInvalidServerDomain = "invalid_server_domain"
+	// CodeInvalidProvenance is a previous identifier this node cannot record.
+	CodeInvalidProvenance = "invalid_provenance"
 )
 
 // The widths identity.users declares, counted in characters as PostgreSQL
@@ -44,7 +47,11 @@ const (
 const (
 	maxLocalNameLength   = 64
 	maxDisplayNameLength = 120
-	maxEmailLength       = 255
+	// maxProvenanceLength is the width identity.users.migrated_from declares: a
+	// local name of at most 64 and a domain of at most 255, with the at sign
+	// and the colon between them.
+	maxProvenanceLength = 322
+	maxEmailLength      = 255
 )
 
 // The bounds a password has to fall inside.
@@ -426,3 +433,58 @@ func isPort(s string) bool {
 // not bytes. A name of sixty accented characters fits varchar(120) and would be
 // rejected by a byte count.
 func characterCount(s string) int { return utf8.RuneCountInString(s) }
+
+// Provenance is where a reader arrived from, on a reader who arrived by
+// migrating (RF17, UC16), and empty on everybody else.
+//
+// It is a string and not a [FederatedID], and the difference is the whole of
+// C11. A federated identifier is something this node assembles out of a local
+// name it holds and a domain it is; this is something a caller said about a
+// node that is not here and that this node cannot ask. Parsing it into halves
+// would suggest one of them meant something — that the domain could be looked
+// up, that the local name could be claimed — and neither is true.
+//
+// So it is checked for exactly what a column can be checked for: it fits, and
+// it looks like an identifier rather than a sentence. A value that does not is
+// refused, because a provenance nobody can read is worse than none.
+type Provenance string
+
+// String renders the provenance.
+func (p Provenance) String() string { return string(p) }
+
+// IsZero reports whether the reader arrived by registering rather than by
+// migrating, which is almost all of them.
+func (p Provenance) IsZero() bool { return p == "" }
+
+// Validate reports why the provenance could not be recorded, or nil.
+func (p Provenance) Validate() error {
+	invalid := func(reason string) error {
+		return errs.New(errs.KindInvalidArgument, "the previous identifier is not usable").
+			WithOp(opParseProvenance).
+			WithCode(CodeInvalidProvenance).
+			WithField("previous_federated_id", reason)
+	}
+
+	switch {
+	case p.IsZero():
+		return nil
+	case !strings.HasPrefix(string(p), "@") || !strings.Contains(string(p), ":"):
+		return invalid("it must look like @local_name:domain, the form the previous node used")
+	case characterCount(string(p)) > maxProvenanceLength:
+		return invalid("it must be at most 322 characters long")
+	default:
+		return nil
+	}
+}
+
+// ParseProvenance removes the surrounding space from s and validates the
+// result. An empty value is a reader who did not migrate, which is not an
+// error.
+func ParseProvenance(s string) (Provenance, error) {
+	provenance := Provenance(strings.TrimSpace(s))
+	if err := provenance.Validate(); err != nil {
+		return "", err
+	}
+
+	return provenance, nil
+}

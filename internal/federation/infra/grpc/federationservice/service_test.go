@@ -29,6 +29,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/getknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/listknownservers"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/listreplicaauthorizations"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/migratehomeserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/refreshknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/removeknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/revokereplica"
@@ -36,6 +37,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/federationservice"
 	quirev1 "github.com/anthonyvsmuller/quire/internal/gen/quire/v1"
 	"github.com/anthonyvsmuller/quire/internal/identity/application/apptest"
+	migratehomeserverusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/migratehomeserver"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/authn"
 )
 
@@ -62,9 +64,9 @@ func (r recorder[In, Out]) Execute(_ context.Context, _ In) (Out, error) {
 //
 // buf.gen.yaml keeps that embedding on purpose, so a method left out of this
 // service compiles and answers Unimplemented rather than failing to build.
-// This calls all ten and refuses that answer — and, because each stand-in has
-// a name, it also refuses a forwarding method wired to the wrong controller,
-// which is the mistake a file of ten near-identical methods invites.
+// This calls all eleven and refuses that answer — and, because each stand-in
+// has a name, it also refuses a forwarding method wired to the wrong
+// controller, which is the mistake a file of near-identical methods invites.
 func TestEveryCallReachesItsController(t *testing.T) {
 	t.Parallel()
 
@@ -104,6 +106,10 @@ func TestEveryCallReachesItsController(t *testing.T) {
 		ListReplicaAuthorizations: listreplicaauthorizations.New(
 			recorder[listauthorizationsusecase.Input, listauthorizationsusecase.Output]{
 				name: "ListReplicaAuthorizations", calls: &calls,
+			}),
+		MigrateHomeServer: migratehomeserver.New(
+			recorder[migratehomeserverusecase.Input, migratehomeserverusecase.Output]{
+				name: "MigrateHomeServer", calls: &calls,
 			}),
 	})
 
@@ -168,6 +174,13 @@ func TestEveryCallReachesItsController(t *testing.T) {
 
 			return err
 		}},
+		// The one whose caller has no session, because a reader migrating here
+		// has no account here yet.
+		{"MigrateHomeServer", func() error {
+			_, err := service.MigrateHomeServer(t.Context(), &quirev1.MigrateHomeServerRequest{})
+
+			return err
+		}},
 	}
 
 	for _, test := range tests {
@@ -190,24 +203,6 @@ func TestEveryCallReachesItsController(t *testing.T) {
 		if len(calls) != 1 || calls[0] != test.name {
 			t.Errorf("%s reached %v, want its own controller", test.name, calls)
 		}
-	}
-}
-
-// TestMigrateHomeServerIsNotServedYet names the one method that is meant to
-// answer Unimplemented, so that it stays a decision rather than an omission.
-//
-// UC16 belongs to phase 9. It creates a reader, adopts their devices with the
-// identifiers those devices already hold (C11) and issues a session, none of
-// which this slice can do — and until it can, the honest reply is that the
-// method is not implemented here.
-func TestMigrateHomeServerIsNotServedYet(t *testing.T) {
-	t.Parallel()
-
-	service := federationservice.New(&federationservice.Controllers{})
-
-	_, err := service.MigrateHomeServer(t.Context(), &quirev1.MigrateHomeServerRequest{})
-	if status.Code(err) != codes.Unimplemented {
-		t.Errorf("MigrateHomeServer = %v, want Unimplemented until phase 9 serves it", err)
 	}
 }
 

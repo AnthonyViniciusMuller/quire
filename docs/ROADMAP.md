@@ -296,7 +296,16 @@ the thesis — corrections to the specification and deliberate divergences from 
       contract refused on a reader's own instruction (RN03), and a reader who never
       authorized the node and one who is not hosted here are given the same words, because a
       peer able to tell them apart could enumerate this node's readers
-- [ ] `feat: add home server migration use case`
+- [x] `feat: add home server migration use case` — the whole of C11, and the two slices
+      that had to stop needing each other first. The method is the federation service's and
+      the work is the identity slice's, so the controller is the identity container's and
+      `federationdi.Catalogue` is what breaks the knot: the identity slice takes the
+      catalogue, and the federation slice takes the controller that came out of it. The
+      devices are adopted with the identifiers they already hold, a migration carrying none
+      is refused rather than accepted into a history nobody could continue, and
+      `identity.users.migrated_from` records a claim this node cannot verify — provenance and
+      never identity. Which device the session is for is not derivable from the contract,
+      which is C20 in [`tcc-corrections.md`](tcc-corrections.md)
 - [ ] `test: add integration tests for sync reconciliation`
 
 ## Phase 10 — Client and end-to-end

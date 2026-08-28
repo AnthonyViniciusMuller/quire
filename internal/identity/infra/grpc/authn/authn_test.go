@@ -133,7 +133,7 @@ func TestUnaryDeniesByDefault(t *testing.T) {
 }
 
 // TestUnaryLetsThePublicMethodsThrough covers what the specification exempts:
-// UC07, UC08 and UC14 answer a caller who has no session.
+// UC07, UC08, UC14 and UC16 answer a caller who has no session.
 func TestUnaryLetsThePublicMethodsThrough(t *testing.T) {
 	t.Parallel()
 
@@ -178,6 +178,10 @@ func TestPublicMethodsAreTheOnesTheSpecificationExempts(t *testing.T) {
 		// UC08, both halves.
 		quirev1.AuthService_RequestPasswordRecovery_FullMethodName: true,
 		quirev1.AuthService_ResetPassword_FullMethodName:           true,
+		// UC16, the one that is not this slice's method. A reader migrating to
+		// this node has no account here yet, which is the same reason
+		// registering is public.
+		quirev1.FederationService_MigrateHomeServer_FullMethodName: true,
 	}
 
 	got := authn.PublicMethods()

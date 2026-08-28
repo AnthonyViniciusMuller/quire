@@ -15,8 +15,9 @@ import (
 const createUser = `-- name: CreateUser :exec
 
 INSERT INTO identity.users (
-    id, origin_server_id, local_name, display_name, email, password_hash, created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    id, origin_server_id, local_name, display_name, email, password_hash, migrated_from,
+    created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
 type CreateUserParams struct {
@@ -26,6 +27,7 @@ type CreateUserParams struct {
 	DisplayName    string
 	Email          *string
 	PasswordHash   *string
+	MigratedFrom   *string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
@@ -45,6 +47,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.DisplayName,
 		arg.Email,
 		arg.PasswordHash,
+		arg.MigratedFrom,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -64,7 +67,8 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) (int64, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, origin_server_id, local_name, display_name, email, password_hash, created_at, updated_at
+SELECT id, origin_server_id, local_name, display_name, email, password_hash,
+       created_at, updated_at, migrated_from
 FROM identity.users
 WHERE origin_server_id = $1
   AND lower(email) = lower($2::text)
@@ -91,12 +95,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, arg GetUserByEmailParams) 
 		&i.PasswordHash,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MigratedFrom,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, origin_server_id, local_name, display_name, email, password_hash, created_at, updated_at
+SELECT id, origin_server_id, local_name, display_name, email, password_hash,
+       created_at, updated_at, migrated_from
 FROM identity.users
 WHERE id = $1
 `
@@ -113,12 +119,14 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (IdentityUser, 
 		&i.PasswordHash,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MigratedFrom,
 	)
 	return i, err
 }
 
 const getUserByLocalName = `-- name: GetUserByLocalName :one
-SELECT id, origin_server_id, local_name, display_name, email, password_hash, created_at, updated_at
+SELECT id, origin_server_id, local_name, display_name, email, password_hash,
+       created_at, updated_at, migrated_from
 FROM identity.users
 WHERE origin_server_id = $1
   AND local_name = $2
@@ -141,6 +149,7 @@ func (q *Queries) GetUserByLocalName(ctx context.Context, arg GetUserByLocalName
 		&i.PasswordHash,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MigratedFrom,
 	)
 	return i, err
 }

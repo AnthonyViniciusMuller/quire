@@ -51,6 +51,18 @@ type Props struct {
 	// PasswordHash is the digest of the reader's password, never the password,
 	// and absent for the same reason Email is: a replica authenticates nobody.
 	PasswordHash string
+	// MigratedFrom is the identifier the reader arrived under, on a reader who
+	// arrived by migrating from another origin server (RF17, UC16), and empty
+	// on everybody else.
+	//
+	// It is provenance and never identity. C11 in docs/tcc-corrections.md is
+	// the argument: a node that needs nothing from the previous server — which
+	// is what makes UC16 independent of that server's availability — has
+	// nothing with which to check the claim. It can record it and it cannot
+	// verify it, so nothing here authenticates against it and the reader's
+	// identifier is the one this node gives them.
+	MigratedFrom Provenance
+
 	// CreatedAt is when the record was opened here. It is a wall clock and,
 	// unlike the timestamps on the replicable entities, it settles nothing.
 	CreatedAt time.Time

@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/server"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/migratehomeserver"
 	"github.com/anthonyvsmuller/quire/internal/identity/application/service"
 	changepasswordusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/changepassword"
 	deleteuserusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/deleteuser"
@@ -27,6 +28,7 @@ import (
 	listdevicesusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/listdevices"
 	loginusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/login"
 	logoutusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/logout"
+	migratehomeserverusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/migratehomeserver"
 	refreshusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/refresh"
 	registerusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/register"
 	registerdeviceusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/registerdevice"
@@ -75,6 +77,15 @@ type Container struct {
 	Interceptor *authn.Interceptor
 	// Service is the gRPC surface of the slice, ready to be registered.
 	Service *authservice.Service
+
+	// Migration serves FederationService.MigrateHomeServer (UC16, RF17).
+	//
+	// It is this slice's controller and the federation slice's method, because
+	// what UC16 changes is which node a reader belongs to and what it writes is
+	// an account, its devices and a session — and only this slice holds any of
+	// those. The node hands it over when it builds the federation container,
+	// which is why that one is built after this one.
+	Migration *migratehomeserver.MigrateHomeServer
 }
 
 // Initialize builds the slice over the node's configuration and connection
@@ -142,9 +153,13 @@ func Initialize(cfg *config.Config, pool *pgxpool.Pool, servers server.Repositor
 		RevokeDevice:   revokedevice.New(revokedeviceusecase.New(devices, credentials, transaction)),
 	}
 
+	migration := migratehomeserverusecase.New(
+		users, devices, credentials, hasher, auth, localServer, clock, transaction)
+
 	return &Container{
 		Auth:        auth,
 		Interceptor: authn.New(auth, clock, authn.PublicMethods()),
 		Service:     authservice.New(&controllers),
+		Migration:   migratehomeserver.New(migration),
 	}, nil
 }

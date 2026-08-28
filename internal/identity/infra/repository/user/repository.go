@@ -65,6 +65,7 @@ func (r *Repository) Create(ctx context.Context, record *user.User) error {
 		DisplayName:    record.DisplayName.String(),
 		Email:          optionalEmail(record.Email),
 		PasswordHash:   optionalString(record.PasswordHash),
+		MigratedFrom:   optionalString(record.MigratedFrom.String()),
 		CreatedAt:      record.CreatedAt,
 		UpdatedAt:      record.UpdatedAt,
 	})
@@ -213,6 +214,13 @@ func toDomain(row *identitydb.IdentityUser) *user.User {
 
 	if row.PasswordHash != nil {
 		props.PasswordHash = *row.PasswordHash
+	}
+
+	// Null on almost every reader: registering is how an account normally
+	// begins, and only a reader who arrived by migrating carries a claim about
+	// where they came from (C11).
+	if row.MigratedFrom != nil {
+		props.MigratedFrom = user.Provenance(*row.MigratedFrom)
 	}
 
 	return user.Restore(row.ID, &props)

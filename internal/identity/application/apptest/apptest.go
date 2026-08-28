@@ -431,10 +431,23 @@ func NewDeviceRepository() *DeviceRepository {
 	return &DeviceRepository{records: map[uuid.UUID]*device.Device{}}
 }
 
-// Create binds the device.
+// Create binds the device, refusing an identifier this repository already
+// holds.
+//
+// The primary key is what enforces that in production, and it matters here
+// because one call chooses the identifier rather than minting it: UC16 adopts
+// the devices a reader is bringing with the identifiers they already hold
+// (C11), and two devices under one identifier would make two histories
+// indistinguishable.
 func (r *DeviceRepository) Create(_ context.Context, appliance *device.Device) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if _, held := r.records[appliance.ID]; held {
+		return errs.New(errs.KindAlreadyExists, "that device identifier is already bound").
+			WithOp("apptest/device: create").
+			WithCode(device.CodeNotFound)
+	}
 
 	r.records[appliance.ID] = cloneDevice(appliance)
 

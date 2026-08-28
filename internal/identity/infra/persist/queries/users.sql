@@ -8,8 +8,9 @@
 
 -- name: CreateUser :exec
 INSERT INTO identity.users (
-    id, origin_server_id, local_name, display_name, email, password_hash, created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+    id, origin_server_id, local_name, display_name, email, password_hash, migrated_from,
+    created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
 
 -- Only the four columns UC06 makes writable. The local name and the origin
 -- server are the identity itself: changing the first is registering somebody
@@ -30,12 +31,14 @@ WHERE id = $1;
 DELETE FROM identity.users WHERE id = $1;
 
 -- name: GetUserByID :one
-SELECT id, origin_server_id, local_name, display_name, email, password_hash, created_at, updated_at
+SELECT id, origin_server_id, local_name, display_name, email, password_hash,
+       created_at, updated_at, migrated_from
 FROM identity.users
 WHERE id = $1;
 
 -- name: GetUserByLocalName :one
-SELECT id, origin_server_id, local_name, display_name, email, password_hash, created_at, updated_at
+SELECT id, origin_server_id, local_name, display_name, email, password_hash,
+       created_at, updated_at, migrated_from
 FROM identity.users
 WHERE origin_server_id = $1
   AND local_name = $2;
@@ -45,7 +48,8 @@ WHERE origin_server_id = $1
 -- row that a second registration is about to collide with, and would report the
 -- address free right up to the insert that fails.
 -- name: GetUserByEmail :one
-SELECT id, origin_server_id, local_name, display_name, email, password_hash, created_at, updated_at
+SELECT id, origin_server_id, local_name, display_name, email, password_hash,
+       created_at, updated_at, migrated_from
 FROM identity.users
 WHERE origin_server_id = $1
   AND lower(email) = lower(sqlc.arg(email)::text);

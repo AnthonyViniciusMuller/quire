@@ -81,6 +81,7 @@ the node authenticates a user or merely replicates them.
 | `senha_hash` | `password_hash` | **nullable** — C03 |
 | `criado_em` | `created_at` | |
 | `atualizado_em` | `updated_at` | |
+| — | `migrated_from` | **added** — where a reader arrived from when they arrived by migrating (RF17, UC16). The MER has no attribute for it, and C11 says why one is needed and why it can only be a record: a node that needs nothing from the previous server cannot verify the claim |
 
 RN09 is two unique indexes: `(origin_server_id, local_name)` for the federated identifier, and
 `(origin_server_id, lower(email))` for the address, which is unique only within the origin

@@ -682,6 +682,29 @@ at any hop.
 **Status** open. Implemented in `internal/sync/infra/service/records`. Add a paragraph to the
 description of `operacao_sync` in 4.2.4.
 
+### C20 — UC16 returns a session and does not say which device it is for
+
+**Where** RF17 and UC16, and `MigrateHomeServerRequest`/`MigrateHomeServerResponse`.
+
+**What the TCC implies** The migration carries the reader's devices and hands back a session
+so that the reader can begin pushing immediately.
+
+**Why that is not enough** A session belongs to exactly one device — the refresh credential
+is revoked with it, and RN10 checks every operation against it — so a reply carrying one
+session and a list of devices has to say which of them it is for. Nothing in the call does.
+The list has an order, and the order is the only thing a client controls, so a client and a
+server that disagree about whether it means anything will disagree about which device just
+got a session; the device that thought it had one will push under an identifier its token
+does not name, and RN10 will refuse every operation it sends.
+
+**Correction** State the rule in the description of UC16: the first device in the list is the
+one making the call, and the session comes back for it. The alternative is a field naming the
+calling device, which is one more thing a caller can get wrong and buys nothing the order
+does not — but either way it has to be written down, because it is not derivable.
+
+**Status** open. Implemented as the first device in the list. Add the sentence to 4.2.2, and
+to the comment on the `devices` field of the request.
+
 ## Divergences
 
 Deliberate departures from a specification that is internally consistent. Subsection 4.2.4

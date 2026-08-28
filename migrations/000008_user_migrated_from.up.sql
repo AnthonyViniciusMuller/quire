@@ -1,0 +1,22 @@
+-- Where a reader arrived from, when they arrived by migrating (RF17, UC16).
+--
+-- C11 in docs/tcc-corrections.md is why the column exists and why it is only a
+-- record. A node that needs nothing from the previous server — which is the
+-- whole point of UC16, and what makes the migration independent of that
+-- server's availability — has nothing with which to check that the caller was
+-- @anthony:old.example. It can record the claim; it cannot verify it.
+--
+-- So this is provenance and never identity. Nothing joins on it, nothing
+-- authenticates against it, and the reader's identifier is the one this node
+-- gives them: the domain half is this node, so the identifier changes whatever
+-- the local name turns out to be. What the column is for is the operator and
+-- the reader — a row that says where a library came from, when somebody asks.
+--
+-- It is nullable because almost every reader has none: registering (UC14) is
+-- how an account normally begins, and a default would make every one of them
+-- claim to have arrived from somewhere.
+--
+-- The width is the federated identifier's: a local name of at most 64 and a
+-- domain of at most 255, with the at sign and the colon between them.
+ALTER TABLE identity.users
+    ADD COLUMN migrated_from varchar(322);

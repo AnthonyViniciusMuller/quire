@@ -127,8 +127,8 @@ func New(auth service.AuthService, clock service.Clock, public []string) *Interc
 
 // PublicMethods are the calls of the contract that answer a caller who has no
 // session, which is the whole of what the specification exempts: UC07 (logging
-// in and out), UC08 (recovering a password) and UC14 (binding to an origin
-// server).
+// in and out), UC08 (recovering a password), UC14 (binding to an origin
+// server) and UC16 (arriving from another one).
 //
 // Refreshing is here for a reason of its own. It authenticates itself with the
 // credential it presents, and requiring an access token as well would make the
@@ -142,6 +142,12 @@ func PublicMethods() []string {
 		quirev1.AuthService_RefreshSession_FullMethodName,
 		quirev1.AuthService_RequestPasswordRecovery_FullMethodName,
 		quirev1.AuthService_ResetPassword_FullMethodName,
+		// The one that is not this slice's. A reader migrating to this node
+		// has no account here yet, so there is no session for them to present
+		// — which is the same reason registering is public, and is why the
+		// method the federation service exposes is named in the identity
+		// slice's list rather than in one of its own.
+		quirev1.FederationService_MigrateHomeServer_FullMethodName,
 	}
 }
 

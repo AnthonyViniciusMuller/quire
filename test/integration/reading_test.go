@@ -63,9 +63,7 @@ func serveReading(t *testing.T) reading {
 
 	cfg := nodeConfig(t)
 
-	federationContainer := federationdi.Initialize(cfg, pool)
-
-	identityContainer, err := identitydi.Initialize(cfg, pool, federationContainer.Servers)
+	identityContainer, err := identitydi.Initialize(cfg, pool, federationdi.Catalogue(pool))
 	if err != nil {
 		t.Fatalf("building the identity slice: %v", err)
 	}
