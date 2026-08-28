@@ -5,6 +5,8 @@ GO              ?= go
 BIN             := $(CURDIR)/bin
 COMPOSE         ?= docker compose
 COMPOSE_FILE    := deploy/docker/compose.yaml
+DEV_CERTS       := $(CURDIR)/deploy/docker/certs
+DEV_DOMAINS     := quire-a.example quire-b.example
 KIND_CLUSTER    ?= quire
 DATABASE_URL    ?= postgres://quire:quire@localhost:5432/quire?sslmode=disable
 MIGRATIONS      := $(CURDIR)/migrations
@@ -211,15 +213,27 @@ migrate-create: $(MIGRATE)
 
 # --- local environment -------------------------------------------------------
 
+## dev-certs: generate the development certificates and signing keys of the local federation
+.PHONY: dev-certs
+dev-certs:
+	./scripts/dev-certs.sh $(DEV_CERTS) $(DEV_DOMAINS)
+
 ## dev-up: start the two federated nodes with docker compose
+#
+# The signing keys are handed to compose through the environment rather than
+# written into the file, because a key in the file is a key in the repository.
+# The certificates travel the other way, as a mounted directory, because the
+# pin a peer checks is computed from the file the node presents.
 .PHONY: dev-up
-dev-up:
+dev-up: dev-certs
+	QUIRE_A_SIGNING_KEY="$$(cat $(DEV_CERTS)/quire-a.example.signing.pem)" \
+	QUIRE_B_SIGNING_KEY="$$(cat $(DEV_CERTS)/quire-b.example.signing.pem)" \
 	$(COMPOSE) -f $(COMPOSE_FILE) up -d --build
 
 ## dev-down: stop the local federation and drop its volumes
 .PHONY: dev-down
 dev-down:
-	$(COMPOSE) -f $(COMPOSE_FILE) down -v
+	$(COMPOSE) -f $(COMPOSE_FILE) down -v --remove-orphans
 
 ## dev-logs: follow the logs of the local federation
 .PHONY: dev-logs

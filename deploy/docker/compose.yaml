@@ -1,0 +1,221 @@
+# A federation of two nodes, on one machine.
+#
+# It is what the end-to-end suites run against and what the system is
+# demonstrated on: two nodes that do not know each other until a reader tells
+# one about the other, each with its own PostgreSQL and its own object store,
+# so that nothing they agree about is something they happen to share.
+#
+# The domains are network aliases rather than names in anybody's DNS. A node is
+# discovered by fetching a document from a path of its domain (RFC 8615), so
+# `quire-a.example` has to resolve for `quire-b` to find it — and inside this
+# network it does, to the container. That is also why the discovery listener
+# answers on port 80: a domain carries no port, and a node that published its
+# documents anywhere else would be a node no peer can find by its domain alone.
+#
+# Nothing here is a certificate authority. The two nodes authenticate each
+# other by the public key each published in its own discovery document (C12),
+# which is what two operators who share no authority can actually check, so the
+# certificates `make dev-certs` generates are self-signed and that is the whole
+# design rather than a shortcut.
+
+name: quire
+
+x-database: &database
+  image: postgres:17-alpine
+  environment:
+    POSTGRES_USER: quire
+    POSTGRES_PASSWORD: quire
+    POSTGRES_DB: quire
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U quire -d quire"]
+    interval: 2s
+    timeout: 3s
+    retries: 15
+  networks: [quire]
+
+x-storage: &storage
+  image: quay.io/minio/minio:latest
+  command: ["server", "/data"]
+  environment:
+    MINIO_ROOT_USER: quire
+    MINIO_ROOT_PASSWORD: quire-secret
+  healthcheck:
+    test: ["CMD", "mc", "ready", "local"]
+    interval: 2s
+    timeout: 3s
+    retries: 15
+  networks: [quire]
+
+# The schema is applied by a job rather than by the node, because a node that
+# migrated on startup would have two of them racing for one database the first
+# time a deployment ran two replicas.
+x-migrate: &migrate
+  image: migrate/migrate:v4.19.1
+  volumes:
+    # The `z` is what makes the mount readable on an SELinux host, where a
+    # directory carrying the label of somebody's home is a directory no
+    # container may open. It is accepted and ignored everywhere else.
+    - ../../migrations:/migrations:ro,z
+  networks: [quire]
+
+x-node: &node
+  build:
+    context: ../..
+    dockerfile: deploy/docker/Dockerfile
+  volumes:
+    - ./certs:/etc/quire/tls:ro,z
+  networks: [quire]
+
+# What both nodes are configured with, and what differs is below: the domain,
+# the databases, the keys.
+x-node-environment: &node-environment
+  QUIRE_ENV: development
+  QUIRE_GRPC_ADDRESS: ":9090"
+  QUIRE_HTTP_ADDRESS: ":80"
+  QUIRE_STORAGE_BUCKET: quire-contents
+  QUIRE_STORAGE_MINIO_ACCESS_KEY_ID: quire
+  QUIRE_STORAGE_MINIO_SECRET_ACCESS_KEY: quire-secret
+  # The .well-known documents are served over plain HTTP here, because RFC 8615
+  # puts them on HTTP and there is no gateway in front of these two to make it
+  # HTTPS. The discovery client refuses that without this switch, and the
+  # configuration refuses this switch outside development — which is the point:
+  # a lookup over plain HTTP carries the pin in the clear, and an attacker who
+  # can answer for the domain can publish any pin they like.
+  QUIRE_FEDERATION_ALLOW_INSECURE_DISCOVERY: "true"
+  # Five seconds instead of thirty. A demonstration should not have to wait
+  # half a minute for a change to reach the other node, and what the interval
+  # bounds is how long a peer that was unreachable waits before being offered
+  # the log again.
+  QUIRE_FEDERATION_REPLICATION_INTERVAL: 5s
+  QUIRE_LOG_FORMAT: text
+
+services:
+  db-a:
+    <<: *database
+    container_name: quire-db-a
+
+  storage-a:
+    <<: *storage
+    container_name: quire-storage-a
+
+  # The node does not create its bucket: a node that created one would have the
+  # right to, which is more than a node needs in order to store a file in it.
+  bucket-a:
+    image: quay.io/minio/mc:latest
+    container_name: quire-bucket-a
+    depends_on:
+      storage-a:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - mc alias set node http://storage-a:9000 quire quire-secret && mc mb --ignore-existing node/quire-contents
+    networks: [quire]
+
+  migrate-a:
+    <<: *migrate
+    container_name: quire-migrate-a
+    depends_on:
+      db-a:
+        condition: service_healthy
+    command:
+      - -path=/migrations
+      - -database=postgres://quire:quire@db-a:5432/quire?sslmode=disable
+      - up
+
+  node-a:
+    <<: *node
+    container_name: quire-node-a
+    depends_on:
+      migrate-a:
+        condition: service_completed_successfully
+      bucket-a:
+        condition: service_completed_successfully
+    environment:
+      <<: *node-environment
+      QUIRE_SERVER_NAME: quire-a.example
+      QUIRE_SERVER_BASE_URL: http://quire-a.example
+      QUIRE_GRPC_ADVERTISED_ADDRESS: quire-a.example:9090
+      QUIRE_DATABASE_URL: postgres://quire:quire@db-a:5432/quire?sslmode=disable
+      QUIRE_STORAGE_MINIO_ENDPOINT: storage-a:9000
+      QUIRE_AUTH_KEY_ID: quire-a-development
+      # Interpolated from the environment `make dev-up` exports out of
+      # deploy/docker/certs, so that the key this node signs with is generated
+      # on the machine that runs it and is in nobody's repository. It is not a
+      # required variable, because compose interpolates the file for every
+      # command it is given and a stack nobody can stop without holding the
+      # signing keys would be a poor trade; a node started without one says so
+      # and stops, naming the variable.
+      QUIRE_AUTH_PRIVATE_KEY_PEM: ${QUIRE_A_SIGNING_KEY:-}
+      QUIRE_FEDERATION_TLS_CERT_FILE: /etc/quire/tls/quire-a.example.crt.pem
+      QUIRE_FEDERATION_TLS_KEY_FILE: /etc/quire/tls/quire-a.example.key.pem
+    networks:
+      quire:
+        aliases: [quire-a.example]
+    ports:
+      # The host reaches the nodes on ports nothing else is likely to hold, and
+      # never on the ones they answer on inside the network: quirectl and the
+      # end-to-end suites run outside it.
+      - "127.0.0.1:19090:9090"
+      - "127.0.0.1:18080:80"
+
+  db-b:
+    <<: *database
+    container_name: quire-db-b
+
+  storage-b:
+    <<: *storage
+    container_name: quire-storage-b
+
+  bucket-b:
+    image: quay.io/minio/mc:latest
+    container_name: quire-bucket-b
+    depends_on:
+      storage-b:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - mc alias set node http://storage-b:9000 quire quire-secret && mc mb --ignore-existing node/quire-contents
+    networks: [quire]
+
+  migrate-b:
+    <<: *migrate
+    container_name: quire-migrate-b
+    depends_on:
+      db-b:
+        condition: service_healthy
+    command:
+      - -path=/migrations
+      - -database=postgres://quire:quire@db-b:5432/quire?sslmode=disable
+      - up
+
+  node-b:
+    <<: *node
+    container_name: quire-node-b
+    depends_on:
+      migrate-b:
+        condition: service_completed_successfully
+      bucket-b:
+        condition: service_completed_successfully
+    environment:
+      <<: *node-environment
+      QUIRE_SERVER_NAME: quire-b.example
+      QUIRE_SERVER_BASE_URL: http://quire-b.example
+      QUIRE_GRPC_ADVERTISED_ADDRESS: quire-b.example:9090
+      QUIRE_DATABASE_URL: postgres://quire:quire@db-b:5432/quire?sslmode=disable
+      QUIRE_STORAGE_MINIO_ENDPOINT: storage-b:9000
+      QUIRE_AUTH_KEY_ID: quire-b-development
+      QUIRE_AUTH_PRIVATE_KEY_PEM: ${QUIRE_B_SIGNING_KEY:-}
+      QUIRE_FEDERATION_TLS_CERT_FILE: /etc/quire/tls/quire-b.example.crt.pem
+      QUIRE_FEDERATION_TLS_KEY_FILE: /etc/quire/tls/quire-b.example.key.pem
+    networks:
+      quire:
+        aliases: [quire-b.example]
+    ports:
+      - "127.0.0.1:29090:9090"
+      - "127.0.0.1:28080:80"
+
+networks:
+  quire:
+    name: quire

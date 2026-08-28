@@ -64,6 +64,17 @@ make test-integration  # integration tests against them
 make test-e2e          # end-to-end against the two nodes
 ```
 
+`make dev-up` brings up two nodes that know nothing about each other until a reader says
+so. Inside the compose network they are `quire-a.example` and `quire-b.example`, which is
+what they discover each other by; from the host they answer on `127.0.0.1:19090` and
+`127.0.0.1:29090` for gRPC and on `127.0.0.1:18080` and `127.0.0.1:28080` for the discovery
+documents. They present the self-signed certificates `make dev-certs` generates, so a client
+outside the network names one:
+
+```bash
+quirectl --server 127.0.0.1:19090 --ca deploy/docker/certs/quire-a.example.crt.pem whoami
+```
+
 Full target list in the [`Makefile`](Makefile); deployment instructions in
 [`docs/deployment.md`](docs/deployment.md).
 
