@@ -508,6 +508,15 @@ the thesis — corrections to the specification and deliberate divergences from 
       password to bring up a test cluster is a script nobody should run. `istioctl validate`
       is what caught the two port names the mesh would have refused, `smtp` and `postgres`,
       and the four workloads whose telemetry would have arrived unattributed
+- [x] `fix: match the federation route on sni and the documents on nothing` — not in the
+      original plan, and found while writing the job above: an HTTP route matches the
+      authority and an authority carries a port, so a caller reaching a gateway on 18443
+      rather than 443 sends `quire-a.example:18443` and a route naming the domain alone
+      answers 404 to it. That is how the end-to-end suite reaches any local cluster. The
+      documents match no host at all, which the gateway per node makes correct rather than
+      expedient — a request arriving at it is for that node whatever the caller called it,
+      and the assertion about the domain a caller can act on is the certificate. The
+      federation route keeps the domain, because SNI is a name and carries no port
 - [x] `ci: add end to end job on kind cluster` — the manifests run rather than rendered, which
       is the one job that can answer whether a node starts under `QUIRE_ENV=production` and
       whether two of them find each other through a mesh that terminates one port and passes
