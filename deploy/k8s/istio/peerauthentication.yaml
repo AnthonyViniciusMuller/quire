@@ -1,0 +1,31 @@
+# Inside the mesh, nothing talks in the clear.
+#
+# STRICT for the namespace, with one port excepted, and the exception is the
+# interesting half. 9090 carries the federation gRPC, which arrives from the
+# gateway as the peer's own TLS connection, passed through untouched — the
+# sidecar cannot wrap it in mesh mTLS because it is already mutually
+# authenticated, by two nodes that share no cluster and no mesh identity.
+#
+# What authenticates that port is the node itself: it presents the certificate
+# whose public key it published, reads the caller's, and compares the digest
+# against what the catalogue learned from the caller's own discovery document
+# (C12, and internal/sync/infra/grpc/peerauthn). That is a stronger statement
+# than the mesh could make, not a weaker one — a mesh identity says which
+# workload in this cluster is calling, and the question here is which node in
+# the federation is.
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: quire
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: quire
+      app.kubernetes.io/component: node
+  mtls:
+    mode: STRICT
+  portLevelMtls:
+    # Quoted, because a bare 9090 is an integer key and kustomize will not
+    # render a map with one.
+    "9090":
+      mode: DISABLE

@@ -1,0 +1,16 @@
+# The mesh half of a node, as a component two overlays include.
+#
+# It is a component and not a base because it is not a deployment on its own:
+# it decorates one. Both overlays add it, and each patches the three things that
+# identify a node to the mesh — the domain the routes match on, the certificate
+# the document server presents, and the namespace in the principal its own
+# gateway is named by.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - ingressgateway.yaml
+  - gateway.yaml
+  - virtualservice.yaml
+  - peerauthentication.yaml
+  - authorizationpolicy.yaml

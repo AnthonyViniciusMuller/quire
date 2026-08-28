@@ -459,10 +459,22 @@ the thesis — corrections to the specification and deliberate divergences from 
       image rather than a generated `ConfigMap`: kustomize will only generate one from files
       under its own root, which `migrations/` is not and should not be moved under, and an
       image versions the schema with the binary that expects it — one tag names both
-- [ ] `build: add istio gateway and authentication policies` — the three paths of the HTTP
+- [x] `build: add istio gateway and authentication policies` — the three paths of the HTTP
       listener need different policies: `/.well-known` has to stay reachable by strangers,
       since being readable without a prior relationship is its entire function, while
-      `/metrics` and `/readyz` stay inside the mesh
+      `/metrics` and `/readyz` stay inside the mesh. Writing them found C23 in
+      [`tcc-corrections.md`](tcc-corrections.md), which is larger than the policies: the
+      gateway of 4.3 cannot terminate the federation connection at all. It is mutually
+      authenticated and pinned at both ends — the node presents the key it published (C12)
+      and reads the caller's — and a gateway that terminates it presents its own certificate
+      and consumes the caller's. So there are two ports: 443 is terminated and routes the
+      documents by path, 9443 is `PASSTHROUGH` matched by SNI, and the mesh's own mTLS is
+      disabled on 9090 because what arrives there is already mutually authenticated by two
+      parties the mesh has no identity for. Each node also gets a gateway of its own rather
+      than sharing the mesh's: two nodes belong to two operators who share no authority, which
+      is the premise C12 is built on, so a shared ingress models something else — and a node
+      that does not own the thing answering for its domain cannot own the certificate it
+      presents either
 - [ ] `build: add cert manager issuer and certificate` — the `Certificate` must keep its
       private key across renewals (`privateKey.rotationPolicy` left at `Never`): the pin
       published by discovery is over the public key, per C12 in

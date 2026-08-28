@@ -1,0 +1,52 @@
+# The two routes, and they are two because the two ports are.
+#
+# The hosts are patched per node by the overlay: one ingress gateway serves
+# every node in the cluster, so the domain is what tells two of them apart.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: quire-discovery
+spec:
+  hosts:
+    - quire.example
+  gateways:
+    - quire
+  http:
+    # Only .well-known is routed. Everything else on this port reaches no
+    # destination and the gateway answers 404, which is deliberate: the API is
+    # gRPC and lives on the port below, and a node that also answered its own
+    # HTTP surface to strangers would be publishing /metrics and /readyz to
+    # them.
+    - name: discovery-documents
+      match:
+        - uri:
+            prefix: /.well-known/
+      route:
+        - destination:
+            host: quire
+            port:
+              number: 8080
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: quire-federation
+spec:
+  hosts:
+    - quire.example
+  gateways:
+    - quire
+  # A tls route and not an http one: the gateway is passing the connection
+  # through, so all it may read is the name the caller asked for. That is
+  # enough to tell two nodes apart and is deliberately not enough to tell
+  # anything else — the bytes past the handshake belong to the node.
+  tls:
+    - match:
+        - port: 9443
+          sniHosts:
+            - quire.example
+      route:
+        - destination:
+            host: quire
+            port:
+              number: 9090

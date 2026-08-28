@@ -821,6 +821,50 @@ and nothing else. Everything past that point in the suite is the real mechanism 
 filled from the log, the mTLS handshake, the pin checked at both ends, the ingest and the
 reconciliation — and it works.
 
+### C23 — the gateway of 4.3 cannot terminate the federation connection
+
+**Where** Subsection 4.3 and Figura 19, read together with RNF08 and C12.
+
+**What the TCC says** The deployment puts a gateway and a service mesh in front of the node.
+The gateway is where TLS is terminated, which is what a gateway is for, and the mesh secures
+everything behind it.
+
+**Why it does not hold** The federation connection is mutually authenticated and pinned at
+both ends, and a gateway that terminates it destroys both halves.
+
+The node presents the certificate whose public key it published in its own discovery document,
+and the peer compares the digest against that published value (C12) — a gateway terminating
+the connection presents the gateway's certificate, and the pin does not match. The node also
+reads the *caller's* certificate and pins it the same way, which is the only thing that tells
+`ReplicateOperations` which node is speaking (RNF08, and
+`internal/sync/infra/grpc/peerauthn`) — a gateway terminating the connection has consumed it,
+and the node sees a caller with no certificate at all, which is what every device looks like.
+
+Neither is recoverable by forwarding a header. A header is a claim made by whatever added it;
+a certificate is a proof the far end made. The whole reason the federation authenticates on
+certificates rather than on tokens is that the two operators share no authority to appeal to,
+and a claim added inside one operator's cluster is worth nothing to the other.
+
+There is a second, quieter consequence. The `.well-known` documents *are* an HTTP surface,
+routed by path, so that port must be terminated — and the certificate a peer verifies it with
+is checked against the ordinary trust store, since the pin covers the gRPC identity and not the
+document that publishes it. A federation of real nodes therefore needs a publicly trusted
+certificate on the document port, and a federation on one machine needs the peers to be told
+about the authority that signed it.
+
+**Correction** State in 4.3 that the node is reached on two ports, and that they are terminated
+differently: the document port at the gateway, and the federation port not at all. The mesh's
+own mutual TLS has to be disabled on the federation port for the same reason — the connection
+arriving there is already mutually authenticated, by two parties the mesh has no identity for.
+
+**Status** settled 2026-08-28, implemented in phase 11. `deploy/k8s/istio` is the shape:
+port 80 redirects, port 443 is terminated and routes `/.well-known/*` to the node, and port
+9443 is `PASSTHROUGH` to the node's gRPC listener, matched by SNI and nothing else. The
+`PeerAuthentication` is `STRICT` with `portLevelMtls` disabling the mesh's own mTLS on 9090,
+which is the port-level statement of the same finding. `QUIRE_GRPC_ADVERTISED_ADDRESS` is what
+makes the second port workable at all: the node publishes the authority peers dial rather than
+assuming one, which is D06 and was written for a different reason.
+
 ## Divergences
 
 Deliberate departures from a specification that is internally consistent. Subsection 4.2.4

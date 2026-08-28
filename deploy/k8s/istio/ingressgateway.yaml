@@ -1,0 +1,85 @@
+# The node's own ingress gateway.
+#
+# One gateway per node rather than one shared by the cluster, and the reason is
+# not convenience. Two nodes in a federation belong to two operators who share
+# no authority — that is the premise C12 is built on — so a topology where they
+# share an ingress is a topology that does not model what is being built. Each
+# node owns the thing that answers for its domain, holds the certificate that
+# identifies it, and is named by its own authorization policy.
+#
+# It is the injected-gateway form rather than a second `istioctl install`: an
+# ordinary Deployment and Service with the injection label, so that it lands in
+# the node's namespace, gets the namespace's own configuration, and is deployed
+# and deleted with the node it belongs to. What it costs is that the pod is an
+# Envoy this repository declares rather than one the mesh installs, which is
+# forty lines and no operator.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quire-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: quire
+      app.kubernetes.io/component: gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: quire
+        app.kubernetes.io/component: gateway
+        # What the Gateway resource selects on, and what tells the mesh this
+        # pod is a gateway rather than a workload with a sidecar.
+        istio: quire-gateway
+        sidecar.istio.io/inject: "true"
+      annotations:
+        inject.istio.io/templates: gateway
+    spec:
+      serviceAccountName: quire-gateway
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        # The name is what the injection template replaces with the proxy. An
+        # image is required by the API and is never the one that runs.
+        - name: istio-proxy
+          image: auto
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: quire-gateway
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quire-gateway
+spec:
+  selector:
+    app.kubernetes.io/name: quire
+    app.kubernetes.io/component: gateway
+  ports:
+    # 80 redirects, 443 serves the discovery documents, and 9443 passes the
+    # federation connection through untouched. What is not here is 9090: the
+    # node's own Service carries that, inside the mesh, for callers that are
+    # already in it.
+    - name: http
+      port: 80
+      targetPort: 8080
+    - name: https
+      port: 443
+      targetPort: 8443
+    - name: tls-federation
+      port: 9443
+      targetPort: 9443

@@ -1,0 +1,73 @@
+# What the federation reaches this node through.
+#
+# Three ports, and the third one is the whole of why this file is not the
+# obvious two.
+#
+#   80 redirects. RFC 8615 fetches over HTTP by default and the discovery
+#   client refuses that outside development, so the redirect is what makes a
+#   peer that followed the standard end up on a connection this node will talk
+#   over.
+#
+#   443 is terminated here, because what it serves is the .well-known documents
+#   and those are an HTTP surface: routing by path is the point, and routing by
+#   path means reading the request. The certificate it presents is this node's
+#   document certificate, which is not the one the node itself presents: this
+#   one may rotate whenever cert-manager likes, and the node's may never rotate
+#   its key.
+#
+#   9443 is passed through untouched, because what it carries is the federation
+#   gRPC and terminating it would destroy both halves of the handshake. The node
+#   presents the certificate whose public key it published, and a peer pins that
+#   key (C12); a gateway terminating the connection would present its own. The
+#   node also reads the *caller's* certificate and pins it the same way, which
+#   is how ReplicateOperations knows which node is speaking; a gateway
+#   terminating the connection would have consumed it. Neither end is
+#   recoverable by forwarding a header, because a header is a claim and a
+#   certificate is a proof.
+#
+# The port is not 443 because 443 is already terminated above, and a single
+# port cannot be both. That is what QUIRE_GRPC_ADVERTISED_ADDRESS is for: the
+# node publishes the authority peers dial, and D06 in docs/tcc-corrections.md
+# is why the discovery document carries it explicitly rather than assuming one.
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: quire
+spec:
+  selector:
+    istio: quire-gateway
+  servers:
+    - name: http-redirect
+      port:
+        # The number the gateway listens on, which is not the number the Service
+        # publishes: the pod is unprivileged, so 80 and 443 arrive on 8080 and
+        # 8443. 9443 is high enough to be bound as it is.
+        number: 8080
+        name: http
+        protocol: HTTP
+      hosts: ["*"]
+      tls:
+        httpsRedirect: true
+
+    - name: discovery
+      port:
+        number: 8443
+        name: https
+        protocol: HTTPS
+      hosts: ["*"]
+      tls:
+        mode: SIMPLE
+        # cert-manager writes it into this namespace, which is what one
+        # gateway per node buys: a shared ingress reads its credentials out of
+        # the mesh's own namespace, and a node could not own the certificate
+        # that answers for its domain.
+        credentialName: quire-gateway-tls
+
+    - name: federation
+      port:
+        number: 9443
+        name: tls-federation
+        protocol: TLS
+      hosts: ["*"]
+      tls:
+        mode: PASSTHROUGH

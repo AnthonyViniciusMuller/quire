@@ -1,0 +1,70 @@
+# The three paths of the HTTP listener, which need three different answers.
+#
+# The policy is an ALLOW one, so anything it does not name is refused. That is
+# the right default here: the surface is small and known, and a listener that
+# grew a fourth path would rather be unreachable than public.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: quire
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: quire
+      app.kubernetes.io/component: node
+  action: ALLOW
+  rules:
+    # /.well-known has to stay reachable by strangers. Being readable without a
+    # prior relationship is its entire function: a peer that has never heard of
+    # this node fetches the document in order to learn where to call and what
+    # key to pin, and a document that required a credential would be one nobody
+    # could reach before they had one.
+    #
+    # It is reachable through the gateway and only through the gateway, which is
+    # what names a principal here rather than leaving the source open: the
+    # documents are public, the route to them is not.
+    - from:
+        - source:
+            # This node's own gateway, and no other. The overlay's namespace
+            # is substituted into the principal, so the origin's documents are
+            # served through the origin's gateway and the replica's through the
+            # replica's — which is what one gateway per node buys beyond
+            # holding its own certificate.
+            principals:
+              - cluster.local/ns/NAMESPACE/sa/quire-gateway
+      to:
+        - operation:
+            methods: [GET]
+            paths: ["/.well-known/*"]
+
+    # /metrics stays inside the mesh. It names every method the node serves,
+    # how often each was called and how long it took, which is a description of
+    # who uses this node and when — and the gateway has no route to it, so this
+    # rule is the second lock and not the only one.
+    #
+    # A principal of "*" means any caller the mesh authenticated, which under
+    # the STRICT policy beside this one means any workload in the mesh. The
+    # scrape comes from one.
+    - from:
+        - source:
+            principals: ["*"]
+      to:
+        - operation:
+            methods: [GET]
+            paths: ["/metrics"]
+
+    # /healthz and /readyz are answered to nobody through this policy, and they
+    # are still answered: Istio rewrites a pod's HTTP probes so the kubelet
+    # reaches the agent and the agent reaches the container locally, which never
+    # crosses the point this policy is enforced at. The rule is absent because
+    # it would be a rule that does nothing, and the readiness of a node is not
+    # something a stranger should be able to poll.
+
+    # The federation port authenticates itself, node to node, with the pin of
+    # C12. The mesh sees a TLS connection it did not terminate, so there is no
+    # method and no path to match on and no identity it could check — an ALLOW
+    # rule naming the port is the honest statement of that, and the refusals
+    # that matter happen in internal/sync/infra/grpc/peerauthn.
+    - to:
+        - operation:
+            ports: ["9090"]
