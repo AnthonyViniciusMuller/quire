@@ -52,20 +52,14 @@ patches:
       - op: replace
         path: /spec/dnsNames/0
         value: quire-b.example
-  - target:
-      kind: VirtualService
-      name: quire-discovery
-    patch: |-
-      - op: replace
-        path: /spec/hosts/0
-        value: quire-b.example
+  # Only the SNI, and only on the federation route. The two routes match any
+  # authority, because a gateway belongs to one node and an authority carries a
+  # port; SNI is a name, carries none, and is what a caller verifies the
+  # certificate against.
   - target:
       kind: VirtualService
       name: quire-federation
     patch: |-
-      - op: replace
-        path: /spec/hosts/0
-        value: quire-b.example
       - op: replace
         path: /spec/tls/0/match/0/sniHosts/0
         value: quire-b.example

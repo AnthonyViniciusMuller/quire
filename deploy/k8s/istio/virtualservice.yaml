@@ -1,14 +1,21 @@
 # The two routes, and they are two because the two ports are.
-#
-# The hosts are patched per node by the overlay: one ingress gateway serves
-# every node in the cluster, so the domain is what tells two of them apart.
 apiVersion: networking.istio.io/v1
 kind: VirtualService
 metadata:
   name: quire-discovery
 spec:
+  # Any authority, and that is not laziness. This gateway belongs to one node,
+  # so a request arriving at it is for that node whatever it called it — and the
+  # certificate the gateway presents is the only assertion about the domain that
+  # a caller can act on, which it checks before this route is consulted.
+  #
+  # Matching the domain here would also be matching the port, since an authority
+  # carries one: a caller reaching this gateway on a published port other than
+  # 443 sends quire-a.example:18443, and a route naming quire-a.example alone
+  # would answer 404 to it. That is precisely how the end-to-end suite reaches a
+  # local cluster.
   hosts:
-    - quire.example
+    - "*"
   gateways:
     - quire
   http:
@@ -33,13 +40,18 @@ metadata:
   name: quire-federation
 spec:
   hosts:
-    - quire.example
+    - "*"
   gateways:
     - quire
   # A tls route and not an http one: the gateway is passing the connection
-  # through, so all it may read is the name the caller asked for. That is
-  # enough to tell two nodes apart and is deliberately not enough to tell
-  # anything else — the bytes past the handshake belong to the node.
+  # through, so all it may read is the name the caller asked for — and the bytes
+  # past the handshake belong to the node.
+  #
+  # Here the domain *is* matched, and it can be: SNI is a name and never an
+  # authority, so it carries no port, and every caller sends the domain because
+  # that is what it verifies the certificate against. What it buys is that a
+  # connection asking for anything else is refused by the gateway rather than by
+  # the node, which is one refusal earlier.
   tls:
     - match:
         - port: 9443
