@@ -1,5 +1,5 @@
-// Package deferred hands a password recovery to a worker instead of delivering
-// it on the call that asked for one.
+// Package deferred hands a message to a worker instead of delivering it on the
+// call that asked for one.
 //
 // It is the second half of C13 in docs/tcc-corrections.md, and it closes a
 // channel the first half cannot. RequestPasswordRecovery answers the same way
@@ -59,9 +59,17 @@ type Service struct {
 // before this delivery is attempted, so keeping it would be keeping something
 // already dead. What is worth keeping is the request identifier, so that the
 // record of a delivery can be found from the record of the call.
+//
+// The message is a closure rather than one of the two message types, because
+// what the queue holds is a delivery and not a kind of mail: a struct with a
+// field per message would grow a field per message, and the worker would grow a
+// switch that has to agree with it. What is queued here is "the thing this call
+// asked for, addressed to the transport it asked".
 type pending struct {
-	message service.RecoveryMessage
-	from    []slog.Attr
+	deliver func(context.Context, service.Mailer) error
+	// what names the delivery in the log, since a closure cannot be read.
+	what string
+	from []slog.Attr
 }
 
 // Service satisfies the port the use cases hold, and wraps another adapter of
@@ -86,12 +94,35 @@ func New(next service.Mailer, cfg *config.Mail, logger *slog.Logger) *Service {
 // introduced to remove — and it would take longest exactly when the node is
 // least able to deliver anything.
 func (s *Service) SendPasswordRecovery(ctx context.Context, message service.RecoveryMessage) error {
+	return s.enqueue(ctx, "a password recovery", func(ctx context.Context, next service.Mailer) error {
+		return next.SendPasswordRecovery(ctx, message)
+	})
+}
+
+// SendEmailChanged accepts the notice and returns, on the same terms.
+//
+// The timing argument that put the recovery in a queue does not apply to this
+// one — the caller is authenticated and the address is their own, so there is
+// nothing to learn from how long it took. What does apply is the other half: the
+// address has already changed, and a relay that is down must not turn a write
+// that succeeded into a call that failed.
+func (s *Service) SendEmailChanged(ctx context.Context, message service.EmailChangedMessage) error {
+	return s.enqueue(ctx, "an address change notice", func(ctx context.Context, next service.Mailer) error {
+		return next.SendEmailChanged(ctx, message)
+	})
+}
+
+// enqueue accepts one delivery, or reports that there is no room for it.
+func (s *Service) enqueue(
+	ctx context.Context, what string, deliver func(context.Context, service.Mailer) error,
+) error {
 	select {
-	case s.queue <- pending{message: message, from: logging.Attrs(ctx)}:
+	case s.queue <- pending{deliver: deliver, what: what, from: logging.Attrs(ctx)}:
 		return nil
 	default:
-		return errs.New(errs.KindResourceExhausted,
-			"there are more password recoveries waiting to be delivered than this node will hold").
+		return errs.Newf(errs.KindResourceExhausted,
+			"there are more messages waiting to be delivered than this node will hold, and %s was refused",
+			what).
 			WithOp(opSend)
 	}
 }
@@ -162,11 +193,12 @@ func (s *Service) deliver(ctx context.Context, delivery *pending) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	if err := s.next.SendPasswordRecovery(ctx, delivery.message); err != nil {
-		s.logger.ErrorContext(ctx, "a password recovery could not be delivered", logging.Err(err))
+	if err := delivery.deliver(ctx, s.next); err != nil {
+		s.logger.ErrorContext(ctx, "a message could not be delivered",
+			slog.String("message", delivery.what), logging.Err(err))
 
 		return
 	}
 
-	s.logger.InfoContext(ctx, "a password recovery was delivered")
+	s.logger.InfoContext(ctx, "a message was delivered", slog.String("message", delivery.what))
 }

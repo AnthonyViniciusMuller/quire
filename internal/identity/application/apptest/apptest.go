@@ -656,11 +656,12 @@ func cloneCredential(issued *credential.Credential) *credential.Credential {
 
 // Mailer records what it was asked to deliver instead of delivering it.
 type Mailer struct {
-	mu   sync.Mutex
-	sent []service.RecoveryMessage
+	mu      sync.Mutex
+	sent    []service.RecoveryMessage
+	notices []service.EmailChangedMessage
 
-	// Err, when set, is what SendPasswordRecovery reports — for the test that
-	// needs a transport that is down.
+	// Err, when set, is what either method reports — for the tests that need a
+	// transport that is down.
 	Err error
 }
 
@@ -681,10 +682,36 @@ func (m *Mailer) SendPasswordRecovery(_ context.Context, message service.Recover
 	return nil
 }
 
-// Sent is everything the transport was asked to deliver, in order.
+// SendEmailChanged records the notice.
+func (m *Mailer) SendEmailChanged(_ context.Context, message service.EmailChangedMessage) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Err != nil {
+		return m.Err
+	}
+
+	m.notices = append(m.notices, message)
+
+	return nil
+}
+
+// Sent is every recovery the transport was asked to deliver, in order.
 func (m *Mailer) Sent() []service.RecoveryMessage {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	return slices.Clone(m.sent)
+}
+
+// Notices is every address change notice it was asked to deliver, in order.
+//
+// They are kept apart from the recoveries rather than in one list of something
+// both satisfy: the two messages have nothing in common but their transport, and
+// a test asserting on one should not have to filter out the other.
+func (m *Mailer) Notices() []service.EmailChangedMessage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.notices)
 }

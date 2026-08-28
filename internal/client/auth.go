@@ -12,10 +12,10 @@ import (
 )
 
 // The paths an update to a reader or a device may name. They are the
-// contract's, and they are the same names the node's controllers admit.
+// contract's, and they are the same names the node's controllers admit. The
+// address is not among them: it has a call of its own, per C14.
 const (
 	pathDisplayName = "display_name"
-	pathEmail       = "email"
 	pathName        = "name"
 )
 
@@ -244,9 +244,13 @@ func (c *Client) Whoami(ctx context.Context) (*quirev1.User, error) {
 	return response.GetUser(), nil
 }
 
-// UpdateUser writes the two fields of a reader that are writable. A nil pointer
+// UpdateUser writes the fields of a reader a field mask can carry. A nil pointer
 // is a field the call does not claim, which is not the same as one it clears.
-func (c *Client) UpdateUser(ctx context.Context, displayName, email *string) (*quirev1.User, error) {
+//
+// The address is not among them, and [Client.ChangeEmail] is why: it is the
+// channel a password recovery arrives through, so changing it takes the current
+// password (C14).
+func (c *Client) UpdateUser(ctx context.Context, displayName *string) (*quirev1.User, error) {
 	authorized, err := c.call(ctx, "update the reader")
 	if err != nil {
 		return nil, err
@@ -261,15 +265,31 @@ func (c *Client) UpdateUser(ctx context.Context, displayName, email *string) (*q
 		mask.Paths = append(mask.Paths, pathDisplayName)
 	}
 
-	if email != nil {
-		reader.Email = email
-
-		mask.Paths = append(mask.Paths, pathEmail)
-	}
-
 	response, err := c.auth.UpdateUser(authorized, &quirev1.UpdateUserRequest{
 		User:       reader,
 		UpdateMask: mask,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response.GetUser(), nil
+}
+
+// ChangeEmail replaces the address the account is recovered through, and takes
+// the current password because of what that address is: whoever can change it
+// can have a recovery credential sent somewhere of their choosing (C14). A
+// notice goes to the previous address, which the node sends and this call does
+// not wait for.
+func (c *Client) ChangeEmail(ctx context.Context, password, email string) (*quirev1.User, error) {
+	authorized, err := c.call(ctx, "change the address")
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := c.auth.ChangeEmail(authorized, &quirev1.ChangeEmailRequest{
+		Password: password,
+		Email:    email,
 	})
 	if err != nil {
 		return nil, err

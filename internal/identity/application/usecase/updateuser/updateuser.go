@@ -1,15 +1,15 @@
 // Package updateuser changes a reader's own record (UC06, update).
 //
-// Only the shown name and the address are writable. Everything else about a
-// reader is either their identity — the local name and the origin server, which
-// together are the identifier RN09 makes unique — or derived from it, and
-// changing the origin server is the migration of RF17 rather than an edit.
+// Only the shown name is writable. Everything else about a reader is either
+// their identity — the local name and the origin server, which together are the
+// identifier RN09 makes unique — or derived from it, and changing the origin
+// server is the migration of RF17 rather than an edit.
 //
-// C14 in docs/tcc-corrections.md is the finding this use case is written
-// against and does not yet implement: the address is what UC08 recovers an
-// account through, so changing it should prove the reader is present the way
-// changing a password does. The contract has no field to carry that password,
-// so the check belongs with the contract amendment rather than here.
+// The address used to be the second writable field and is now changeemail's,
+// which is C14 in docs/tcc-corrections.md: it is what UC08 recovers an account
+// through, so changing it proves the reader is present the way changing a
+// password does — and a field mask has no way to say that one of its paths
+// needs a credential.
 package updateuser
 
 import (
@@ -48,11 +48,11 @@ func New(users user.Repository, localServer service.LocalServer, clock service.C
 
 // Execute applies the fields the request carries.
 func (u *UpdateUser) Execute(ctx context.Context, input Input) (Output, error) {
-	if input.DisplayName == nil && input.Email == nil {
+	if input.DisplayName == nil {
 		return Output{}, errs.New(errs.KindInvalidArgument, "the request changes nothing").
 			WithOp(opExecute).
 			WithCode(CodeNothingToUpdate).
-			WithField("update_mask", "it must name at least one of display_name and email")
+			WithField("update_mask", "it must name display_name")
 	}
 
 	reader, err := u.users.GetByID(ctx, input.UserID)
@@ -62,28 +62,18 @@ func (u *UpdateUser) Execute(ctx context.Context, input Input) (Output, error) {
 
 	now := u.clock.Now()
 
-	// Both are applied to the entity before either is written, so a request
-	// carrying one good field and one bad one changes nothing rather than half.
-	if input.DisplayName != nil {
-		displayName, parseErr := user.ParseDisplayName(*input.DisplayName)
-		if parseErr != nil {
-			return Output{}, parseErr
-		}
-
-		if renameErr := reader.Rename(displayName, now); renameErr != nil {
-			return Output{}, renameErr
-		}
+	// Applied to the entity before it is written, so that a request carrying a
+	// field the domain refuses changes nothing rather than half — which is what
+	// this shape is for and stays worth keeping with one field, since the next
+	// writable one arrives beside it rather than instead of it.
+	displayName, err := user.ParseDisplayName(*input.DisplayName)
+	if err != nil {
+		return Output{}, err
 	}
 
-	if input.Email != nil {
-		email, parseErr := user.ParseEmail(*input.Email)
-		if parseErr != nil {
-			return Output{}, parseErr
-		}
-
-		if changeErr := reader.ChangeEmail(email, now); changeErr != nil {
-			return Output{}, changeErr
-		}
+	err = reader.Rename(displayName, now)
+	if err != nil {
+		return Output{}, err
 	}
 
 	err = u.users.Update(ctx, reader)

@@ -157,24 +157,27 @@ func newUserCommand(a *app) *cobra.Command {
 		RunE:  func(command *cobra.Command, _ []string) error { return command.Help() },
 	}
 
-	command.AddCommand(newUserUpdateCommand(a), newUserPasswordCommand(a), newUserDeleteCommand(a))
+	command.AddCommand(
+		newUserUpdateCommand(a),
+		newUserEmailCommand(a),
+		newUserPasswordCommand(a),
+		newUserDeleteCommand(a),
+	)
 
 	return command
 }
 
-// newUserUpdateCommand writes the two fields of a reader that are writable.
+// newUserUpdateCommand writes the fields of a reader a field mask can carry.
 func newUserUpdateCommand(a *app) *cobra.Command {
-	var displayName, email string
+	var displayName string
 
 	command := &cobra.Command{
 		Use:   "update",
-		Short: "Change the display name or the address",
+		Short: "Change the display name",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			return a.with(command, func(ctx context.Context, connection *client.Client) error {
-				reader, err := connection.UpdateUser(ctx,
-					claimed(command, "display-name", &displayName),
-					claimed(command, "email", &email))
+				reader, err := connection.UpdateUser(ctx, claimed(command, "display-name", &displayName))
 				if err != nil {
 					return err
 				}
@@ -191,7 +194,48 @@ func newUserUpdateCommand(a *app) *cobra.Command {
 	}
 
 	command.Flags().StringVar(&displayName, "display-name", "", "what the reader calls themselves")
-	command.Flags().StringVar(&email, "email", "", "the address a password recovery is sent to")
+
+	return command
+}
+
+// newUserEmailCommand changes the address, which takes the password — the
+// second half a field mask cannot express, and the one C14 is about.
+func newUserEmailCommand(a *app) *cobra.Command {
+	var address, secret string
+
+	command := &cobra.Command{
+		Use:   "email <address>",
+		Short: "Change the address a password recovery is sent to",
+		Long: "It takes the current password, because whoever can change this address can\n" +
+			"have a recovery sent somewhere of their choosing. The previous address is\n" +
+			"told, which is how a reader finds out about a change they did not make.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			address = args[0]
+
+			given, err := password(secret, "password")
+			if err != nil {
+				return err
+			}
+
+			return a.with(command, func(ctx context.Context, connection *client.Client) error {
+				reader, err := connection.ChangeEmail(ctx, given, address)
+				if err != nil {
+					return err
+				}
+
+				if done, err := a.emit(reader); done || err != nil {
+					return err
+				}
+
+				a.print("the address of %s is now %s", reader.GetFederatedId(), reader.GetEmail())
+
+				return nil
+			})
+		},
+	}
+
+	command.Flags().StringVar(&secret, "password", "", "the password ($"+passwordVariable+")")
 
 	return command
 }

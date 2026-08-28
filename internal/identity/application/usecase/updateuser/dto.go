@@ -8,21 +8,16 @@ import (
 
 // Input is a reader changing their own record.
 //
-// The two writable fields are pointers because absence is not emptiness: a
-// client that is not touching a field and one that means to clear it look
-// identical without a way to tell them apart. Nil is "leave it alone", and it
-// is what the contract's field mask decodes to.
+// The writable field is a pointer because absence is not emptiness: a client
+// that is not touching a field and one that means to clear it look identical
+// without a way to tell them apart. Nil is "leave it alone", and it is what the
+// contract's field mask decodes to. It stays a pointer with one field, because
+// what makes it one is the mask and not how many paths the mask may carry.
 type Input struct {
 	// UserID is the reader the call is made on behalf of.
 	UserID uuid.UUID
 	// DisplayName is the new shown name, or nil.
 	DisplayName *string
-	// Email is the new address, or nil.
-	//
-	// It is the channel UC08 recovers the account through, and C14 in
-	// docs/tcc-corrections.md is about what that means: changing it should ask
-	// for the current password, and the contract has no field to carry one.
-	Email *string
 }
 
 // Output is the record as it now reads.

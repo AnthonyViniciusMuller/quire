@@ -42,6 +42,13 @@ func (t *transport) SendPasswordRecovery(_ context.Context, message service.Reco
 	return t.err
 }
 
+// SendEmailChanged is here because the port has two methods, and the queue is
+// checked through the one that has a token in it: what this package does is the
+// same for both, and a second set of the same tests would drift from the first.
+func (t *transport) SendEmailChanged(_ context.Context, _ service.EmailChangedMessage) error {
+	return t.err
+}
+
 // theMessage is what every test here queues.
 func theMessage() service.RecoveryMessage {
 	return service.RecoveryMessage{

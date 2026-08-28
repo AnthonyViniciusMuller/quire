@@ -340,3 +340,47 @@ func headerNamed(t *testing.T, headers, name string) string {
 
 	return ""
 }
+
+// The notice of C14 goes to the address that is being replaced, which is the
+// whole point of it: the mailbox the reader is still known to read, about a
+// change made to the one they no longer do.
+func TestSendEmailChangedGoesToThePreviousAddress(t *testing.T) {
+	t.Parallel()
+
+	fake := newRelay(t, false)
+	sender := deliveredTo(t, fake, config.MailSecurityNone)
+
+	err := sender.SendEmailChanged(t.Context(), service.EmailChangedMessage{
+		PreviousEmail: user.Email("antônio@quire-a.example"),
+		NewEmail:      user.Email("someone-else@elsewhere.example"),
+		DisplayName:   user.DisplayName("Antônio Müller"),
+		ChangedAt:     time.Date(2026, time.August, 28, 15, 4, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("SendEmailChanged() error = %v, want nil", err)
+	}
+
+	headers, body := split(t, waitFor(t, fake))
+
+	if !strings.Contains(headerNamed(t, headers, "To"), "antônio@quire-a.example") {
+		t.Errorf("To = %q, want the previous address", headerNamed(t, headers, "To"))
+	}
+
+	tests := []struct {
+		name string
+		want string
+	}{
+		// Both addresses are named. A reader told only that their address
+		// changed cannot tell whether it was them.
+		{"the address it was", "antônio@quire-a.example"},
+		{"the address it became", "someone-else@elsewhere.example"},
+		{"when it happened", "28 August 2026"},
+		{"what to do about it", "somebody else knows your password"},
+	}
+
+	for _, test := range tests {
+		if !strings.Contains(body, test.want) {
+			t.Errorf("%s: %q is not in the body", test.name, test.want)
+		}
+	}
+}

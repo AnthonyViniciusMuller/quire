@@ -555,12 +555,18 @@ func (x *GetUserResponse) GetUser() *User {
 
 type UpdateUserRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Only display_name and email are writable. Everything else about a reader
-	// is either their identity or derived from it.
+	// Only display_name is writable. Everything else about a reader is either
+	// their identity, derived from it, or — in the single case of the address —
+	// a credential in its own right, changed through ChangeEmail (C14).
 	User *User `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
 	// Which fields of user to apply. Absence is not emptiness: a client that
 	// sends no mask and a client that means to clear a field look identical
 	// without one.
+	//
+	// A path this call does not write is refused rather than ignored, and "email"
+	// is now one of them: a client that asked to change the address through here
+	// is asking to go around the password check, and being told so is better than
+	// being answered with a record where it did not change.
 	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -744,6 +750,106 @@ func (*ChangePasswordResponse) Descriptor() ([]byte, []int) {
 	return file_quire_v1_auth_proto_rawDescGZIP(), []int{11}
 }
 
+type ChangeEmailRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Proves the session belongs to the reader and not merely to a device left
+	// unlocked, exactly as ChangePassword does — and for a stronger reason, since
+	// this is the field that makes the password replaceable.
+	Password string `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
+	// The address the recovery of UC08 will be sent to from now on.
+	Email         string `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChangeEmailRequest) Reset() {
+	*x = ChangeEmailRequest{}
+	mi := &file_quire_v1_auth_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangeEmailRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangeEmailRequest) ProtoMessage() {}
+
+func (x *ChangeEmailRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_auth_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangeEmailRequest.ProtoReflect.Descriptor instead.
+func (*ChangeEmailRequest) Descriptor() ([]byte, []int) {
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ChangeEmailRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *ChangeEmailRequest) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+type ChangeEmailResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChangeEmailResponse) Reset() {
+	*x = ChangeEmailResponse{}
+	mi := &file_quire_v1_auth_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangeEmailResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangeEmailResponse) ProtoMessage() {}
+
+func (x *ChangeEmailResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_auth_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangeEmailResponse.ProtoReflect.Descriptor instead.
+func (*ChangeEmailResponse) Descriptor() ([]byte, []int) {
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ChangeEmailResponse) GetUser() *User {
+	if x != nil {
+		return x.User
+	}
+	return nil
+}
+
 type DeleteUserRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// For the same reason ChangePassword asks for it.
@@ -754,7 +860,7 @@ type DeleteUserRequest struct {
 
 func (x *DeleteUserRequest) Reset() {
 	*x = DeleteUserRequest{}
-	mi := &file_quire_v1_auth_proto_msgTypes[12]
+	mi := &file_quire_v1_auth_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -766,7 +872,7 @@ func (x *DeleteUserRequest) String() string {
 func (*DeleteUserRequest) ProtoMessage() {}
 
 func (x *DeleteUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[12]
+	mi := &file_quire_v1_auth_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -779,7 +885,7 @@ func (x *DeleteUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteUserRequest.ProtoReflect.Descriptor instead.
 func (*DeleteUserRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{12}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DeleteUserRequest) GetPassword() string {
@@ -797,7 +903,7 @@ type DeleteUserResponse struct {
 
 func (x *DeleteUserResponse) Reset() {
 	*x = DeleteUserResponse{}
-	mi := &file_quire_v1_auth_proto_msgTypes[13]
+	mi := &file_quire_v1_auth_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -809,7 +915,7 @@ func (x *DeleteUserResponse) String() string {
 func (*DeleteUserResponse) ProtoMessage() {}
 
 func (x *DeleteUserResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[13]
+	mi := &file_quire_v1_auth_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -822,7 +928,7 @@ func (x *DeleteUserResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteUserResponse.ProtoReflect.Descriptor instead.
 func (*DeleteUserResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{13}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{15}
 }
 
 type LoginRequest struct {
@@ -847,7 +953,7 @@ type LoginRequest struct {
 
 func (x *LoginRequest) Reset() {
 	*x = LoginRequest{}
-	mi := &file_quire_v1_auth_proto_msgTypes[14]
+	mi := &file_quire_v1_auth_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -859,7 +965,7 @@ func (x *LoginRequest) String() string {
 func (*LoginRequest) ProtoMessage() {}
 
 func (x *LoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[14]
+	mi := &file_quire_v1_auth_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -872,7 +978,7 @@ func (x *LoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginRequest.ProtoReflect.Descriptor instead.
 func (*LoginRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{14}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *LoginRequest) GetLoginId() isLoginRequest_LoginId {
@@ -944,7 +1050,7 @@ type LoginResponse struct {
 
 func (x *LoginResponse) Reset() {
 	*x = LoginResponse{}
-	mi := &file_quire_v1_auth_proto_msgTypes[15]
+	mi := &file_quire_v1_auth_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -956,7 +1062,7 @@ func (x *LoginResponse) String() string {
 func (*LoginResponse) ProtoMessage() {}
 
 func (x *LoginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[15]
+	mi := &file_quire_v1_auth_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -969,7 +1075,7 @@ func (x *LoginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginResponse.ProtoReflect.Descriptor instead.
 func (*LoginResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{15}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *LoginResponse) GetSession() *Session {
@@ -1005,7 +1111,7 @@ type LogoutRequest struct {
 
 func (x *LogoutRequest) Reset() {
 	*x = LogoutRequest{}
-	mi := &file_quire_v1_auth_proto_msgTypes[16]
+	mi := &file_quire_v1_auth_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1017,7 +1123,7 @@ func (x *LogoutRequest) String() string {
 func (*LogoutRequest) ProtoMessage() {}
 
 func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[16]
+	mi := &file_quire_v1_auth_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1030,7 +1136,7 @@ func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutRequest.ProtoReflect.Descriptor instead.
 func (*LogoutRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{16}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *LogoutRequest) GetRefreshToken() string {
@@ -1048,7 +1154,7 @@ type LogoutResponse struct {
 
 func (x *LogoutResponse) Reset() {
 	*x = LogoutResponse{}
-	mi := &file_quire_v1_auth_proto_msgTypes[17]
+	mi := &file_quire_v1_auth_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1060,7 +1166,7 @@ func (x *LogoutResponse) String() string {
 func (*LogoutResponse) ProtoMessage() {}
 
 func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[17]
+	mi := &file_quire_v1_auth_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1073,7 +1179,7 @@ func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutResponse.ProtoReflect.Descriptor instead.
 func (*LogoutResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{17}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{19}
 }
 
 type RefreshSessionRequest struct {
@@ -1085,7 +1191,7 @@ type RefreshSessionRequest struct {
 
 func (x *RefreshSessionRequest) Reset() {
 	*x = RefreshSessionRequest{}
-	mi := &file_quire_v1_auth_proto_msgTypes[18]
+	mi := &file_quire_v1_auth_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1097,7 +1203,7 @@ func (x *RefreshSessionRequest) String() string {
 func (*RefreshSessionRequest) ProtoMessage() {}
 
 func (x *RefreshSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[18]
+	mi := &file_quire_v1_auth_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1110,7 +1216,7 @@ func (x *RefreshSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshSessionRequest.ProtoReflect.Descriptor instead.
 func (*RefreshSessionRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{18}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RefreshSessionRequest) GetRefreshToken() string {
@@ -1132,7 +1238,7 @@ type RefreshSessionResponse struct {
 
 func (x *RefreshSessionResponse) Reset() {
 	*x = RefreshSessionResponse{}
-	mi := &file_quire_v1_auth_proto_msgTypes[19]
+	mi := &file_quire_v1_auth_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1144,7 +1250,7 @@ func (x *RefreshSessionResponse) String() string {
 func (*RefreshSessionResponse) ProtoMessage() {}
 
 func (x *RefreshSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[19]
+	mi := &file_quire_v1_auth_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1157,7 +1263,7 @@ func (x *RefreshSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshSessionResponse.ProtoReflect.Descriptor instead.
 func (*RefreshSessionResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{19}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RefreshSessionResponse) GetSession() *Session {
@@ -1176,7 +1282,7 @@ type RequestPasswordRecoveryRequest struct {
 
 func (x *RequestPasswordRecoveryRequest) Reset() {
 	*x = RequestPasswordRecoveryRequest{}
-	mi := &file_quire_v1_auth_proto_msgTypes[20]
+	mi := &file_quire_v1_auth_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1188,7 +1294,7 @@ func (x *RequestPasswordRecoveryRequest) String() string {
 func (*RequestPasswordRecoveryRequest) ProtoMessage() {}
 
 func (x *RequestPasswordRecoveryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[20]
+	mi := &file_quire_v1_auth_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1201,7 +1307,7 @@ func (x *RequestPasswordRecoveryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestPasswordRecoveryRequest.ProtoReflect.Descriptor instead.
 func (*RequestPasswordRecoveryRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{20}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RequestPasswordRecoveryRequest) GetEmail() string {
@@ -1221,7 +1327,7 @@ type RequestPasswordRecoveryResponse struct {
 
 func (x *RequestPasswordRecoveryResponse) Reset() {
 	*x = RequestPasswordRecoveryResponse{}
-	mi := &file_quire_v1_auth_proto_msgTypes[21]
+	mi := &file_quire_v1_auth_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1233,7 +1339,7 @@ func (x *RequestPasswordRecoveryResponse) String() string {
 func (*RequestPasswordRecoveryResponse) ProtoMessage() {}
 
 func (x *RequestPasswordRecoveryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[21]
+	mi := &file_quire_v1_auth_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1246,7 +1352,7 @@ func (x *RequestPasswordRecoveryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestPasswordRecoveryResponse.ProtoReflect.Descriptor instead.
 func (*RequestPasswordRecoveryResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{21}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{23}
 }
 
 type ResetPasswordRequest struct {
@@ -1259,7 +1365,7 @@ type ResetPasswordRequest struct {
 
 func (x *ResetPasswordRequest) Reset() {
 	*x = ResetPasswordRequest{}
-	mi := &file_quire_v1_auth_proto_msgTypes[22]
+	mi := &file_quire_v1_auth_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1271,7 +1377,7 @@ func (x *ResetPasswordRequest) String() string {
 func (*ResetPasswordRequest) ProtoMessage() {}
 
 func (x *ResetPasswordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[22]
+	mi := &file_quire_v1_auth_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1284,7 +1390,7 @@ func (x *ResetPasswordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetPasswordRequest.ProtoReflect.Descriptor instead.
 func (*ResetPasswordRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{22}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ResetPasswordRequest) GetRecoveryToken() string {
@@ -1311,7 +1417,7 @@ type ResetPasswordResponse struct {
 
 func (x *ResetPasswordResponse) Reset() {
 	*x = ResetPasswordResponse{}
-	mi := &file_quire_v1_auth_proto_msgTypes[23]
+	mi := &file_quire_v1_auth_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1323,7 +1429,7 @@ func (x *ResetPasswordResponse) String() string {
 func (*ResetPasswordResponse) ProtoMessage() {}
 
 func (x *ResetPasswordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[23]
+	mi := &file_quire_v1_auth_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1336,7 +1442,7 @@ func (x *ResetPasswordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetPasswordResponse.ProtoReflect.Descriptor instead.
 func (*ResetPasswordResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{23}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{25}
 }
 
 type RegisterDeviceRequest struct {
@@ -1349,7 +1455,7 @@ type RegisterDeviceRequest struct {
 
 func (x *RegisterDeviceRequest) Reset() {
 	*x = RegisterDeviceRequest{}
-	mi := &file_quire_v1_auth_proto_msgTypes[24]
+	mi := &file_quire_v1_auth_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1361,7 +1467,7 @@ func (x *RegisterDeviceRequest) String() string {
 func (*RegisterDeviceRequest) ProtoMessage() {}
 
 func (x *RegisterDeviceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[24]
+	mi := &file_quire_v1_auth_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1374,7 +1480,7 @@ func (x *RegisterDeviceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterDeviceRequest.ProtoReflect.Descriptor instead.
 func (*RegisterDeviceRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{24}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *RegisterDeviceRequest) GetName() string {
@@ -1400,7 +1506,7 @@ type RegisterDeviceResponse struct {
 
 func (x *RegisterDeviceResponse) Reset() {
 	*x = RegisterDeviceResponse{}
-	mi := &file_quire_v1_auth_proto_msgTypes[25]
+	mi := &file_quire_v1_auth_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1412,7 +1518,7 @@ func (x *RegisterDeviceResponse) String() string {
 func (*RegisterDeviceResponse) ProtoMessage() {}
 
 func (x *RegisterDeviceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[25]
+	mi := &file_quire_v1_auth_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1425,7 +1531,7 @@ func (x *RegisterDeviceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterDeviceResponse.ProtoReflect.Descriptor instead.
 func (*RegisterDeviceResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{25}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *RegisterDeviceResponse) GetDevice() *Device {
@@ -1447,7 +1553,7 @@ type ListDevicesRequest struct {
 
 func (x *ListDevicesRequest) Reset() {
 	*x = ListDevicesRequest{}
-	mi := &file_quire_v1_auth_proto_msgTypes[26]
+	mi := &file_quire_v1_auth_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1459,7 +1565,7 @@ func (x *ListDevicesRequest) String() string {
 func (*ListDevicesRequest) ProtoMessage() {}
 
 func (x *ListDevicesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[26]
+	mi := &file_quire_v1_auth_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1472,7 +1578,7 @@ func (x *ListDevicesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDevicesRequest.ProtoReflect.Descriptor instead.
 func (*ListDevicesRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{26}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListDevicesRequest) GetIncludeInactive() bool {
@@ -1493,7 +1599,7 @@ type ListDevicesResponse struct {
 
 func (x *ListDevicesResponse) Reset() {
 	*x = ListDevicesResponse{}
-	mi := &file_quire_v1_auth_proto_msgTypes[27]
+	mi := &file_quire_v1_auth_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1505,7 +1611,7 @@ func (x *ListDevicesResponse) String() string {
 func (*ListDevicesResponse) ProtoMessage() {}
 
 func (x *ListDevicesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[27]
+	mi := &file_quire_v1_auth_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1518,7 +1624,7 @@ func (x *ListDevicesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDevicesResponse.ProtoReflect.Descriptor instead.
 func (*ListDevicesResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{27}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ListDevicesResponse) GetDevices() []*Device {
@@ -1539,7 +1645,7 @@ type UpdateDeviceRequest struct {
 
 func (x *UpdateDeviceRequest) Reset() {
 	*x = UpdateDeviceRequest{}
-	mi := &file_quire_v1_auth_proto_msgTypes[28]
+	mi := &file_quire_v1_auth_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1551,7 +1657,7 @@ func (x *UpdateDeviceRequest) String() string {
 func (*UpdateDeviceRequest) ProtoMessage() {}
 
 func (x *UpdateDeviceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[28]
+	mi := &file_quire_v1_auth_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1564,7 +1670,7 @@ func (x *UpdateDeviceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDeviceRequest.ProtoReflect.Descriptor instead.
 func (*UpdateDeviceRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{28}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *UpdateDeviceRequest) GetDeviceId() string {
@@ -1597,7 +1703,7 @@ type UpdateDeviceResponse struct {
 
 func (x *UpdateDeviceResponse) Reset() {
 	*x = UpdateDeviceResponse{}
-	mi := &file_quire_v1_auth_proto_msgTypes[29]
+	mi := &file_quire_v1_auth_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1609,7 +1715,7 @@ func (x *UpdateDeviceResponse) String() string {
 func (*UpdateDeviceResponse) ProtoMessage() {}
 
 func (x *UpdateDeviceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[29]
+	mi := &file_quire_v1_auth_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1622,7 +1728,7 @@ func (x *UpdateDeviceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDeviceResponse.ProtoReflect.Descriptor instead.
 func (*UpdateDeviceResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{29}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *UpdateDeviceResponse) GetDevice() *Device {
@@ -1641,7 +1747,7 @@ type RevokeDeviceRequest struct {
 
 func (x *RevokeDeviceRequest) Reset() {
 	*x = RevokeDeviceRequest{}
-	mi := &file_quire_v1_auth_proto_msgTypes[30]
+	mi := &file_quire_v1_auth_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1653,7 +1759,7 @@ func (x *RevokeDeviceRequest) String() string {
 func (*RevokeDeviceRequest) ProtoMessage() {}
 
 func (x *RevokeDeviceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[30]
+	mi := &file_quire_v1_auth_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1666,7 +1772,7 @@ func (x *RevokeDeviceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeDeviceRequest.ProtoReflect.Descriptor instead.
 func (*RevokeDeviceRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{30}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *RevokeDeviceRequest) GetDeviceId() string {
@@ -1684,7 +1790,7 @@ type RevokeDeviceResponse struct {
 
 func (x *RevokeDeviceResponse) Reset() {
 	*x = RevokeDeviceResponse{}
-	mi := &file_quire_v1_auth_proto_msgTypes[31]
+	mi := &file_quire_v1_auth_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1696,7 +1802,7 @@ func (x *RevokeDeviceResponse) String() string {
 func (*RevokeDeviceResponse) ProtoMessage() {}
 
 func (x *RevokeDeviceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_auth_proto_msgTypes[31]
+	mi := &file_quire_v1_auth_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1709,7 +1815,7 @@ func (x *RevokeDeviceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeDeviceResponse.ProtoReflect.Descriptor instead.
 func (*RevokeDeviceResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_auth_proto_rawDescGZIP(), []int{31}
+	return file_quire_v1_auth_proto_rawDescGZIP(), []int{33}
 }
 
 var File_quire_v1_auth_proto protoreflect.FileDescriptor
@@ -1766,7 +1872,12 @@ const file_quire_v1_auth_proto_rawDesc = "" +
 	"\x15ChangePasswordRequest\x12)\n" +
 	"\x10current_password\x18\x01 \x01(\tR\x0fcurrentPassword\x12!\n" +
 	"\fnew_password\x18\x02 \x01(\tR\vnewPassword\"\x18\n" +
-	"\x16ChangePasswordResponse\"/\n" +
+	"\x16ChangePasswordResponse\"F\n" +
+	"\x12ChangeEmailRequest\x12\x1a\n" +
+	"\bpassword\x18\x01 \x01(\tR\bpassword\x12\x14\n" +
+	"\x05email\x18\x02 \x01(\tR\x05email\"9\n" +
+	"\x13ChangeEmailResponse\x12\"\n" +
+	"\x04user\x18\x01 \x01(\v2\x0e.quire.v1.UserR\x04user\"/\n" +
 	"\x11DeleteUserRequest\x12\x1a\n" +
 	"\bpassword\x18\x01 \x01(\tR\bpassword\"\x14\n" +
 	"\x12DeleteUserResponse\"\xa0\x01\n" +
@@ -1814,13 +1925,14 @@ const file_quire_v1_auth_proto_rawDesc = "" +
 	"\x06device\x18\x01 \x01(\v2\x10.quire.v1.DeviceR\x06device\"2\n" +
 	"\x13RevokeDeviceRequest\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\"\x16\n" +
-	"\x14RevokeDeviceResponse2\xd0\b\n" +
+	"\x14RevokeDeviceResponse2\x9c\t\n" +
 	"\vAuthService\x12M\n" +
 	"\fRegisterUser\x12\x1d.quire.v1.RegisterUserRequest\x1a\x1e.quire.v1.RegisterUserResponse\x12>\n" +
 	"\aGetUser\x12\x18.quire.v1.GetUserRequest\x1a\x19.quire.v1.GetUserResponse\x12G\n" +
 	"\n" +
 	"UpdateUser\x12\x1b.quire.v1.UpdateUserRequest\x1a\x1c.quire.v1.UpdateUserResponse\x12S\n" +
-	"\x0eChangePassword\x12\x1f.quire.v1.ChangePasswordRequest\x1a .quire.v1.ChangePasswordResponse\x12G\n" +
+	"\x0eChangePassword\x12\x1f.quire.v1.ChangePasswordRequest\x1a .quire.v1.ChangePasswordResponse\x12J\n" +
+	"\vChangeEmail\x12\x1c.quire.v1.ChangeEmailRequest\x1a\x1d.quire.v1.ChangeEmailResponse\x12G\n" +
 	"\n" +
 	"DeleteUser\x12\x1b.quire.v1.DeleteUserRequest\x1a\x1c.quire.v1.DeleteUserResponse\x128\n" +
 	"\x05Login\x12\x16.quire.v1.LoginRequest\x1a\x17.quire.v1.LoginResponse\x12;\n" +
@@ -1845,7 +1957,7 @@ func file_quire_v1_auth_proto_rawDescGZIP() []byte {
 	return file_quire_v1_auth_proto_rawDescData
 }
 
-var file_quire_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
+var file_quire_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_quire_v1_auth_proto_goTypes = []any{
 	(*User)(nil),                            // 0: quire.v1.User
 	(*Device)(nil),                          // 1: quire.v1.Device
@@ -1859,82 +1971,87 @@ var file_quire_v1_auth_proto_goTypes = []any{
 	(*UpdateUserResponse)(nil),              // 9: quire.v1.UpdateUserResponse
 	(*ChangePasswordRequest)(nil),           // 10: quire.v1.ChangePasswordRequest
 	(*ChangePasswordResponse)(nil),          // 11: quire.v1.ChangePasswordResponse
-	(*DeleteUserRequest)(nil),               // 12: quire.v1.DeleteUserRequest
-	(*DeleteUserResponse)(nil),              // 13: quire.v1.DeleteUserResponse
-	(*LoginRequest)(nil),                    // 14: quire.v1.LoginRequest
-	(*LoginResponse)(nil),                   // 15: quire.v1.LoginResponse
-	(*LogoutRequest)(nil),                   // 16: quire.v1.LogoutRequest
-	(*LogoutResponse)(nil),                  // 17: quire.v1.LogoutResponse
-	(*RefreshSessionRequest)(nil),           // 18: quire.v1.RefreshSessionRequest
-	(*RefreshSessionResponse)(nil),          // 19: quire.v1.RefreshSessionResponse
-	(*RequestPasswordRecoveryRequest)(nil),  // 20: quire.v1.RequestPasswordRecoveryRequest
-	(*RequestPasswordRecoveryResponse)(nil), // 21: quire.v1.RequestPasswordRecoveryResponse
-	(*ResetPasswordRequest)(nil),            // 22: quire.v1.ResetPasswordRequest
-	(*ResetPasswordResponse)(nil),           // 23: quire.v1.ResetPasswordResponse
-	(*RegisterDeviceRequest)(nil),           // 24: quire.v1.RegisterDeviceRequest
-	(*RegisterDeviceResponse)(nil),          // 25: quire.v1.RegisterDeviceResponse
-	(*ListDevicesRequest)(nil),              // 26: quire.v1.ListDevicesRequest
-	(*ListDevicesResponse)(nil),             // 27: quire.v1.ListDevicesResponse
-	(*UpdateDeviceRequest)(nil),             // 28: quire.v1.UpdateDeviceRequest
-	(*UpdateDeviceResponse)(nil),            // 29: quire.v1.UpdateDeviceResponse
-	(*RevokeDeviceRequest)(nil),             // 30: quire.v1.RevokeDeviceRequest
-	(*RevokeDeviceResponse)(nil),            // 31: quire.v1.RevokeDeviceResponse
-	(*timestamppb.Timestamp)(nil),           // 32: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil),           // 33: google.protobuf.FieldMask
+	(*ChangeEmailRequest)(nil),              // 12: quire.v1.ChangeEmailRequest
+	(*ChangeEmailResponse)(nil),             // 13: quire.v1.ChangeEmailResponse
+	(*DeleteUserRequest)(nil),               // 14: quire.v1.DeleteUserRequest
+	(*DeleteUserResponse)(nil),              // 15: quire.v1.DeleteUserResponse
+	(*LoginRequest)(nil),                    // 16: quire.v1.LoginRequest
+	(*LoginResponse)(nil),                   // 17: quire.v1.LoginResponse
+	(*LogoutRequest)(nil),                   // 18: quire.v1.LogoutRequest
+	(*LogoutResponse)(nil),                  // 19: quire.v1.LogoutResponse
+	(*RefreshSessionRequest)(nil),           // 20: quire.v1.RefreshSessionRequest
+	(*RefreshSessionResponse)(nil),          // 21: quire.v1.RefreshSessionResponse
+	(*RequestPasswordRecoveryRequest)(nil),  // 22: quire.v1.RequestPasswordRecoveryRequest
+	(*RequestPasswordRecoveryResponse)(nil), // 23: quire.v1.RequestPasswordRecoveryResponse
+	(*ResetPasswordRequest)(nil),            // 24: quire.v1.ResetPasswordRequest
+	(*ResetPasswordResponse)(nil),           // 25: quire.v1.ResetPasswordResponse
+	(*RegisterDeviceRequest)(nil),           // 26: quire.v1.RegisterDeviceRequest
+	(*RegisterDeviceResponse)(nil),          // 27: quire.v1.RegisterDeviceResponse
+	(*ListDevicesRequest)(nil),              // 28: quire.v1.ListDevicesRequest
+	(*ListDevicesResponse)(nil),             // 29: quire.v1.ListDevicesResponse
+	(*UpdateDeviceRequest)(nil),             // 30: quire.v1.UpdateDeviceRequest
+	(*UpdateDeviceResponse)(nil),            // 31: quire.v1.UpdateDeviceResponse
+	(*RevokeDeviceRequest)(nil),             // 32: quire.v1.RevokeDeviceRequest
+	(*RevokeDeviceResponse)(nil),            // 33: quire.v1.RevokeDeviceResponse
+	(*timestamppb.Timestamp)(nil),           // 34: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),           // 35: google.protobuf.FieldMask
 }
 var file_quire_v1_auth_proto_depIdxs = []int32{
-	32, // 0: quire.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	32, // 1: quire.v1.Device.last_synced_at:type_name -> google.protobuf.Timestamp
-	32, // 2: quire.v1.Session.access_token_expires_at:type_name -> google.protobuf.Timestamp
-	32, // 3: quire.v1.Session.refresh_token_expires_at:type_name -> google.protobuf.Timestamp
+	34, // 0: quire.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	34, // 1: quire.v1.Device.last_synced_at:type_name -> google.protobuf.Timestamp
+	34, // 2: quire.v1.Session.access_token_expires_at:type_name -> google.protobuf.Timestamp
+	34, // 3: quire.v1.Session.refresh_token_expires_at:type_name -> google.protobuf.Timestamp
 	0,  // 4: quire.v1.RegisterUserResponse.user:type_name -> quire.v1.User
 	0,  // 5: quire.v1.GetUserResponse.user:type_name -> quire.v1.User
 	0,  // 6: quire.v1.UpdateUserRequest.user:type_name -> quire.v1.User
-	33, // 7: quire.v1.UpdateUserRequest.update_mask:type_name -> google.protobuf.FieldMask
+	35, // 7: quire.v1.UpdateUserRequest.update_mask:type_name -> google.protobuf.FieldMask
 	0,  // 8: quire.v1.UpdateUserResponse.user:type_name -> quire.v1.User
-	3,  // 9: quire.v1.LoginRequest.device:type_name -> quire.v1.DeviceBinding
-	2,  // 10: quire.v1.LoginResponse.session:type_name -> quire.v1.Session
-	0,  // 11: quire.v1.LoginResponse.user:type_name -> quire.v1.User
-	1,  // 12: quire.v1.LoginResponse.device:type_name -> quire.v1.Device
-	2,  // 13: quire.v1.RefreshSessionResponse.session:type_name -> quire.v1.Session
-	1,  // 14: quire.v1.RegisterDeviceResponse.device:type_name -> quire.v1.Device
-	1,  // 15: quire.v1.ListDevicesResponse.devices:type_name -> quire.v1.Device
-	1,  // 16: quire.v1.UpdateDeviceRequest.device:type_name -> quire.v1.Device
-	33, // 17: quire.v1.UpdateDeviceRequest.update_mask:type_name -> google.protobuf.FieldMask
-	1,  // 18: quire.v1.UpdateDeviceResponse.device:type_name -> quire.v1.Device
-	4,  // 19: quire.v1.AuthService.RegisterUser:input_type -> quire.v1.RegisterUserRequest
-	6,  // 20: quire.v1.AuthService.GetUser:input_type -> quire.v1.GetUserRequest
-	8,  // 21: quire.v1.AuthService.UpdateUser:input_type -> quire.v1.UpdateUserRequest
-	10, // 22: quire.v1.AuthService.ChangePassword:input_type -> quire.v1.ChangePasswordRequest
-	12, // 23: quire.v1.AuthService.DeleteUser:input_type -> quire.v1.DeleteUserRequest
-	14, // 24: quire.v1.AuthService.Login:input_type -> quire.v1.LoginRequest
-	16, // 25: quire.v1.AuthService.Logout:input_type -> quire.v1.LogoutRequest
-	18, // 26: quire.v1.AuthService.RefreshSession:input_type -> quire.v1.RefreshSessionRequest
-	20, // 27: quire.v1.AuthService.RequestPasswordRecovery:input_type -> quire.v1.RequestPasswordRecoveryRequest
-	22, // 28: quire.v1.AuthService.ResetPassword:input_type -> quire.v1.ResetPasswordRequest
-	24, // 29: quire.v1.AuthService.RegisterDevice:input_type -> quire.v1.RegisterDeviceRequest
-	26, // 30: quire.v1.AuthService.ListDevices:input_type -> quire.v1.ListDevicesRequest
-	28, // 31: quire.v1.AuthService.UpdateDevice:input_type -> quire.v1.UpdateDeviceRequest
-	30, // 32: quire.v1.AuthService.RevokeDevice:input_type -> quire.v1.RevokeDeviceRequest
-	5,  // 33: quire.v1.AuthService.RegisterUser:output_type -> quire.v1.RegisterUserResponse
-	7,  // 34: quire.v1.AuthService.GetUser:output_type -> quire.v1.GetUserResponse
-	9,  // 35: quire.v1.AuthService.UpdateUser:output_type -> quire.v1.UpdateUserResponse
-	11, // 36: quire.v1.AuthService.ChangePassword:output_type -> quire.v1.ChangePasswordResponse
-	13, // 37: quire.v1.AuthService.DeleteUser:output_type -> quire.v1.DeleteUserResponse
-	15, // 38: quire.v1.AuthService.Login:output_type -> quire.v1.LoginResponse
-	17, // 39: quire.v1.AuthService.Logout:output_type -> quire.v1.LogoutResponse
-	19, // 40: quire.v1.AuthService.RefreshSession:output_type -> quire.v1.RefreshSessionResponse
-	21, // 41: quire.v1.AuthService.RequestPasswordRecovery:output_type -> quire.v1.RequestPasswordRecoveryResponse
-	23, // 42: quire.v1.AuthService.ResetPassword:output_type -> quire.v1.ResetPasswordResponse
-	25, // 43: quire.v1.AuthService.RegisterDevice:output_type -> quire.v1.RegisterDeviceResponse
-	27, // 44: quire.v1.AuthService.ListDevices:output_type -> quire.v1.ListDevicesResponse
-	29, // 45: quire.v1.AuthService.UpdateDevice:output_type -> quire.v1.UpdateDeviceResponse
-	31, // 46: quire.v1.AuthService.RevokeDevice:output_type -> quire.v1.RevokeDeviceResponse
-	33, // [33:47] is the sub-list for method output_type
-	19, // [19:33] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	0,  // 9: quire.v1.ChangeEmailResponse.user:type_name -> quire.v1.User
+	3,  // 10: quire.v1.LoginRequest.device:type_name -> quire.v1.DeviceBinding
+	2,  // 11: quire.v1.LoginResponse.session:type_name -> quire.v1.Session
+	0,  // 12: quire.v1.LoginResponse.user:type_name -> quire.v1.User
+	1,  // 13: quire.v1.LoginResponse.device:type_name -> quire.v1.Device
+	2,  // 14: quire.v1.RefreshSessionResponse.session:type_name -> quire.v1.Session
+	1,  // 15: quire.v1.RegisterDeviceResponse.device:type_name -> quire.v1.Device
+	1,  // 16: quire.v1.ListDevicesResponse.devices:type_name -> quire.v1.Device
+	1,  // 17: quire.v1.UpdateDeviceRequest.device:type_name -> quire.v1.Device
+	35, // 18: quire.v1.UpdateDeviceRequest.update_mask:type_name -> google.protobuf.FieldMask
+	1,  // 19: quire.v1.UpdateDeviceResponse.device:type_name -> quire.v1.Device
+	4,  // 20: quire.v1.AuthService.RegisterUser:input_type -> quire.v1.RegisterUserRequest
+	6,  // 21: quire.v1.AuthService.GetUser:input_type -> quire.v1.GetUserRequest
+	8,  // 22: quire.v1.AuthService.UpdateUser:input_type -> quire.v1.UpdateUserRequest
+	10, // 23: quire.v1.AuthService.ChangePassword:input_type -> quire.v1.ChangePasswordRequest
+	12, // 24: quire.v1.AuthService.ChangeEmail:input_type -> quire.v1.ChangeEmailRequest
+	14, // 25: quire.v1.AuthService.DeleteUser:input_type -> quire.v1.DeleteUserRequest
+	16, // 26: quire.v1.AuthService.Login:input_type -> quire.v1.LoginRequest
+	18, // 27: quire.v1.AuthService.Logout:input_type -> quire.v1.LogoutRequest
+	20, // 28: quire.v1.AuthService.RefreshSession:input_type -> quire.v1.RefreshSessionRequest
+	22, // 29: quire.v1.AuthService.RequestPasswordRecovery:input_type -> quire.v1.RequestPasswordRecoveryRequest
+	24, // 30: quire.v1.AuthService.ResetPassword:input_type -> quire.v1.ResetPasswordRequest
+	26, // 31: quire.v1.AuthService.RegisterDevice:input_type -> quire.v1.RegisterDeviceRequest
+	28, // 32: quire.v1.AuthService.ListDevices:input_type -> quire.v1.ListDevicesRequest
+	30, // 33: quire.v1.AuthService.UpdateDevice:input_type -> quire.v1.UpdateDeviceRequest
+	32, // 34: quire.v1.AuthService.RevokeDevice:input_type -> quire.v1.RevokeDeviceRequest
+	5,  // 35: quire.v1.AuthService.RegisterUser:output_type -> quire.v1.RegisterUserResponse
+	7,  // 36: quire.v1.AuthService.GetUser:output_type -> quire.v1.GetUserResponse
+	9,  // 37: quire.v1.AuthService.UpdateUser:output_type -> quire.v1.UpdateUserResponse
+	11, // 38: quire.v1.AuthService.ChangePassword:output_type -> quire.v1.ChangePasswordResponse
+	13, // 39: quire.v1.AuthService.ChangeEmail:output_type -> quire.v1.ChangeEmailResponse
+	15, // 40: quire.v1.AuthService.DeleteUser:output_type -> quire.v1.DeleteUserResponse
+	17, // 41: quire.v1.AuthService.Login:output_type -> quire.v1.LoginResponse
+	19, // 42: quire.v1.AuthService.Logout:output_type -> quire.v1.LogoutResponse
+	21, // 43: quire.v1.AuthService.RefreshSession:output_type -> quire.v1.RefreshSessionResponse
+	23, // 44: quire.v1.AuthService.RequestPasswordRecovery:output_type -> quire.v1.RequestPasswordRecoveryResponse
+	25, // 45: quire.v1.AuthService.ResetPassword:output_type -> quire.v1.ResetPasswordResponse
+	27, // 46: quire.v1.AuthService.RegisterDevice:output_type -> quire.v1.RegisterDeviceResponse
+	29, // 47: quire.v1.AuthService.ListDevices:output_type -> quire.v1.ListDevicesResponse
+	31, // 48: quire.v1.AuthService.UpdateDevice:output_type -> quire.v1.UpdateDeviceResponse
+	33, // 49: quire.v1.AuthService.RevokeDevice:output_type -> quire.v1.RevokeDeviceResponse
+	35, // [35:50] is the sub-list for method output_type
+	20, // [20:35] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_quire_v1_auth_proto_init() }
@@ -1945,7 +2062,7 @@ func file_quire_v1_auth_proto_init() {
 	file_quire_v1_auth_proto_msgTypes[0].OneofWrappers = []any{}
 	file_quire_v1_auth_proto_msgTypes[1].OneofWrappers = []any{}
 	file_quire_v1_auth_proto_msgTypes[3].OneofWrappers = []any{}
-	file_quire_v1_auth_proto_msgTypes[14].OneofWrappers = []any{
+	file_quire_v1_auth_proto_msgTypes[16].OneofWrappers = []any{
 		(*LoginRequest_LocalName)(nil),
 		(*LoginRequest_Email)(nil),
 	}
@@ -1955,7 +2072,7 @@ func file_quire_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_quire_v1_auth_proto_rawDesc), len(file_quire_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   32,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

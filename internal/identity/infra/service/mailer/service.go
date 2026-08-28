@@ -65,3 +65,17 @@ func (s *Service) SendPasswordRecovery(ctx context.Context, message service.Reco
 
 	return nil
 }
+
+// SendEmailChanged writes the notice where a developer can read it.
+//
+// Nothing here is a credential, so unlike the recovery above this record is
+// harmless — which is worth saying, because it is the reason the two are not
+// treated the same by the refusal in New.
+func (s *Service) SendEmailChanged(ctx context.Context, message service.EmailChangedMessage) error {
+	logging.From(ctx).InfoContext(ctx, "address changed, notice not delivered: this node has no transport",
+		slog.String("previous_email", message.PreviousEmail.String()),
+		slog.String("new_email", message.NewEmail.String()),
+		slog.Time("changed_at", message.ChangedAt))
+
+	return nil
+}

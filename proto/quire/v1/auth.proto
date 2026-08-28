@@ -40,6 +40,22 @@ service AuthService {
   // changing a password takes the old one as well as the new.
   rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
 
+  // UC06, update — the address, which is not one registration field among
+  // others and therefore not part of UpdateUser.
+  //
+  // The address is the channel UC08 recovers an account through, so whoever can
+  // change it can have a recovery credential sent somewhere of their choosing
+  // and then set the password. A session proves that a device is unlocked, not
+  // that the reader is at it, which is exactly why ChangePassword asks for the
+  // current password — and this call asks for it for the same reason. C14 in
+  // docs/tcc-corrections.md is the finding.
+  //
+  // It is its own call rather than a password field on UpdateUserRequest
+  // because a field mask has no way to say "this one field needs a credential":
+  // a request that named display_name and email would either demand a password
+  // for both or accept one for neither.
+  rpc ChangeEmail(ChangeEmailRequest) returns (ChangeEmailResponse);
+
   // UC06, delete. Removes the reader from this node, with everything that
   // cascades from them. It is not a migration: RF17 moves a reader to another
   // origin server and is served by FederationService.MigrateHomeServer.
@@ -177,13 +193,19 @@ message GetUserResponse {
 }
 
 message UpdateUserRequest {
-  // Only display_name and email are writable. Everything else about a reader
-  // is either their identity or derived from it.
+  // Only display_name is writable. Everything else about a reader is either
+  // their identity, derived from it, or — in the single case of the address —
+  // a credential in its own right, changed through ChangeEmail (C14).
   User user = 1;
 
   // Which fields of user to apply. Absence is not emptiness: a client that
   // sends no mask and a client that means to clear a field look identical
   // without one.
+  //
+  // A path this call does not write is refused rather than ignored, and "email"
+  // is now one of them: a client that asked to change the address through here
+  // is asking to go around the password check, and being told so is better than
+  // being answered with a record where it did not change.
   google.protobuf.FieldMask update_mask = 2;
 }
 
@@ -200,6 +222,19 @@ message ChangePasswordRequest {
 }
 
 message ChangePasswordResponse {}
+
+message ChangeEmailRequest {
+  // Proves the session belongs to the reader and not merely to a device left
+  // unlocked, exactly as ChangePassword does — and for a stronger reason, since
+  // this is the field that makes the password replaceable.
+  string password = 1;
+
+  // The address the recovery of UC08 will be sent to from now on.
+  string email = 2;
+}
+message ChangeEmailResponse {
+  User user = 1;
+}
 
 message DeleteUserRequest {
   // For the same reason ChangePassword asks for it.

@@ -528,9 +528,29 @@ Sending a notice to the *previous* address is worth stating alongside it, and is
 survives a compromise: it is how a reader finds out. It needs the delivery component C13 is
 about.
 
-**Status** open, and **not yet implemented** — the use case follows the contract as it stands,
-because the contract has no field to carry the password. The change belongs with the contract
-amendment.
+**Status** settled 2026-08-28: yes, the call that changes the address carries the password.
+Implemented in the amendment the answer requires.
+
+The shape is the second of the two above — a `ChangeEmail` call beside `ChangePassword`,
+rather than a `password` field on `UpdateUserRequest` — for the reason stated when the
+correction was written: a field mask has no way to say that one of its paths needs a
+credential, so a request naming `display_name` and `email` would have to demand a password for
+both or accept one for neither. `email` therefore left `UpdateUser` entirely; a mask that
+carries it is refused, and refused by naming where the check is rather than by reporting an
+unknown path, because a client that asked for it is asking to go around a password check.
+
+The notice to the previous address is implemented with it, and it is the half that survives a
+compromise. The password check stops a device left unlocked for a minute, which is the threat
+the check on `ChangePassword` was written for; it does not stop somebody who learned the
+password, and for them the notice is how the reader finds out at all. It names both addresses —
+a reader told only that their address changed cannot tell whether it was them, and whoever
+reads the previous mailbox either is the reader or already held the channel UC08 recovers
+through. It goes through the queue of C13, so a relay that is down does not turn a write that
+succeeded into a call that failed: the address has already changed by the time the notice is
+attempted, and answering the reader with an error would leave them believing it had not.
+
+That notice is why this correction could not be implemented before C13 was: it needed a
+component that could deliver to an address, and until phase 11 there was none.
 
 ### C15 — UC12 is written as the reader's catalogue, and `servidor` names no reader
 

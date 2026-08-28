@@ -34,6 +34,7 @@ const (
 	AuthService_GetUser_FullMethodName                 = "/quire.v1.AuthService/GetUser"
 	AuthService_UpdateUser_FullMethodName              = "/quire.v1.AuthService/UpdateUser"
 	AuthService_ChangePassword_FullMethodName          = "/quire.v1.AuthService/ChangePassword"
+	AuthService_ChangeEmail_FullMethodName             = "/quire.v1.AuthService/ChangeEmail"
 	AuthService_DeleteUser_FullMethodName              = "/quire.v1.AuthService/DeleteUser"
 	AuthService_Login_FullMethodName                   = "/quire.v1.AuthService/Login"
 	AuthService_Logout_FullMethodName                  = "/quire.v1.AuthService/Logout"
@@ -69,6 +70,21 @@ type AuthServiceClient interface {
 	// UC06, update — the credentials half, which a field mask cannot express:
 	// changing a password takes the old one as well as the new.
 	ChangePassword(ctx context.Context, in *ChangePasswordRequest, opts ...grpc.CallOption) (*ChangePasswordResponse, error)
+	// UC06, update — the address, which is not one registration field among
+	// others and therefore not part of UpdateUser.
+	//
+	// The address is the channel UC08 recovers an account through, so whoever can
+	// change it can have a recovery credential sent somewhere of their choosing
+	// and then set the password. A session proves that a device is unlocked, not
+	// that the reader is at it, which is exactly why ChangePassword asks for the
+	// current password — and this call asks for it for the same reason. C14 in
+	// docs/tcc-corrections.md is the finding.
+	//
+	// It is its own call rather than a password field on UpdateUserRequest
+	// because a field mask has no way to say "this one field needs a credential":
+	// a request that named display_name and email would either demand a password
+	// for both or accept one for neither.
+	ChangeEmail(ctx context.Context, in *ChangeEmailRequest, opts ...grpc.CallOption) (*ChangeEmailResponse, error)
 	// UC06, delete. Removes the reader from this node, with everything that
 	// cascades from them. It is not a migration: RF17 moves a reader to another
 	// origin server and is served by FederationService.MigrateHomeServer.
@@ -148,6 +164,16 @@ func (c *authServiceClient) ChangePassword(ctx context.Context, in *ChangePasswo
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ChangePasswordResponse)
 	err := c.cc.Invoke(ctx, AuthService_ChangePassword_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ChangeEmail(ctx context.Context, in *ChangeEmailRequest, opts ...grpc.CallOption) (*ChangeEmailResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ChangeEmailResponse)
+	err := c.cc.Invoke(ctx, AuthService_ChangeEmail_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -277,6 +303,21 @@ type AuthServiceServer interface {
 	// UC06, update — the credentials half, which a field mask cannot express:
 	// changing a password takes the old one as well as the new.
 	ChangePassword(context.Context, *ChangePasswordRequest) (*ChangePasswordResponse, error)
+	// UC06, update — the address, which is not one registration field among
+	// others and therefore not part of UpdateUser.
+	//
+	// The address is the channel UC08 recovers an account through, so whoever can
+	// change it can have a recovery credential sent somewhere of their choosing
+	// and then set the password. A session proves that a device is unlocked, not
+	// that the reader is at it, which is exactly why ChangePassword asks for the
+	// current password — and this call asks for it for the same reason. C14 in
+	// docs/tcc-corrections.md is the finding.
+	//
+	// It is its own call rather than a password field on UpdateUserRequest
+	// because a field mask has no way to say "this one field needs a credential":
+	// a request that named display_name and email would either demand a password
+	// for both or accept one for neither.
+	ChangeEmail(context.Context, *ChangeEmailRequest) (*ChangeEmailResponse, error)
 	// UC06, delete. Removes the reader from this node, with everything that
 	// cascades from them. It is not a migration: RF17 moves a reader to another
 	// origin server and is served by FederationService.MigrateHomeServer.
@@ -333,6 +374,9 @@ func (UnimplementedAuthServiceServer) UpdateUser(context.Context, *UpdateUserReq
 }
 func (UnimplementedAuthServiceServer) ChangePassword(context.Context, *ChangePasswordRequest) (*ChangePasswordResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ChangePassword not implemented")
+}
+func (UnimplementedAuthServiceServer) ChangeEmail(context.Context, *ChangeEmailRequest) (*ChangeEmailResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ChangeEmail not implemented")
 }
 func (UnimplementedAuthServiceServer) DeleteUser(context.Context, *DeleteUserRequest) (*DeleteUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteUser not implemented")
@@ -453,6 +497,24 @@ func _AuthService_ChangePassword_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).ChangePassword(ctx, req.(*ChangePasswordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ChangeEmail_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ChangeEmailRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ChangeEmail(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ChangeEmail_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ChangeEmail(ctx, req.(*ChangeEmailRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -659,6 +721,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ChangePassword",
 			Handler:    _AuthService_ChangePassword_Handler,
+		},
+		{
+			MethodName: "ChangeEmail",
+			Handler:    _AuthService_ChangeEmail_Handler,
 		},
 		{
 			MethodName: "DeleteUser",

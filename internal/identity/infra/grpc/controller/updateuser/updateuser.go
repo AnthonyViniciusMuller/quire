@@ -19,8 +19,10 @@ const opHandle = "identity/updateuser: handle"
 // CodeUnwritableField is a mask naming a field this call does not write.
 const CodeUnwritableField = "unwritable_field"
 
-// The paths the mask may carry, which are the two fields of a reader that are
-// neither their identity nor derived from it.
+// The paths the mask may carry. The address used to be the second of them and
+// is now ChangeEmail's, per C14 in docs/tcc-corrections.md: it is the channel
+// UC08 recovers an account through, so changing it takes the current password,
+// and a field mask has no way to say that one of its paths needs a credential.
 const (
 	pathDisplayName = "display_name"
 	pathEmail       = "email"
@@ -61,13 +63,19 @@ func (c *UpdateUser) Handle(
 			displayName := request.GetUser().GetDisplayName()
 			input.DisplayName = &displayName
 		case pathEmail:
-			email := request.GetUser().GetEmail()
-			input.Email = &email
+			// Named rather than folded into the default, because a client that
+			// asked for it is asking to go around a password check and should
+			// be told where the check is — not merely that the path is unknown.
+			return nil, errs.New(errs.KindInvalidArgument,
+				"the address is changed through ChangeEmail, which takes the current password").
+				WithOp(opHandle).
+				WithCode(CodeUnwritableField).
+				WithField("update_mask", "it may not carry email")
 		default:
 			return nil, errs.Newf(errs.KindInvalidArgument, "%q is not a field this call writes", path).
 				WithOp(opHandle).
 				WithCode(CodeUnwritableField).
-				WithField("update_mask", "only display_name and email may be changed")
+				WithField("update_mask", "only display_name may be changed")
 		}
 	}
 

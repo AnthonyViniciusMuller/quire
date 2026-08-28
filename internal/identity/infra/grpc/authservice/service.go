@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc"
 
 	quirev1 "github.com/anthonyvsmuller/quire/internal/gen/quire/v1"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/changeemail"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/changepassword"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/deleteuser"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/getuser"
@@ -41,10 +42,12 @@ import (
 type Controllers struct {
 	// RegisterUser serves UC14.
 	RegisterUser *registeruser.RegisterUser
-	// GetUser, UpdateUser, ChangePassword and DeleteUser serve UC06.
+	// GetUser, UpdateUser, ChangePassword, ChangeEmail and DeleteUser serve
+	// UC06.
 	GetUser        *getuser.GetUser
 	UpdateUser     *updateuser.UpdateUser
 	ChangePassword *changepassword.ChangePassword
+	ChangeEmail    *changeemail.ChangeEmail
 	DeleteUser     *deleteuser.DeleteUser
 	// Login, Logout and RefreshSession serve UC07 and what keeps it alive.
 	Login          *login.Login
@@ -106,6 +109,14 @@ func (s *Service) ChangePassword(
 	ctx context.Context, request *quirev1.ChangePasswordRequest,
 ) (*quirev1.ChangePasswordResponse, error) {
 	return s.controllers.ChangePassword.Handle(ctx, request)
+}
+
+// ChangeEmail replaces the address the caller's account is recovered through
+// (UC06, C14).
+func (s *Service) ChangeEmail(
+	ctx context.Context, request *quirev1.ChangeEmailRequest,
+) (*quirev1.ChangeEmailResponse, error) {
+	return s.controllers.ChangeEmail.Handle(ctx, request)
 }
 
 // DeleteUser removes the caller from this node (UC06).

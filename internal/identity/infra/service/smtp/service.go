@@ -42,7 +42,7 @@ import (
 // The operations reported by this file, in the form the errs package expects.
 const (
 	opNew  = "identity/smtp: new"
-	opSend = "identity/smtp: send password recovery"
+	opSend = "identity/smtp: send"
 )
 
 // minimumTLSVersion is what this node will negotiate with a relay. A recovery
@@ -114,24 +114,38 @@ func New(cfg *config.Mail, serverName string) (*Service, error) {
 
 // SendPasswordRecovery submits the credential to the address on record.
 func (s *Service) SendPasswordRecovery(ctx context.Context, message service.RecoveryMessage) error {
-	to := &mail.Address{
-		Name:    message.DisplayName.String(),
-		Address: message.Email.String(),
-	}
+	return s.send(ctx,
+		&mail.Address{Name: message.DisplayName.String(), Address: message.Email.String()},
+		recoverySubject, recoveryBody(message))
+}
 
-	body, err := s.compose(to, message)
+// SendEmailChanged submits the notice to the address that is no longer the one.
+//
+// The recipient is the *previous* address, which is the whole point of the
+// message: it goes to the mailbox the reader is still known to read, about a
+// change made to the one they no longer do.
+func (s *Service) SendEmailChanged(ctx context.Context, message service.EmailChangedMessage) error {
+	return s.send(ctx,
+		&mail.Address{Name: message.DisplayName.String(), Address: message.PreviousEmail.String()},
+		changedSubject, changedBody(message))
+}
+
+// send composes one message and hands it over.
+func (s *Service) send(ctx context.Context, to *mail.Address, subject, body string) error {
+	rendered, err := s.compose(to, subject, body)
 	if err != nil {
 		return err
 	}
 
-	return s.submit(ctx, to.Address, body)
+	return s.submit(ctx, to.Address, rendered)
 }
 
 // compose renders the message, headers and all.
 //
-// The credential is in the body and never in a header, because headers are
-// what a relay logs and what a bounce quotes back.
-func (s *Service) compose(to *mail.Address, message service.RecoveryMessage) ([]byte, error) {
+// Nothing that has to stay secret goes into a header, because headers are what
+// a relay logs and what a bounce quotes back — and a subject line is what a
+// locked screen shows.
+func (s *Service) compose(to *mail.Address, subject, body string) ([]byte, error) {
 	var out strings.Builder
 
 	// Address.String encodes a display name that is not ASCII, which is not a
@@ -164,13 +178,13 @@ func (s *Service) compose(to *mail.Address, message service.RecoveryMessage) ([]
 	// 998 octets RFC 5322 allows, which a display name and a token concatenated
 	// into a sentence would not be guaranteed to.
 	encoder := quotedprintable.NewWriter(&out)
-	if _, err := io.WriteString(encoder, body(message)); err != nil {
-		return nil, errs.Wrap(err, errs.KindInternal, "the recovery message could not be encoded").
+	if _, err := io.WriteString(encoder, body); err != nil {
+		return nil, errs.Wrap(err, errs.KindInternal, "the message could not be encoded").
 			WithOp(opSend)
 	}
 
 	if err := encoder.Close(); err != nil {
-		return nil, errs.Wrap(err, errs.KindInternal, "the recovery message could not be encoded").
+		return nil, errs.Wrap(err, errs.KindInternal, "the message could not be encoded").
 			WithOp(opSend)
 	}
 

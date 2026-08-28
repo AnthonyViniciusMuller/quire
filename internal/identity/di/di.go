@@ -24,6 +24,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/server"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/migratehomeserver"
 	"github.com/anthonyvsmuller/quire/internal/identity/application/service"
+	changeemailusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/changeemail"
 	changepasswordusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/changepassword"
 	deleteuserusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/deleteuser"
 	getuserusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/getuser"
@@ -41,6 +42,7 @@ import (
 	updateuserusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/updateuser"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/authn"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/authservice"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/changeemail"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/changepassword"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/deleteuser"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/getuser"
@@ -153,6 +155,8 @@ func Initialize(
 		UpdateUser:   updateuser.New(updateuserusecase.New(users, localServer, clock)),
 		ChangePassword: changepassword.New(
 			changepasswordusecase.New(users, credentials, hasher, clock, transaction)),
+		ChangeEmail: changeemail.New(
+			changeemailusecase.New(users, hasher, notifier, localServer, clock)),
 		DeleteUser: deleteuser.New(deleteuserusecase.New(users, hasher)),
 		Login: login.New(
 			loginusecase.New(users, devices, credentials, hasher, auth, localServer, clock, transaction)),

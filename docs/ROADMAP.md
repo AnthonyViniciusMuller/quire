@@ -95,7 +95,8 @@ the thesis — corrections to the specification and deliberate divergences from 
 - [x] `feat: add device management use cases`
 - [x] `feat: add user profile use cases` — not in the original plan. UC06 is «CRUD» and the
       contract has `GetUser`, `UpdateUser`, `ChangePassword` and `DeleteUser`; without them
-      the handlers of the next commit would have four methods and no use cases
+      the handlers of the next commit would have four methods and no use cases. A fifth,
+      `ChangeEmail`, was added after phase 11 when C14 was settled
 - [x] `feat: add authentication interceptor`
 - [x] `feat: add auth grpc handlers`
 - [x] `feat: add identity container and wiring` — not in the original plan. The handlers
@@ -542,6 +543,21 @@ the thesis — corrections to the specification and deliberate divergences from 
       the relay — because a reference deployment that does not name its own local
       accommodations is one somebody copies whole
 
+## Phase 12 — answers to the questions phase 5 left open
+
+Not a slice. Each of these implements an answer that was given after phase 11, and each names
+the entry in [`tcc-corrections.md`](tcc-corrections.md) the answer produced.
+
+- [x] `feat: add change email use case with a password check` — C14, settled: the address is
+      the channel UC08 recovers an account through, so whoever can change it can have a
+      recovery sent somewhere of their choosing, and a session proves only that a device is
+      unlocked. The shape is the second of the two C14 named — a `ChangeEmail` call beside
+      `ChangePassword` — because a field mask has no way to say that one of its paths needs a
+      credential. `email` left `UpdateUser` entirely, and a mask still carrying it is refused
+      by naming where the check moved to. The notice to the previous address lands with it and
+      is the half that survives somebody who learned the password; it is also why this could
+      not be implemented before C13 was
+
 ## Design decisions to settle
 
 Questions found while implementing, whose answer belongs in the thesis and must be settled
@@ -549,16 +565,8 @@ before the commit that depends on them. A question stays here only while it is o
 is answered it becomes an entry in [`tcc-corrections.md`](tcc-corrections.md), so that the
 answer travels with the correction it produced rather than with the doubt it started as.
 
-Three are open, all found while implementing phase 5. Each names what the answer changes, so
+Two are open, both found while implementing phase 5. Each names what the answer changes, so
 that answering it is a decision rather than an archaeology.
-
-**Should the contract carry a password on the call that changes an address?** C13 aside, this
-is the one with a security consequence: a session may change the address, the address is the
-channel UC08 recovers an account through, so a device left unlocked for a minute is an account
-takeover — and the specification already applies the check that would stop it, to the password
-and not to the field that makes the password replaceable. C14 has the two shapes the fix can
-take. It is not implemented, because `UpdateUserRequest` has no field to carry the password;
-answering this is a contract amendment and the check that follows it.
 
 **Is the reuse trade of D07 the right way round?** A device whose reply was lost on a mobile
 network retries with the credential it still holds and is logged out for it, which on an
@@ -572,15 +580,18 @@ reasoning that a reader who changes their password is responding to a suspicion.
 calling device is implementable — the access token names it — and needs one more statement on
 the credential repository.
 
-Three have been settled since. Whether `updated_at` could break ties as a wall clock, on
+Four have been settled since. Whether `updated_at` could break ties as a wall clock, on
 2026-08-26: it cannot, and it becomes a hybrid logical clock — the counterexample and the
 argument are in C01. Whether a node with no way to deliver a recovery should start at all, on
 2026-08-28: the question was the wrong way round, and the missing component was built instead —
 the transport and the queue are both in C13, which is now settled, and 4.3 gains a component.
-And whether the integration suite should have a container library start its dependencies, on
-2026-08-27: it should not, and phase 7 confirmed it rather than reopening it. That last one
-leaves no entry in [`tcc-corrections.md`](tcc-corrections.md), because it is a question about
-this project's tooling and not about the specification — the suite now needs a MinIO as well as a
+Whether the call that changes an address should carry the password, on 2026-08-28: it should,
+and C14 records the amendment — a `ChangeEmail` call beside `ChangePassword`, since a field
+mask cannot say that one of its paths needs a credential, plus the notice to the previous
+address that the transport of C13 finally made possible. And whether the integration suite should have a container library start its
+dependencies, on 2026-08-27: it should not, and phase 7 confirmed it rather than reopening it.
+That last one leaves no entry in [`tcc-corrections.md`](tcc-corrections.md), because it is a
+question about this project's tooling and not about the specification — the suite now needs a MinIO as well as a
 PostgreSQL, `make test-up` brings both up, and the 87 modules testcontainers costs are
 still 87 modules.
 

@@ -65,12 +65,11 @@ func TestExecute(t *testing.T) {
 	f := newFixture(t)
 	f.clock.Advance(time.Hour)
 
-	name, address := "  Anthony Muller ", "anthony@other.test"
+	name := "  Anthony Muller "
 
 	output, err := f.usecase.Execute(t.Context(), updateuser.Input{
 		UserID:      f.reader.ID,
 		DisplayName: &name,
-		Email:       &address,
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -79,8 +78,8 @@ func TestExecute(t *testing.T) {
 	switch {
 	case output.User.DisplayName != "Anthony Muller":
 		t.Errorf("DisplayName = %q, want it trimmed", output.User.DisplayName)
-	case output.User.Email != "anthony@other.test":
-		t.Errorf("Email = %q, want the new one", output.User.Email)
+	case output.User.Email != f.reader.Email:
+		t.Error("the address changed, and this call no longer writes it (C14)")
 	case output.User.LocalName != f.reader.LocalName:
 		t.Error("the local name changed, and it is half the identifier RN09 makes unique")
 	case !output.User.UpdatedAt.After(f.reader.UpdatedAt):
@@ -90,74 +89,30 @@ func TestExecute(t *testing.T) {
 	}
 }
 
-// TestExecuteLeavesTheFieldsItWasNotGiven is what the pointers are for: absence
-// is not emptiness.
-func TestExecuteLeavesTheFieldsItWasNotGiven(t *testing.T) {
+// TestExecuteRefusesADisplayNameTheDomainWill keeps a request the entity would
+// reject from reaching the repository at all.
+func TestExecuteRefusesADisplayNameTheDomainWill(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	name := "Anthony M."
+	name := "   "
 
-	output, err := f.usecase.Execute(t.Context(), updateuser.Input{UserID: f.reader.ID, DisplayName: &name})
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	if output.User.Email != f.reader.Email {
-		t.Errorf("Email = %q, want it left alone", output.User.Email)
-	}
-}
-
-// TestExecuteWritesNothingWhenOneFieldIsBad keeps a request with one good field
-// and one bad one from changing half the record.
-func TestExecuteWritesNothingWhenOneFieldIsBad(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	name, address := "Anthony M.", "not an address"
-
-	_, err := f.usecase.Execute(t.Context(), updateuser.Input{
-		UserID:      f.reader.ID,
-		DisplayName: &name,
-		Email:       &address,
-	})
+	_, err := f.usecase.Execute(t.Context(), updateuser.Input{UserID: f.reader.ID, DisplayName: &name})
 	if err == nil {
-		t.Fatal("Execute with an address that is not one = nil, want an error")
+		t.Fatal("Execute with a blank name = nil, want an error")
 	}
 
 	if !errors.Is(err, errs.KindInvalidArgument) {
 		t.Errorf("error = %v, want an invalid argument", err)
 	}
 
-	stored, err := f.users.GetByID(t.Context(), f.reader.ID)
-	if err != nil {
-		t.Fatalf("the reader: %v", err)
+	stored, storedErr := f.users.GetByID(t.Context(), f.reader.ID)
+	if storedErr != nil {
+		t.Fatalf("the reader: %v", storedErr)
 	}
 
 	if stored.DisplayName != f.reader.DisplayName {
 		t.Errorf("DisplayName = %q, want the record unchanged", stored.DisplayName)
-	}
-}
-
-// TestExecuteRefusesAnAddressAlreadyRegistered is RN09 on the update path: the
-// address is unique within the origin server however it got there.
-func TestExecuteRefusesAnAddressAlreadyRegistered(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	address := "TAKEN@example.test"
-
-	_, err := f.usecase.Execute(t.Context(), updateuser.Input{UserID: f.reader.ID, Email: &address})
-	if err == nil {
-		t.Fatal("taking another reader's address = nil, want an error")
-	}
-
-	if !errors.Is(err, errs.KindAlreadyExists) {
-		t.Errorf("error = %v, want already exists", err)
-	}
-
-	if code := errs.CodeOf(err); code != user.CodeEmailRegistered {
-		t.Errorf("code = %q, want %q", code, user.CodeEmailRegistered)
 	}
 }
 
