@@ -1,14 +1,16 @@
 //go:build integration
 
-// Package integration_test exercises the identity slice against a real
-// PostgreSQL: the statements, the indexes, the transactions and the whole gRPC
-// surface over a real listener.
+// Package integration_test exercises the node's slices against a real
+// PostgreSQL and a real object store: the statements, the indexes, the
+// constraints, the transactions and the whole gRPC surface over a real
+// listener.
 //
-// What it covers is what a unit test cannot. The doubles in
-// internal/identity/application/apptest imitate the two uniqueness rules of
-// RN09 and the consume-once semantics of a credential, and an imitation is
-// exactly as good as the reading it was written from — these tests are what
-// checks that reading against the database.
+// What it covers is what a unit test cannot. Every slice's application/apptest
+// holds doubles that imitate a rule the database owns — the two uniqueness
+// rules of RN09, the consume-once semantics of a credential, the pair
+// constraints of C05 and C06, the order an index returns a page in — and an
+// imitation is exactly as good as the reading it was written from. These tests
+// are what checks that reading against the database.
 //
 // The database is supplied rather than started. QUIRE_TEST_DATABASE_URL has to
 // point at one, and the tests fail rather than skip when it does not: a skipped

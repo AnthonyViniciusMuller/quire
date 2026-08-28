@@ -221,7 +221,10 @@ the thesis — corrections to the specification and deliberate divergences from 
       in this contract carries a mask over an entity that reconciles per field, and the
       rendering of a `crdt.Revision` on the wire, which becomes `internal/shared/crdtpb` —
       the compaction rule is the one that would drift
-- [ ] `test: add integration tests for reading service`
+- [x] `test: add integration tests for reading service` — against the same supplied
+      PostgreSQL as phases 5, 6 and 7. The keyset walk edits a mark it has already returned
+      and still sees every mark exactly once, which is what ordering by the identifier buys
+      and what `updated_at` would have cost
 
 ## Phase 9 — sync slice (UC09–11, UC16)
 
