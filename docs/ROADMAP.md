@@ -563,24 +563,28 @@ the entry in [`tcc-corrections.md`](tcc-corrections.md) the answer produced.
       to a suspicion, and the session that survived would be the one they suspect. Sparing the
       calling device is implementable and was refused on purpose — a rule with an exception in
       it is not one a reader can act on without being told how it works
+- [x] `docs: settle the refresh credential reuse trade` — D07, settled: it is the right way
+      round, and no code changes. Reuse of a spent refresh credential ends the device's
+      sessions, per the OAuth 2.0 Security BCP, and the false positive it costs — a device
+      whose reply was lost on a mobile network is logged out — is priced rather than hidden.
+      The grace window that would remove it was refused on its own terms: it needs
+      `token_acesso` to record which credential replaced which, which Appendix A has no
+      attribute for, and its length would be a number chosen by feel — too short to help the
+      network it is for, or long enough to be the reuse it is meant to tell apart from an
+      accident. This was the last question phase 5 left open
 
-## Design decisions to settle
+## Design decisions settled
 
-Questions found while implementing, whose answer belongs in the thesis and must be settled
-before the commit that depends on them. A question stays here only while it is open; once it
-is answered it becomes an entry in [`tcc-corrections.md`](tcc-corrections.md), so that the
-answer travels with the correction it produced rather than with the doubt it started as.
+Questions found while implementing, whose answer belongs in the thesis and had to be settled
+before the commit that depended on them. A question stayed here only while it was open; once
+answered it became an entry in [`tcc-corrections.md`](tcc-corrections.md), so that the answer
+travels with the correction it produced rather than with the doubt it started as.
 
-One is open, found while implementing phase 5. It names what the answer changes, so that
-answering it is a decision rather than an archaeology.
+**None is open.** The list below is what was asked and what was decided, kept because the
+questions are part of the record: an answer with no question in front of it reads as an
+assumption.
 
-**Is the reuse trade of D07 the right way round?** A device whose reply was lost on a mobile
-network retries with the credential it still holds and is logged out for it, which on an
-offline-first system is not rare. The implementation follows the OAuth 2.0 Security BCP; the
-alternative — a grace window — needs `token_acesso` to record which credential replaced it,
-which is a change to Appendix A.
-
-Five have been settled since. Whether `updated_at` could break ties as a wall clock, on
+Six have been settled. Whether `updated_at` could break ties as a wall clock, on
 2026-08-26: it cannot, and it becomes a hybrid logical clock — the counterexample and the
 argument are in C01. Whether a node with no way to deliver a recovery should start at all, on
 2026-08-28: the question was the wrong way round, and the missing component was built instead —
@@ -597,6 +601,13 @@ That last one leaves no entry in [`tcc-corrections.md`](tcc-corrections.md), bec
 question about this project's tooling and not about the specification — the suite now needs a MinIO as well as a
 PostgreSQL, `make test-up` brings both up, and the 87 modules testcontainers costs are
 still 87 modules.
+
+And, last, whether the reuse trade of D07 is the right way round, on 2026-08-28: it is, and
+the cost is accepted as stated. A device logged out because its reply was lost on a mobile
+network pays one re-authentication; a grace window would be a stolen credential that keeps
+working for the length of the window, which is the one property rotation exists to remove — and
+its length would be a number chosen by feel. The window was refused on those terms rather than
+on principle, and D07 now records both the choice and the false positive it is known to cost.
 
 ## Divergences from the thesis specification
 

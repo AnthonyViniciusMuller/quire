@@ -14,8 +14,10 @@ The document has two parts, because the two need different work in the text:
   which is what subsection 4.2.4 exists for.
 
 Open questions that block a specific commit are not here: they live under
-[Design decisions to settle](ROADMAP.md#design-decisions-to-settle) in the roadmap until
-they are answered, and become an entry here once they are.
+[Design decisions settled](ROADMAP.md#design-decisions-settled) in the roadmap until they are
+answered, and become an entry here once they are. That section currently holds none open, and
+keeps the questions beside their answers — an answer with no question in front of it reads as
+an assumption.
 
 **When you find another one, append it here.** The finding is worth as much as the code, and
 it is lost the moment it stays in a commit message.
@@ -1017,7 +1019,21 @@ already exchanged for — requires the credential to record which credential rep
 is judged the wrong way round; the cost of the choice as made is one re-authentication, and
 the cost of not making it is a stolen credential that works for thirty days.
 
-**Status** open. Implemented in the refresh use case of phase 5.
+**Status** settled 2026-08-28: the trade is the right way round, and the cost is accepted as
+stated. A device logged out because its reply was lost is a re-authentication; a grace window
+would be a stolen credential that keeps working for the length of the window, which is the one
+property rotation exists to remove.
+
+The window was considered and refused on its own terms rather than on principle. It needs
+`token_acesso` to record which credential replaced which — an attribute Appendix A does not
+have — so it is a change to the MER and not only to a use case, and its length would be a
+number chosen by feel: too short to help the mobile network it is for, or long enough to be
+the very reuse it is meant to distinguish from an accident. What the implementation does
+instead is stated rather than hidden, which is what this entry is for: 4.2.4 records that
+reuse of a spent refresh credential ends the device's sessions, and that the false positive is
+known and priced.
+
+Implemented in the refresh use case of phase 5, unchanged by the answer.
 
 ### D09 — changing a password ends the session that changed it
 
