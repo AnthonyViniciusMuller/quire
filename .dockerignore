@@ -1,0 +1,16 @@
+# What never belongs in the build context.
+#
+# The context is sent to the daemon before anything is built, so a directory
+# here is a directory copied on every build — and two of these are worse than
+# slow. bin holds the pinned tools and the compiled binaries of the host, which
+# would be copied over the ones the build produces; deploy/docker/certs holds
+# the development signing keys, which have no business inside an image.
+
+.git
+.github
+bin
+deploy/docker/certs
+docs
+test
+*.md
+LICENSE

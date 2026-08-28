@@ -8,6 +8,15 @@ COMPOSE_FILE    := deploy/docker/compose.yaml
 DEV_CERTS       := $(CURDIR)/deploy/docker/certs
 DEV_DOMAINS     := quire-a.example quire-b.example
 KIND_CLUSTER    ?= quire
+
+# The image the manifests refer to. The tag is the description of the working
+# tree rather than `latest`, so that a pod can be traced back to a commit and so
+# that two deployments of two builds are two tags — which `latest` makes
+# impossible exactly when it matters.
+IMAGE_REGISTRY  ?= ghcr.io/anthonyvsmuller
+IMAGE_NAME      ?= quired
+IMAGE_TAG       ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+IMAGE           := $(IMAGE_REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
 DATABASE_URL    ?= postgres://quire:quire@localhost:5432/quire?sslmode=disable
 MIGRATIONS      := $(CURDIR)/migrations
 
@@ -45,6 +54,27 @@ help:
 build:
 	$(GO) build -trimpath -o $(BIN)/quired ./cmd/quired
 	$(GO) build -trimpath -o $(BIN)/quirectl ./cmd/quirectl
+
+## image: build the cluster image of the node, tagged as the manifests expect
+#
+# The cluster stage and not the compose one: no shell, no package manager, and
+# nothing to bind a privileged port with, because in a cluster the address a
+# peer resolves belongs to the gateway.
+#
+# --load because the default buildx driver keeps its result in the build cache,
+# and an image `kind load` cannot find in the local daemon is an image the
+# cluster never sees.
+.PHONY: image
+image:
+	docker build --target cluster --load \
+		--build-arg VERSION="$(IMAGE_TAG)" \
+		--build-arg REVISION="$$(git rev-parse HEAD 2>/dev/null || echo unknown)" \
+		-f deploy/docker/Dockerfile -t $(IMAGE) .
+
+## image-name: print the tag the manifests refer to
+.PHONY: image-name
+image-name:
+	@echo $(IMAGE)
 
 ## run: run the node server against the local environment
 .PHONY: run

@@ -62,6 +62,11 @@ x-node: &node
   build:
     context: ../..
     dockerfile: deploy/docker/Dockerfile
+    # The Alpine stage, and not the distroless one the manifests deploy: the
+    # nodes here are found by a domain that carries no port, so they answer
+    # discovery on 80 and need the capability to bind it. In a cluster that
+    # address belongs to the gateway.
+    target: compose
   volumes:
     - ./certs:/etc/quire/tls:ro,z
   networks: [quire]

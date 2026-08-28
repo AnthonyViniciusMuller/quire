@@ -435,11 +435,21 @@ the thesis — corrections to the specification and deliberate divergences from 
       call that blocked would take longest when the node is least able to deliver anything, and
       what was already accepted is drained when the node is asked to stop. It is not durable
       and does not claim to be
-- [ ] `build: add container image for the node server` — phase 10 already built one, in
+- [x] `build: add container image for the node server` — phase 10 already built one, in
       [`deploy/docker/Dockerfile`](../deploy/docker/Dockerfile), because a compose file that
       cannot build the node is not a federation. What is left here is whatever a cluster
-      needs of it that a laptop does not: a base without a shell if the deployment wants
-      one, the labels, and the tag the manifests refer to
+      needs of it that a laptop does not, and it turned out to be a second runtime stage
+      rather than a compromise between the two: the laptop image is Alpine because a node
+      found by a domain alone answers discovery on 80 and binding 80 unprivileged needs a
+      capability, which needs libcap to set; the cluster image is distroless with no shell
+      and nothing to bind 80 with, because there the address a peer resolves belongs to the
+      gateway and the pod listens on 8080. Both carry the same binary from the same build
+      stage. The labels are the OCI set, with the version and the revision filled in by
+      `make image`, and the tag is `git describe` rather than `latest` — a pod that cannot
+      be traced back to a commit is a pod nobody can debug, which is what `latest` guarantees
+      exactly when it matters. `.dockerignore` lands with it: the context carried `bin`,
+      which would have copied the host'"'"'s binaries over the ones the build produces, and
+      `deploy/docker/certs`, which has no business inside an image
 - [ ] `build: add kustomize base manifests`
 - [ ] `build: add istio gateway and authentication policies` — the three paths of the HTTP
       listener need different policies: `/.well-known` has to stay reachable by strangers,
