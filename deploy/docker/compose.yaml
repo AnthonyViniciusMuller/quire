@@ -93,6 +93,12 @@ services:
   db-a:
     <<: *database
     container_name: quire-db-a
+    ports:
+      # Published for the end-to-end suite, which needs one thing out of a
+      # peer's database that the contract has no call for — C22 in
+      # docs/tcc-corrections.md — and for anybody who wants to look at what a
+      # node actually stored.
+      - "127.0.0.1:15432:5432"
 
   storage-a:
     <<: *storage
@@ -162,6 +168,8 @@ services:
   db-b:
     <<: *database
     container_name: quire-db-b
+    ports:
+      - "127.0.0.1:25432:5432"
 
   storage-b:
     <<: *storage

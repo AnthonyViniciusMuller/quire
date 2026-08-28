@@ -741,6 +741,13 @@ first and pushes — the online path is the convenience, not the mechanism.
 
 **Status** open. Found while implementing phase 9. Nothing in the code implements it yet.
 
+Phase 10 saw it from outside the node, which is worth recording because it is what a reader
+would see. In the end-to-end suite a work registered by one device through `CreateEbook` is
+readable by every device of that reader and appears in no page any of them pulls: the
+collection is right, the log has never heard of it, and the two disagree silently.
+`TestAChangeMadeWhileConnectedReachesNoLog` pins that, so the day the outbox lands it is the
+test that fails and says so.
+
 ## Divergences
 
 Deliberate departures from a specification that is internally consistent. Subsection 4.2.4

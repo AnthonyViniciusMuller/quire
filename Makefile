@@ -144,10 +144,27 @@ test-storage-up:
 test-storage-down:
 	docker rm -f $(TEST_STORAGE_CONTAINER)
 
+# The end-to-end suite drives the federation `make dev-up` starts: the nodes on
+# the ports compose published, the certificates `make dev-certs` generated, and
+# the databases behind them — which one test needs for the state the contract
+# has no call to establish, per C22 in docs/tcc-corrections.md.
+TEST_NODE_A              ?= 127.0.0.1:19090
+TEST_NODE_B              ?= 127.0.0.1:29090
+TEST_NODE_A_CA           ?= $(DEV_CERTS)/quire-a.example.crt.pem
+TEST_NODE_B_CA           ?= $(DEV_CERTS)/quire-b.example.crt.pem
+TEST_NODE_A_DATABASE_URL ?= postgres://quire:quire@127.0.0.1:15432/quire?sslmode=disable
+TEST_NODE_B_DATABASE_URL ?= postgres://quire:quire@127.0.0.1:25432/quire?sslmode=disable
+
 ## test-e2e: end-to-end tests against the two federated nodes
 .PHONY: test-e2e
 test-e2e:
-	$(GO) test -tags=e2e -timeout=20m ./test/e2e/...
+	QUIRE_TEST_NODE_A="$(TEST_NODE_A)" \
+	QUIRE_TEST_NODE_B="$(TEST_NODE_B)" \
+	QUIRE_TEST_NODE_A_CA="$(TEST_NODE_A_CA)" \
+	QUIRE_TEST_NODE_B_CA="$(TEST_NODE_B_CA)" \
+	QUIRE_TEST_NODE_A_DATABASE_URL="$(TEST_NODE_A_DATABASE_URL)" \
+	QUIRE_TEST_NODE_B_DATABASE_URL="$(TEST_NODE_B_DATABASE_URL)" \
+		$(GO) test -tags=e2e -timeout=20m -count=1 ./test/e2e/...
 
 ## test-kind: end-to-end tests inside the kind cluster
 .PHONY: test-kind

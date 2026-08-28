@@ -370,7 +370,18 @@ the thesis — corrections to the specification and deliberate divergences from 
       have caught it: its peer-facing test calls with a device's session, which passes the
       interceptor and is refused by the handler, so what it pinned was the second refusal
       and never the first. The test that replaces it calls with no token at all
-- [ ] `test: add end to end suite for offline reconciliation`
+- [x] `test: add end to end suite for offline reconciliation` — against the federation
+      `make dev-up` starts, supplied rather than started for the reason the integration
+      suite's database is, and driving `internal/client` in process: what it shows is what a
+      suite with one node in one process cannot, since two devices there would be one clock.
+      Each test registers a reader of its own and resets nothing, because the federation is
+      long-lived and shared with the demonstration. The reconciliation test makes the order
+      wrong on purpose — the later write pushed first — and both devices still converge on
+      the write that wins on `(updated_at, device_id)`, which is C01 checked from the far
+      end rather than from a property test. Two of the five tests had to be written around
+      C21 and one of them pins it: a work created through the connected path is readable by
+      every device and appears in no page any of them pulls, so the suite that would have
+      shown a cursor moving had to author its work offline first
 - [ ] `test: add end to end suite for cross node replication`
 - [ ] `test: add end to end suite for home server migration`
 
