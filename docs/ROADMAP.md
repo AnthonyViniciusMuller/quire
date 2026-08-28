@@ -266,7 +266,16 @@ the thesis — corrections to the specification and deliberate divergences from 
       told it about. An empty page leaves the cursor where the caller had it, since
       answering with a zero would send a device that had drained the log back to its
       beginning
-- [ ] `feat: add bidirectional sync stream handler`
+- [x] `feat: add bidirectional sync stream handler` — three calls, the slice's
+      `di.Container`, and the in-process hub that makes the stream a stream rather than a
+      poll: the call that grows a reader's log wakes the streams waiting on it, and a poll
+      is the backstop for what the hub cannot reach across two replicas of this node.
+      Neither is load-bearing — a stream that missed both leaves the device with a cursor,
+      which is the property C08 exists to give. `SyncAck` is given the function the contract
+      describes: the node keeps at most one page in flight, because an operation written to
+      a socket is not an operation written to disk. `ReplicateOperations` stays Unimplemented
+      until the next commit, and a test names it so that it is a decision rather than an
+      omission
 - [ ] `feat: add replication worker for authorized nodes`
 - [ ] `feat: add node to node replication handler with mtls`
 - [ ] `feat: add home server migration use case`

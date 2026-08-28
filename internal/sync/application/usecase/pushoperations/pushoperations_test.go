@@ -24,6 +24,7 @@ type fixture struct {
 	records *apptest.Records
 	clock   *apptest.Clock
 	tx      *apptest.Transaction
+	changes *apptest.Changes
 
 	reader uuid.UUID
 	phone  uuid.UUID
@@ -35,13 +36,15 @@ func newFixture() *fixture {
 	records := apptest.NewRecords()
 	clock := apptest.NewClock(authored)
 	tx := apptest.NewTransaction(log)
+	changes := apptest.NewChanges()
 
 	return &fixture{
-		usecase: pushoperations.New(log, records, clock, tx),
+		usecase: pushoperations.New(log, records, clock, tx, changes),
 		log:     log,
 		records: records,
 		clock:   clock,
 		tx:      tx,
+		changes: changes,
 		reader:  uuid.New(),
 		phone:   uuid.New(),
 		tablet:  uuid.New(),
@@ -319,5 +322,51 @@ func TestExecuteAnswersAnEmptyBatchWithTheHeadOfTheLog(t *testing.T) {
 
 	if len(output.Results) != 0 || output.LastPosition != 1 {
 		t.Errorf("Execute = %+v, want no verdicts and the head of the log", output)
+	}
+}
+
+// A change made on one device has to reach the reader's other devices as it
+// happens rather than at the next poll, and the only call that knows the log
+// grew is the one that grew it.
+func TestExecuteWakesTheReadersOpenStreams(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture()
+	change := f.change(f.phone, 1)
+
+	if _, err := f.usecase.Execute(t.Context(), f.input(change)); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if announced := f.changes.Announced(); len(announced) != 1 || announced[0] != f.reader {
+		t.Fatalf("the hub was told about %v, want the reader whose log grew", announced)
+	}
+
+	// A batch that grew nothing wakes nobody: every change in it was already
+	// here, so a stream that looked would find what it already has.
+	if _, err := f.usecase.Execute(t.Context(), f.input(change)); err != nil {
+		t.Fatalf("the second push: %v", err)
+	}
+
+	if announced := f.changes.Announced(); len(announced) != 1 {
+		t.Errorf("the hub was told about %d pushes, want only the one that grew the log", len(announced))
+	}
+}
+
+// A superseded change grew the log as surely as an applied one did: it is
+// stored, it has a position, and a device pulling from here has to be given it.
+func TestExecuteWakesTheStreamsForASupersededChangeToo(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture()
+	change := f.change(f.phone, 1)
+	f.records.Answer(change.ID, operation.Superseded())
+
+	if _, err := f.usecase.Execute(t.Context(), f.input(change)); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if announced := f.changes.Announced(); len(announced) != 1 {
+		t.Errorf("the hub was told about %d pushes, want the superseded change counted", len(announced))
 	}
 }

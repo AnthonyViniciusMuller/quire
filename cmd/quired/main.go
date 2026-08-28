@@ -33,6 +33,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/shared/metrics"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 	"github.com/anthonyvsmuller/quire/internal/shared/wellknown"
+	syncdi "github.com/anthonyvsmuller/quire/internal/sync/di"
 )
 
 func main() {
@@ -117,6 +118,19 @@ func run(ctx context.Context) error {
 	// imports the other's container.
 	reading := readingdi.Initialize(pool, library.Ebooks, clock)
 
+	// Last, because it writes through both of them: the records that replicate
+	// belong to the library and reading slices, and the reconciler reaches
+	// every one of them through the repository its own slice declares. Wiring
+	// that is this file's job — the sync slice imports no container but its
+	// own.
+	synchronization := syncdi.Initialize(pool, clock, &syncdi.Records{
+		Works:     library.Ebooks,
+		Groupings: library.Collections,
+		Filings:   library.Memberships,
+		Marks:     reading.Annotations,
+		Positions: reading.Progress,
+	})
+
 	grpcServer, err := grpcx.New(ctx, &cfg.Server,
 		grpcx.WithChain(grpcx.NewChain(logger).Around(registry.GRPCServerInterceptors())),
 		// Nearest the handler, and after the chain above on purpose. A call it
@@ -142,6 +156,7 @@ func run(ctx context.Context) error {
 	federation.Service.Register(grpcServer.Registrar())
 	library.Service.Register(grpcServer.Registrar())
 	reading.Service.Register(grpcServer.Registrar())
+	synchronization.Service.Register(grpcServer.Registrar())
 
 	// After every service is registered, so that a method nobody has called
 	// yet still has a series rather than appearing the first time it fails.

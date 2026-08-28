@@ -32,6 +32,8 @@ import (
 	listprogressusecase "github.com/anthonyvsmuller/quire/internal/reading/application/usecase/listprogress"
 	updateannotationusecase "github.com/anthonyvsmuller/quire/internal/reading/application/usecase/updateannotation"
 	updateprogressusecase "github.com/anthonyvsmuller/quire/internal/reading/application/usecase/updateprogress"
+	"github.com/anthonyvsmuller/quire/internal/reading/domain/annotation"
+	"github.com/anthonyvsmuller/quire/internal/reading/domain/progress"
 	"github.com/anthonyvsmuller/quire/internal/reading/infra/grpc/controller/createannotation"
 	"github.com/anthonyvsmuller/quire/internal/reading/infra/grpc/controller/deleteannotation"
 	"github.com/anthonyvsmuller/quire/internal/reading/infra/grpc/controller/getannotation"
@@ -52,6 +54,14 @@ import (
 type Container struct {
 	// Service is the gRPC surface of the slice, ready to be registered.
 	Service *readingservice.Service
+
+	// Annotations and Progress are what replicates through this slice. The
+	// sync slice's reconciler writes both, and it reaches them through the
+	// ports this slice declares rather than through statements of its own —
+	// which is what keeps the two entities reconciling differently (C05) in
+	// the packages that say so.
+	Annotations annotation.Repository
+	Progress    progress.Repository
 }
 
 // Initialize builds the slice over the node's connection pool and the library
@@ -80,5 +90,9 @@ func Initialize(pool *pgxpool.Pool, library libraryebook.Repository, stamps *hlc
 			listprogressusecase.New(positions, works)),
 	}
 
-	return &Container{Service: readingservice.New(&controllers)}
+	return &Container{
+		Service:     readingservice.New(&controllers),
+		Annotations: marks,
+		Progress:    positions,
+	}
 }

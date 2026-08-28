@@ -42,6 +42,7 @@ type PushOperations struct {
 	records service.Records
 	clock   service.Clock
 	tx      service.Transaction
+	changes service.Changes
 }
 
 // PushOperations satisfies the shape every use case of the slice has.
@@ -53,8 +54,9 @@ func New(
 	records service.Records,
 	clock service.Clock,
 	tx service.Transaction,
+	changes service.Changes,
 ) *PushOperations {
-	return &PushOperations{log: log, records: records, clock: clock, tx: tx}
+	return &PushOperations{log: log, records: records, clock: clock, tx: tx, changes: changes}
 }
 
 // Execute stores and reconciles the batch, and answers with one verdict per
@@ -71,6 +73,7 @@ func (p *PushOperations) Execute(ctx context.Context, input Input) (Output, erro
 	}
 
 	results := make([]operation.Result, 0, len(input.Operations))
+	grew := false
 
 	for index := range input.Operations {
 		result, err := p.ingest(ctx, input.UserID, &input.Operations[index])
@@ -78,7 +81,21 @@ func (p *PushOperations) Execute(ctx context.Context, input Input) (Output, erro
 			return Output{}, err
 		}
 
+		// A superseded change grew the log as surely as an applied one did: it
+		// is stored, it has a position, and a device pulling from here has to
+		// be given it. A duplicate and a rejection did not.
+		if result.Outcome == operation.OutcomeApplied || result.Outcome == operation.OutcomeSuperseded {
+			grew = true
+		}
+
 		results = append(results, result)
+	}
+
+	// After the batch and not inside it, and after the changes are committed:
+	// a stream woken while the transaction was still open would read the log
+	// and find nothing, and then not be woken again.
+	if grew {
+		p.changes.Announce(input.UserID)
 	}
 
 	head, err := p.log.Head(ctx, input.UserID)

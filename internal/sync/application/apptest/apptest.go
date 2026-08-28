@@ -356,3 +356,33 @@ func (r *OperationRepository) restore(held []uuid.UUID) {
 		})
 	}
 }
+
+// Changes records what was announced, so that a test can assert that a stream
+// would have been woken — and, more usefully, that it would not have been for a
+// batch that grew nothing.
+type Changes struct {
+	mu        sync.Mutex
+	announced []uuid.UUID
+}
+
+// Changes satisfies the port the use cases hold.
+var _ service.Changes = (*Changes)(nil)
+
+// NewChanges returns a hub that records.
+func NewChanges() *Changes { return &Changes{} }
+
+// Announce records the reader.
+func (c *Changes) Announce(userID uuid.UUID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.announced = append(c.announced, userID)
+}
+
+// Announced is every reader announced, in order.
+func (c *Changes) Announced() []uuid.UUID {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return slices.Clone(c.announced)
+}

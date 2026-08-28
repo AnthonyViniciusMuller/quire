@@ -38,7 +38,9 @@ import (
 	updatecollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/updatecollection"
 	updateebookusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/updateebook"
 	uploadcontentusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/uploadcontent"
+	"github.com/anthonyvsmuller/quire/internal/library/domain/collection"
 	"github.com/anthonyvsmuller/quire/internal/library/domain/ebook"
+	"github.com/anthonyvsmuller/quire/internal/library/domain/membership"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/addebooktocollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/createcollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/createebook"
@@ -83,6 +85,14 @@ type Container struct {
 	// reading position is: both of its tables reference a work and neither
 	// references a reader.
 	Ebooks ebook.Repository
+
+	// Collections and Memberships are the rest of what replicates through this
+	// slice. The sync slice's reconciler writes all three, and it reaches each
+	// of them through the port its own slice declares rather than through a
+	// statement of its own — which is what keeps the tombstone rule, the
+	// ownership check and the stamping in the package that has them.
+	Collections collection.Repository
+	Memberships membership.Repository
 
 	// closer releases what the object store client holds, when it holds
 	// anything. Only one of the three adapters does.
@@ -157,9 +167,11 @@ func Initialize(
 	}
 
 	return &Container{
-		Service: libraryservice.New(&controllers),
-		Ebooks:  works,
-		closer:  closer,
+		Service:     libraryservice.New(&controllers),
+		Ebooks:      works,
+		Collections: collections,
+		Memberships: memberships,
+		closer:      closer,
 	}, nil
 }
 
