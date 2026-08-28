@@ -24,6 +24,8 @@ spec:
       labels:
         app.kubernetes.io/name: quire
         app.kubernetes.io/component: storage
+        app: quire-storage
+        version: v1
     spec:
       securityContext:
         runAsNonRoot: true

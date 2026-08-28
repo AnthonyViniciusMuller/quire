@@ -25,6 +25,11 @@ spec:
       labels:
         app.kubernetes.io/name: quire
         app.kubernetes.io/component: node
+        # What the mesh's telemetry groups by: it reads app and version and
+        # nothing else, so a workload labelled only in the Kubernetes
+        # convention is one whose metrics arrive unattributed.
+        app: quire
+        version: v1
     spec:
       serviceAccountName: quire
       securityContext:

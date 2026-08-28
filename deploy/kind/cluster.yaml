@@ -1,0 +1,42 @@
+# The local cluster, as one machine pretending to be several.
+#
+# One node, because what is being demonstrated is a federation of two Quire
+# nodes and not a distributed control plane: two Kubernetes nodes would double
+# the memory and change nothing about what the tests exercise.
+#
+# The port mappings are what the end-to-end suite and quirectl reach the
+# federation through. Each Quire node has its own gateway, and each gateway
+# answers on two ports for the reason C23 gives — 443 is terminated for the
+# discovery documents and 9443 is passed through for the federation — so a
+# federation of two is four published ports. The fifth and sixth are the
+# databases, which one test needs for the state the contract has no call to
+# establish (C22).
+#
+# The host ports avoid the ones a developer machine is likely to hold: 443 and
+# 5432 are not published, and neither are the compose federation's, so both can
+# run at once.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # The origin, quire-a.example.
+      - containerPort: 30443
+        hostPort: 18443
+        listenAddress: "127.0.0.1"
+      - containerPort: 30943
+        hostPort: 19443
+        listenAddress: "127.0.0.1"
+      - containerPort: 30532
+        hostPort: 15433
+        listenAddress: "127.0.0.1"
+      # The replica, quire-b.example.
+      - containerPort: 30444
+        hostPort: 28443
+        listenAddress: "127.0.0.1"
+      - containerPort: 30944
+        hostPort: 29443
+        listenAddress: "127.0.0.1"
+      - containerPort: 30533
+        hostPort: 25433
+        listenAddress: "127.0.0.1"

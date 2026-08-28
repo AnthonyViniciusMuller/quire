@@ -496,7 +496,18 @@ the thesis — corrections to the specification and deliberate divergences from 
       PostgreSQL, an object store and a mail relay, all three speaking TLS, because the node
       runs under `QUIRE_ENV=production` and a dependency stack that made it relax those
       checks would be a deployment testing something else. No overlay contains a secret
-- [ ] `build: add kind based local cluster setup`
+- [x] `build: add kind based local cluster setup` — [`scripts/kind-up.sh`](../scripts/kind-up.sh)
+      and [`deploy/kind/cluster.yaml`](../deploy/kind/cluster.yaml): one Kubernetes node, six
+      published ports, and two Quire nodes under `QUIRE_ENV=production`. Two things it does
+      that a manifest cannot. It generates every credential and writes it straight into the
+      cluster, so no key is in this repository and each run replaces the last — which is why
+      it restarts the node afterwards. And it teaches CoreDNS to rewrite `quire-a.example` to
+      the gateway that answers for it, because a node is discovered by fetching a document
+      from a path of its domain and that domain has to resolve. The host half of that is
+      `/etc/hosts`, which the script names and refuses to edit: a script that needed a
+      password to bring up a test cluster is a script nobody should run. `istioctl validate`
+      is what caught the two port names the mesh would have refused, `smtp` and `postgres`,
+      and the four workloads whose telemetry would have arrived unattributed
 - [ ] `ci: add end to end job on kind cluster`
 - [ ] `test: add grpc latency benchmark script`
 - [ ] `docs: add deployment and operations guide`

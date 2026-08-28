@@ -19,6 +19,11 @@ spec:
       labels:
         app.kubernetes.io/name: quire
         app.kubernetes.io/component: postgres
+        # What the mesh's telemetry groups by. It reads app and version and
+        # nothing else, so a workload labelled only in the Kubernetes
+        # convention is one whose metrics arrive unattributed.
+        app: quire-postgres
+        version: v1
     spec:
       securityContext:
         runAsNonRoot: true
@@ -76,6 +81,9 @@ spec:
     app.kubernetes.io/name: quire
     app.kubernetes.io/component: postgres
   ports:
-    - name: postgres
+    # tcp-postgres and not postgres: Istio decides how to treat a port from the
+    # prefix of its name, and a name it does not recognize is a port it refuses
+    # to admit into the mesh at all.
+    - name: tcp-postgres
       port: 5432
       targetPort: postgres

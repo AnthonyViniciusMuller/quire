@@ -32,6 +32,8 @@ spec:
         # pod is a gateway rather than a workload with a sidecar.
         istio: quire-gateway
         sidecar.istio.io/inject: "true"
+        app: quire-gateway
+        version: v1
       annotations:
         inject.istio.io/templates: gateway
     spec:

@@ -25,6 +25,8 @@ spec:
       labels:
         app.kubernetes.io/name: quire
         app.kubernetes.io/component: mail
+        app: quire-mail
+        version: v1
     spec:
       securityContext:
         runAsNonRoot: true
@@ -86,7 +88,10 @@ spec:
     app.kubernetes.io/name: quire
     app.kubernetes.io/component: mail
   ports:
-    - name: smtp
+    # tcp-smtp, because the submission starts in the clear and upgrades with
+    # STARTTLS: what the sidecar carries is opaque bytes, and the TLS inside
+    # them is between the node and this relay.
+    - name: tcp-smtp
       port: 587
       targetPort: smtp
     - name: http-ui
