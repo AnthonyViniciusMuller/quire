@@ -804,6 +804,35 @@ func TestSyncRefusesAReplicationCallFromADevice(t *testing.T) {
 	}
 }
 
+// A peer carries no token — nobody ever issued it one — so the call has to
+// reach the handler that reads its certificate.
+//
+// This is the regression the local federation of phase 10 found. The method was
+// not in the identity slice's list of calls that need no access token, so the
+// authentication interceptor refused every peer with Unauthenticated before the
+// check that really identifies one could run, and the whole inbound half of the
+// replication was unreachable in any node cmd/quired builds. What the test
+// pins is not the refusal but where it comes from: this call is refused by the
+// handler, over the certificate, and never by the interceptor over a token.
+func TestSyncLetsACallerWithNoTokenReachTheReplicationHandler(t *testing.T) {
+	node := serveSync(t)
+
+	// The listener of this suite presents no certificate, so the handler
+	// refuses the call for arriving over a connection that carries none —
+	// which is the answer of the code that identifies peers, and the point.
+	_, err := node.client.ReplicateOperations(t.Context(), &quirev1.ReplicateOperationsRequest{
+		UserId: node.userID,
+	})
+
+	if status.Code(err) == codes.Unauthenticated {
+		t.Fatalf("ReplicateOperations = %v, which is the interceptor refusing a peer for holding no token", err)
+	}
+
+	if status.Code(err) != codes.PermissionDenied {
+		t.Errorf("ReplicateOperations = %v, want a permission denied from the handler", err)
+	}
+}
+
 // holdsOperation reports whether a page carries the change.
 func holdsOperation(t *testing.T, page *quirev1.PullOperationsResponse, id string) bool {
 	t.Helper()

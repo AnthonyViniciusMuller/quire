@@ -125,15 +125,29 @@ func New(auth service.AuthService, clock service.Clock, public []string) *Interc
 	return &Interceptor{auth: auth, clock: clock, public: set}
 }
 
-// PublicMethods are the calls of the contract that answer a caller who has no
-// session, which is the whole of what the specification exempts: UC07 (logging
-// in and out), UC08 (recovering a password), UC14 (binding to an origin
-// server) and UC16 (arriving from another one).
+// PublicMethods are the calls this interceptor does not authenticate.
+//
+// Most of them are what the specification exempts: UC07 (logging in and out),
+// UC08 (recovering a password), UC14 (binding to an origin server) and UC16
+// (arriving from another one) are all answered to a caller who has no session,
+// because in each of them a session is what the caller is trying to obtain or
+// has already lost.
 //
 // Refreshing is here for a reason of its own. It authenticates itself with the
 // credential it presents, and requiring an access token as well would make the
 // shorter lifetime the shorter session — a device whose token has expired is
 // exactly the device that needs this call.
+//
+// The last one is not unauthenticated at all, and the name of this list is the
+// nearest thing the interceptor has to a way of saying so. ReplicateOperations
+// is the only call in the contract whose caller is a peer node rather than a
+// reader's device, and a node proves who it is with the certificate it
+// presents (RNF08) — a pin the catalogue learned from the peer's own discovery
+// document, checked by the handler against the authorization the reader gave
+// (RN03). Nobody ever issued that node a token, so leaving the method out of
+// this list refuses every peer with Unauthenticated before the check that
+// really identifies it can run, which is what a node built by cmd/quired did
+// until the local federation of phase 10 was pointed at itself.
 func PublicMethods() []string {
 	return []string{
 		quirev1.AuthService_RegisterUser_FullMethodName,
@@ -148,6 +162,10 @@ func PublicMethods() []string {
 		// method the federation service exposes is named in the identity
 		// slice's list rather than in one of its own.
 		quirev1.FederationService_MigrateHomeServer_FullMethodName,
+		// The one that is authenticated by something other than a token. See
+		// the last paragraph above: the certificate is the credential, and the
+		// handler is what checks it.
+		quirev1.SyncService_ReplicateOperations_FullMethodName,
 	}
 }
 

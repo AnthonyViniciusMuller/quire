@@ -182,6 +182,10 @@ func TestPublicMethodsAreTheOnesTheSpecificationExempts(t *testing.T) {
 		// this node has no account here yet, which is the same reason
 		// registering is public.
 		quirev1.FederationService_MigrateHomeServer_FullMethodName: true,
+		// Not a call without a credential, but a call whose credential is a
+		// certificate: the caller is a peer node, nobody ever issued it a
+		// token, and the handler checks the pin it presented instead.
+		quirev1.SyncService_ReplicateOperations_FullMethodName: true,
 	}
 
 	got := authn.PublicMethods()

@@ -361,12 +361,15 @@ the thesis — corrections to the specification and deliberate divergences from 
       the loopback address beside the domain and `quirectl` names one with `--ca`; and
       `QUIRE_FEDERATION_TLS_CA_FILE` is read by nothing, because the pin of C12 replaced the
       authority it was for
-- [ ] `fix: let a peer reach the replication handler` — not in the original plan, and found
+- [x] `fix: let a peer reach the replication handler` — not in the original plan, and found
       by the federation above: `ReplicateOperations` is not in the identity slice's list of
       methods that need no access token, so the authentication interceptor refuses every
       peer with `Unauthenticated` before the handler that checks its certificate ever runs.
       The whole inbound half of phase 9 is unreachable in a node that installs the
-      interceptor, which is every node `cmd/quired` builds
+      interceptor, which is every node `cmd/quired` builds. The integration suite could not
+      have caught it: its peer-facing test calls with a device's session, which passes the
+      interceptor and is refused by the handler, so what it pinned was the second refusal
+      and never the first. The test that replaces it calls with no token at all
 - [ ] `test: add end to end suite for offline reconciliation`
 - [ ] `test: add end to end suite for cross node replication`
 - [ ] `test: add end to end suite for home server migration`
