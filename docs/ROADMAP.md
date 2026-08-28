@@ -306,7 +306,15 @@ the thesis — corrections to the specification and deliberate divergences from 
       `identity.users.migrated_from` records a claim this node cannot verify — provenance and
       never identity. Which device the session is for is not derivable from the contract,
       which is C20 in [`tcc-corrections.md`](tcc-corrections.md)
-- [ ] `test: add integration tests for sync reconciliation`
+- [x] `test: add integration tests for sync reconciliation` — against the same supplied
+      PostgreSQL as phases 5 to 8, and against all five slices at once, since the reconciler
+      writes through two of them. What only a real database can answer is here: the cursor
+      never skips under concurrent pushes, a refused change leaves nothing behind because the
+      unit of work really unwinds, and the queue statement owes a peer authorized after the
+      fact the whole log — which is what filling from the log rather than at ingest buys and
+      what a fake would have imitated rather than checked. The delivery pass is assembled by
+      hand rather than taken from the container, because what the container hands back is a
+      loop around a timer and a test that waited for one would be testing the timer
 
 ## Phase 10 — Client and end-to-end
 
