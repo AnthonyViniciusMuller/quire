@@ -51,9 +51,11 @@ import (
 const (
 	nodeAAddressVariable     = "QUIRE_TEST_NODE_A"
 	nodeACAVariable          = "QUIRE_TEST_NODE_A_CA"
+	nodeABaseURLVariable     = "QUIRE_TEST_NODE_A_HTTP"
 	nodeADatabaseURLVariable = "QUIRE_TEST_NODE_A_DATABASE_URL"
 	nodeBAddressVariable     = "QUIRE_TEST_NODE_B"
 	nodeBCAVariable          = "QUIRE_TEST_NODE_B_CA"
+	nodeBBaseURLVariable     = "QUIRE_TEST_NODE_B_HTTP"
 	nodeBDatabaseURLVariable = "QUIRE_TEST_NODE_B_DATABASE_URL"
 )
 
@@ -81,6 +83,11 @@ type node struct {
 	// (C12) — so a client outside the network verifies it against the file
 	// itself.
 	ca string
+	// baseURL is where the node serves its discovery documents to this suite.
+	// It is the port compose published, and not what the node publishes as its
+	// own base URL: inside the network the two nodes reach each other by
+	// domain, and this suite is outside it.
+	baseURL string
 	// databaseURL is the node's own PostgreSQL, and it is here for exactly one
 	// thing: the state a peer has to hold before it may be replicated to, and
 	// which the contract has no call for. C22 in docs/tcc-corrections.md is
@@ -91,25 +98,27 @@ type node struct {
 
 // The two nodes, read once from the environment.
 var (
-	nodeA node
-	nodeB node
+	nodeA *node
+	nodeB *node
 )
 
 func TestMain(m *testing.M) {
-	nodeA = node{
+	nodeA = &node{
 		domain:      "quire-a.example",
 		address:     requiredEnv(nodeAAddressVariable),
 		ca:          requiredEnv(nodeACAVariable),
+		baseURL:     requiredEnv(nodeABaseURLVariable),
 		databaseURL: requiredEnv(nodeADatabaseURLVariable),
 	}
-	nodeB = node{
+	nodeB = &node{
 		domain:      "quire-b.example",
 		address:     requiredEnv(nodeBAddressVariable),
 		ca:          requiredEnv(nodeBCAVariable),
+		baseURL:     requiredEnv(nodeBBaseURLVariable),
 		databaseURL: requiredEnv(nodeBDatabaseURLVariable),
 	}
 
-	for _, answering := range []node{nodeA, nodeB} {
+	for _, answering := range []*node{nodeA, nodeB} {
 		if err := answering.reachable(); err != nil {
 			panic(fmt.Sprintf("the node at %s is not answering: %v\nrun make dev-up", answering.address, err))
 		}
@@ -136,7 +145,7 @@ func requiredEnv(name string) string {
 // It is also what checks the certificate: a node presenting one this suite
 // cannot verify fails here, with the reason, rather than in whichever test
 // happened to run first.
-func (n node) reachable() error {
+func (n *node) reachable() error {
 	transport, err := credentials.NewClientTLSFromFile(n.ca, "")
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", n.ca, err)
@@ -171,7 +180,7 @@ type reader struct {
 	email     string
 	// on is the node hosting them, which is the only node that can
 	// authenticate them (RN08).
-	on node
+	on *node
 }
 
 // newReader registers a reader nothing else will collide with.
@@ -179,7 +188,7 @@ type reader struct {
 // The name carries the run rather than the test, because a local name is unique
 // per origin server and this federation outlives the process: two runs of the
 // same test are two readers, and neither has to clean up after the other.
-func newReader(t *testing.T, on node) *reader {
+func newReader(t *testing.T, on *node) *reader {
 	t.Helper()
 
 	local := "e2e-" + token(t)
@@ -206,7 +215,7 @@ type device struct {
 
 	name      string
 	statePath string
-	on        node
+	on        *node
 }
 
 // newDevice binds a device to the reader and logs it in.
@@ -214,7 +223,7 @@ type device struct {
 // The name is what a reader would see in `quirectl device list`, and it is
 // carried here so that a failure names the device that caused it rather than a
 // uuid nobody can place.
-func newDevice(t *testing.T, on node, who *reader, name string) *device {
+func newDevice(t *testing.T, on *node, who *reader, name string) *device {
 	t.Helper()
 
 	appliance := &device{
@@ -257,7 +266,7 @@ func (d *device) reconnect(t *testing.T) {
 }
 
 // open builds a client for one device against one node.
-func open(t *testing.T, on node, statePath string, offline bool) *client.Client {
+func open(t *testing.T, on *node, statePath string, offline bool) *client.Client {
 	t.Helper()
 
 	connection, err := client.Open(client.Options{
@@ -286,6 +295,32 @@ func token(t *testing.T) string {
 
 	return hex.EncodeToString(value)
 }
+
+// eventually waits for something that happens on its own, and fails saying what
+// it was still waiting for.
+//
+// Nothing in this suite sleeps until something is true. A replication pass
+// takes as long as it takes, and a test that slept for the interval would fail
+// on a slow machine and pass on a fast one for the same code.
+func eventually(t *testing.T, what string, done func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(settleFor)
+
+	for time.Now().Before(deadline) {
+		if done() {
+			return
+		}
+
+		time.Sleep(pollEvery)
+	}
+
+	t.Fatalf("waited %s for %s, and it did not happen", settleFor, what)
+}
+
+// pollEvery is how often [eventually] re-asks. It is short because what is
+// being waited for is usually already true.
+const pollEvery = 250 * time.Millisecond
 
 // drain pulls until the node has nothing left, which is what a device that has
 // been away does before it can be said to have caught up.

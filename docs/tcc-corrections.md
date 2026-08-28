@@ -748,6 +748,59 @@ collection is right, the log has never heard of it, and the two disagree silentl
 `TestAChangeMadeWhileConnectedReachesNoLog` pins that, so the day the outbox lands it is the
 test that fails and says so.
 
+### C22 — nothing tells a replica that it is one
+
+**Where** RF16, UC15 and RN03, against RF12 and UC09.
+
+**What the TCC says** A reader authorizes additional nodes to hold a copy of their data
+(RF16, UC15), nothing is synchronized with a node they have not authorized (RN03), and the
+origin then replicates their operations to the node they named (RF12, UC09).
+
+**Why the two do not meet** The permission is recorded on the origin, and the destination
+checks one of its own. Before it will accept a single operation, a replica needs four things
+in its own database: a row in its catalogue for the origin, carrying the origin's pinned key;
+a row for the reader; an active authorization naming that reader and that origin; and a row
+for every device that authored anything in the batch, because `sync.operations` references
+`identity.devices` and the whole batch is refused on the foreign key otherwise.
+
+Nothing in the contract can carry any of it. Every call of `FederationService` is addressed
+by a reader's device to its own node, `AddKnownServer` needs a session on the node being told,
+and a reader has no account on a replica by construction — RN08 gives authentication to the
+origin and C03 leaves a replicated reader without a password. So a federation assembled only
+through the API cannot replicate at all: the origin fills its queue, dials the peer, presents
+its certificate, and is refused, correctly, by a node that was never told anything.
+
+It is also a standing obligation and not a handshake. A device bound tomorrow has to reach
+every replica before anything it writes can, so whatever carries this has to be callable
+again rather than once.
+
+**Correction** The contract needs a peer-facing call by which an origin tells a destination
+that a reader authorized it, carrying what the destination has to store: the reader — the
+identifier, the local name, the display name and the origin domain, never the address or the
+password (C03) — the reader's devices, and the permission with whether the files travel. It
+is authenticated as `ReplicateOperations` is, by the certificate the catalogue pinned, and the
+destination records the origin from the discovery document it fetches itself rather than from
+anything the call claims. Revocation needs the mirror of it, so that a reader withdrawing a
+permission is not left with a peer that only stops being sent things.
+
+The alternative is worse and worth naming, because it is the shorter path: letting the
+destination create the reader on receipt, on the strength of the caller being in its
+catalogue. RN03 is the reader's promise that their data goes where they said, and a node that
+created a reader because somebody sent it operations would be a node anybody in its catalogue
+could fill with readers who never asked for it.
+
+**Why it is not implemented here** A new RPC in the contract, a use case and a repository
+write on both sides, and the origin calling it at the moment of `AuthorizeReplica` and again
+at every binding after it. That is a slice-sized change, and it changes the `.proto`, which is
+the specification this document exists to correct rather than to quietly extend.
+
+**Status** open. Found in phase 10, by the end-to-end suite, which stands in for the missing
+call rather than working around it: `admit` in `test/e2e/replication_test.go` writes exactly
+what that call would carry, read out of the discovery document the origin already publishes,
+and nothing else. Everything past that point in the suite is the real mechanism — the queue
+filled from the log, the mTLS handshake, the pin checked at both ends, the ingest and the
+reconciliation — and it works.
+
 ## Divergences
 
 Deliberate departures from a specification that is internally consistent. Subsection 4.2.4

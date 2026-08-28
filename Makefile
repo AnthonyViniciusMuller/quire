@@ -150,6 +150,8 @@ test-storage-down:
 # has no call to establish, per C22 in docs/tcc-corrections.md.
 TEST_NODE_A              ?= 127.0.0.1:19090
 TEST_NODE_B              ?= 127.0.0.1:29090
+TEST_NODE_A_HTTP         ?= http://127.0.0.1:18080
+TEST_NODE_B_HTTP         ?= http://127.0.0.1:28080
 TEST_NODE_A_CA           ?= $(DEV_CERTS)/quire-a.example.crt.pem
 TEST_NODE_B_CA           ?= $(DEV_CERTS)/quire-b.example.crt.pem
 TEST_NODE_A_DATABASE_URL ?= postgres://quire:quire@127.0.0.1:15432/quire?sslmode=disable
@@ -160,6 +162,8 @@ TEST_NODE_B_DATABASE_URL ?= postgres://quire:quire@127.0.0.1:25432/quire?sslmode
 test-e2e:
 	QUIRE_TEST_NODE_A="$(TEST_NODE_A)" \
 	QUIRE_TEST_NODE_B="$(TEST_NODE_B)" \
+	QUIRE_TEST_NODE_A_HTTP="$(TEST_NODE_A_HTTP)" \
+	QUIRE_TEST_NODE_B_HTTP="$(TEST_NODE_B_HTTP)" \
 	QUIRE_TEST_NODE_A_CA="$(TEST_NODE_A_CA)" \
 	QUIRE_TEST_NODE_B_CA="$(TEST_NODE_B_CA)" \
 	QUIRE_TEST_NODE_A_DATABASE_URL="$(TEST_NODE_A_DATABASE_URL)" \

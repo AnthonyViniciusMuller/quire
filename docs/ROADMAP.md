@@ -382,7 +382,20 @@ the thesis — corrections to the specification and deliberate divergences from 
       C21 and one of them pins it: a work created through the connected path is readable by
       every device and appears in no page any of them pulls, so the suite that would have
       shown a cursor moving had to author its work offline first
-- [ ] `test: add end to end suite for cross node replication`
+- [x] `test: add end to end suite for cross node replication` — the whole path between two
+      nodes: the origin discovers the peer over RFC 8615, pins the key it published, the
+      reader authorizes it, and a change authored offline on a device reaches the other
+      node's database without anybody asking for it. What the suite found is C22 in
+      [`tcc-corrections.md`](tcc-corrections.md): a replica refuses everything until its own
+      database holds the origin, the reader, the permission and every device that authored
+      anything — and no call in the contract can tell it any of that, so a federation
+      assembled through the API alone cannot replicate. The suite stands in for the missing
+      call rather than around it, writing exactly what it would carry out of the document the
+      origin already publishes; everything past that point is the real mechanism. The two
+      refusals are checked as well — a node the reader never authorized gets nothing, and a
+      peer whose key is not the one pinned is not spoken to (C12) — and the second of those
+      has to put the pin back, because the catalogue is node-wide (C15) and a wrong pin left
+      behind is a wrong pin for every reader on that node
 - [ ] `test: add end to end suite for home server migration`
 
 ## Phase 11 — Kubernetes and delivery
