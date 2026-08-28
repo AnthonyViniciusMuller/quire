@@ -475,11 +475,17 @@ the thesis — corrections to the specification and deliberate divergences from 
       is the premise C12 is built on, so a shared ingress models something else — and a node
       that does not own the thing answering for its domain cannot own the certificate it
       presents either
-- [ ] `build: add cert manager issuer and certificate` — the `Certificate` must keep its
+- [x] `build: add cert manager issuer and certificate` — the `Certificate` must keep its
       private key across renewals (`privateKey.rotationPolicy` left at `Never`): the pin
       published by discovery is over the public key, per C12 in
       [`tcc-corrections.md`](tcc-corrections.md), and rotating the key breaks every peer's
-      pin on renewal — the exact failure C12 exists to remove
+      pin on renewal — the exact failure C12 exists to remove. It is written out rather than
+      left to the default, because a default that is load-bearing is one somebody changes
+      without knowing what it was holding up. A node holds two certificates and not one, for
+      the reason C23 gives: the key the federation pins may never rotate, and the key the
+      document server presents is pinned by nobody and rotates on every renewal. The
+      authority they come from is cluster-scoped and applied once, and is the one thing here
+      a real deployment replaces rather than copies — two operators share none
 - [ ] `build: add origin and replica overlays` — both set `QUIRE_GRPC_ADVERTISED_ADDRESS`
       to the authority the gateway answers on, which is not the port the node listens on;
       outside development the configuration refuses to load without it

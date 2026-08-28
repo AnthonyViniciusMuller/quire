@@ -1,0 +1,16 @@
+# The certificates half of a node, as a component two overlays include.
+#
+# The issuer they refer to is cluster-scoped and is not here: it is applied once
+# per cluster, from ./cluster, because a certificate authority shared by two
+# nodes is a fact about the cluster and not about either of them.
+#
+# In a federation of real operators there is no shared authority at all — that
+# is the premise of C12 — and each node's certificate comes from wherever its
+# operator gets one. A single authority here is what makes two nodes on one
+# machine verifiable to each other at all, and it is the one thing in this
+# directory that a real deployment replaces rather than copies.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - certificate.yaml

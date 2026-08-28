@@ -1,0 +1,52 @@
+# The authority the local federation is verified against.
+#
+# Three resources and they bootstrap in order: a self-signed issuer that can
+# sign one thing, one certificate that is a certificate authority, and an issuer
+# that signs with it. cert-manager has no shorter way to reach a CA of your own,
+# and a CA of your own is what a cluster with no public name needs.
+#
+# It is not what a federation is built on. Two nodes belonging to two operators
+# share no authority, which is why what identifies a peer is the public key it
+# published rather than a chain (C12) — and the certificates the nodes present
+# would be self-signed in a real deployment, exactly as scripts/dev-certs.sh
+# generates them for the compose federation. What the authority here buys is the
+# other half of C23: the discovery documents are served over ordinary HTTPS and
+# verified against an ordinary trust store, and on one machine that store has to
+# be told about something.
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: quire-selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: quire-ca
+  # The namespace cert-manager reads a ClusterIssuer's secrets from. It is
+  # cert-manager's own by default, and an authority written anywhere else is one
+  # the issuer below cannot find.
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: quire-local-federation-ca
+  secretName: quire-ca
+  duration: 87600h
+  renewBefore: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: quire-selfsigned
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: quire-ca
+spec:
+  ca:
+    secretName: quire-ca

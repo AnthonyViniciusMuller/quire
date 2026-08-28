@@ -1,0 +1,9 @@
+# Applied once per cluster, before any node. Everything here is cluster-scoped
+# or lives in cert-manager's own namespace, which is why it is not a component
+# an overlay includes: two overlays including it would be two overlays claiming
+# to own the same authority.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - issuer.yaml

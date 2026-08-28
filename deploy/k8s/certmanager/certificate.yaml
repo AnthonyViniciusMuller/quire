@@ -1,0 +1,84 @@
+# The two certificates a node holds, and they are two because they answer two
+# questions.
+#
+# The names are patched per node by the overlay: a certificate is an assertion
+# about a domain, and the domain is the one thing an overlay exists to say.
+---
+# What the node itself presents, and what the federation is pinned on.
+#
+# It is presented on the gRPC listener to peers and to devices, and it is also
+# what the node dials a peer *with* — which is why it carries client auth as
+# well as server auth. A certificate that could only serve would make this node
+# reachable and unable to replicate.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: quire-federation-tls
+spec:
+  secretName: quire-federation-tls
+  duration: 2160h
+  renewBefore: 360h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    # The one line in this directory that is load-bearing.
+    #
+    # The pin a peer holds is the digest of this key's SubjectPublicKeyInfo, per
+    # C12 in docs/tcc-corrections.md, published in this node's own discovery
+    # document and recorded by every peer that ever discovered it. Rotating the
+    # key on renewal would change the digest, and every peer in the federation
+    # would stop talking to this node at once — with the refusal C12 exists to
+    # produce, for a reason C12 was not written about.
+    #
+    # Never is cert-manager's default and is left explicit anyway, because a
+    # default that is load-bearing is a default somebody will change without
+    # knowing what it was holding up. Rotating it is a deliberate act with a
+    # published consequence: every peer has to re-read the document, which is
+    # what RefreshKnownServer is for.
+    rotationPolicy: Never
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - quire.example
+  ipAddresses:
+    # The loopback address beside the domain, for the same reason
+    # scripts/dev-certs.sh puts it there: one certificate answers two callers,
+    # and a device outside the cluster reaches this node on a published port of
+    # the host rather than on its domain.
+    - 127.0.0.1
+  issuerRef:
+    name: quire-ca
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# What the gateway presents for the discovery documents.
+#
+# A second certificate rather than the one above, and the difference is exactly
+# the constraint above. Nothing pins this one: a peer fetching
+# /.well-known/quire/server verifies it the ordinary way, against a trust store,
+# because the pin covers the gRPC identity and not the document that publishes
+# it (C23). So this key may rotate on every renewal, and does — which is what a
+# key that nobody has written down should do.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: quire-gateway-tls
+spec:
+  secretName: quire-gateway-tls
+  duration: 2160h
+  renewBefore: 360h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - server auth
+  dnsNames:
+    - quire.example
+  ipAddresses:
+    - 127.0.0.1
+  issuerRef:
+    name: quire-ca
+    kind: ClusterIssuer
+    group: cert-manager.io
