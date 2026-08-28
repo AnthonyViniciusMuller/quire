@@ -249,7 +249,16 @@ the thesis — corrections to the specification and deliberate divergences from 
       generated histories, and C01's own counterexample reduced two ways to show what a wall
       clock costs. The adapter is what knows the five tables, and writing it found three
       things the specification does not say — C17, C18 and C19
-- [ ] `feat: add push operations use case`
+- [x] `feat: add push operations use case` — one use case for both transports, because a
+      device pushing what it wrote offline and a peer replicating a reader are offering the
+      same thing: the input carries who the caller is rather than the credential they proved
+      it with, and RN10 is a check against a device the batch may name or against nothing at
+      all. The unit of work is one change and not the batch — PostgreSQL aborts a whole
+      transaction on any statement it refuses, so one rejected change would take a reader's
+      whole push with it. The slice's `command.Usecase` shape, its `Clock`, `Transaction`
+      and `Records` ports and its `apptest` doubles land with it; the clock is the one port
+      in the node with a second method, because this is the slice that meets other people's
+      clocks
 - [ ] `feat: add pull operations use case`
 - [ ] `feat: add bidirectional sync stream handler`
 - [ ] `feat: add replication worker for authorized nodes`
