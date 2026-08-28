@@ -1018,3 +1018,28 @@ is judged the wrong way round; the cost of the choice as made is one re-authenti
 the cost of not making it is a stolen credential that works for thirty days.
 
 **Status** open. Implemented in the refresh use case of phase 5.
+
+### D09 — changing a password ends the session that changed it
+
+The contract says that *resetting* a password ends every session, and says nothing about
+changing one. The implementation makes changing one do the same, the calling device included,
+and 4.2.4 has to record it.
+
+A reader who changes their password is responding to a suspicion. A session that survived the
+change would be the session they suspect — and on a system where a device may be offline for
+thirty days (RNF11's refresh window), a credential that outlives the password it was issued
+against is a credential nobody can withdraw by changing the password, which is the one thing a
+reader knows how to do.
+
+Sparing the calling device is implementable: the access token names it, and the credential
+repository would need one more statement to consume every credential *except* that device's.
+What it would buy is one re-authentication on the appliance the reader is already holding, and
+what it would cost is a rule with an exception in it — "changing your password logs you out
+everywhere, except here". The rule without the exception is the one a reader can act on
+without being told how it works.
+
+**Status** settled 2026-08-28: yes, it ends that session too. Implemented in the change
+password use case of phase 5, which consumes every session credential of the reader inside the
+same unit of work as the password write, so a change that was rolled back leaves the sessions
+alone. The reference client drops the session it was holding rather than discovering at the
+next call that it is spent.

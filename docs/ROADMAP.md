@@ -557,6 +557,12 @@ the entry in [`tcc-corrections.md`](tcc-corrections.md) the answer produced.
       by naming where the check moved to. The notice to the previous address lands with it and
       is the half that survives somebody who learned the password; it is also why this could
       not be implemented before C13 was
+- [x] `docs: record that changing a password ends the calling session` — D09, settled: it
+      should, which confirms what phase 5 already does and changes no code. The contract says
+      only that *resetting* one ends every session; a reader who changes theirs is responding
+      to a suspicion, and the session that survived would be the one they suspect. Sparing the
+      calling device is implementable and was refused on purpose — a rule with an exception in
+      it is not one a reader can act on without being told how it works
 
 ## Design decisions to settle
 
@@ -565,8 +571,8 @@ before the commit that depends on them. A question stays here only while it is o
 is answered it becomes an entry in [`tcc-corrections.md`](tcc-corrections.md), so that the
 answer travels with the correction it produced rather than with the doubt it started as.
 
-Two are open, both found while implementing phase 5. Each names what the answer changes, so
-that answering it is a decision rather than an archaeology.
+One is open, found while implementing phase 5. It names what the answer changes, so that
+answering it is a decision rather than an archaeology.
 
 **Is the reuse trade of D07 the right way round?** A device whose reply was lost on a mobile
 network retries with the credential it still holds and is logged out for it, which on an
@@ -574,13 +580,7 @@ offline-first system is not rare. The implementation follows the OAuth 2.0 Secur
 alternative — a grace window — needs `token_acesso` to record which credential replaced it,
 which is a change to Appendix A.
 
-**Should changing a password end the session that changed it?** The contract says only that
-resetting one ends every session. The implementation makes changing one do the same, on the
-reasoning that a reader who changes their password is responding to a suspicion. Sparing the
-calling device is implementable — the access token names it — and needs one more statement on
-the credential repository.
-
-Four have been settled since. Whether `updated_at` could break ties as a wall clock, on
+Five have been settled since. Whether `updated_at` could break ties as a wall clock, on
 2026-08-26: it cannot, and it becomes a hybrid logical clock — the counterexample and the
 argument are in C01. Whether a node with no way to deliver a recovery should start at all, on
 2026-08-28: the question was the wrong way round, and the missing component was built instead —
@@ -588,7 +588,10 @@ the transport and the queue are both in C13, which is now settled, and 4.3 gains
 Whether the call that changes an address should carry the password, on 2026-08-28: it should,
 and C14 records the amendment — a `ChangeEmail` call beside `ChangePassword`, since a field
 mask cannot say that one of its paths needs a credential, plus the notice to the previous
-address that the transport of C13 finally made possible. And whether the integration suite should have a container library start its
+address that the transport of C13 finally made possible. Whether changing a password should
+end the session that changed it, on 2026-08-28: it should, which confirms what phase 5
+implemented and becomes D09 — a rule with an exception in it is not one a reader can act on
+without being told how it works. And whether the integration suite should have a container library start its
 dependencies, on 2026-08-27: it should not, and phase 7 confirmed it rather than reopening it.
 That last one leaves no entry in [`tcc-corrections.md`](tcc-corrections.md), because it is a
 question about this project's tooling and not about the specification — the suite now needs a MinIO as well as a
