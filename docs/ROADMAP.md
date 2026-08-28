@@ -276,7 +276,16 @@ the thesis — corrections to the specification and deliberate divergences from 
       a socket is not an operation written to disk. `ReplicateOperations` stays Unimplemented
       until the next commit, and a test names it so that it is a decision rather than an
       omission
-- [ ] `feat: add replication worker for authorized nodes`
+- [x] `feat: add replication worker for authorized nodes` — the whole outbound half, and
+      the queue is filled from the log rather than by the call that stored the change. That
+      is what makes a peer authorized today (RF16, UC15) and a peer that missed a week the
+      same case; rows written at ingest would leave a new replica permanently missing
+      everything from before its own authorization, and nothing would notice. A peer is
+      offered a reader's changes in the order this node committed them, which the pending
+      query now joins the log to get — the row identifier would have been the cheap tie-break
+      and is a random uuid, so it would have shuffled a history into an order the far end
+      would refuse. The client speaks mTLS and pins the peer's public key per C12, including
+      on a resumed session, where TLS 1.3 skips the certificate callback entirely
 - [ ] `feat: add node to node replication handler with mtls`
 - [ ] `feat: add home server migration use case`
 - [ ] `test: add integration tests for sync reconciliation`

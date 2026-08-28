@@ -21,6 +21,7 @@ import (
 
 	"github.com/anthonyvsmuller/quire/internal/shared/crdt"
 	"github.com/anthonyvsmuller/quire/internal/sync/application/service"
+	"github.com/anthonyvsmuller/quire/internal/sync/domain/delivery"
 	"github.com/anthonyvsmuller/quire/internal/sync/domain/operation"
 )
 
@@ -385,4 +386,260 @@ func (c *Changes) Announced() []uuid.UUID {
 	defer c.mu.Unlock()
 
 	return slices.Clone(c.announced)
+}
+
+// DeliveryRepository is an in-memory queue that backs off the way the
+// statement does: a row is offered again only once its wait has elapsed, and
+// the wait doubles once per attempt up to the ceiling the domain sets.
+//
+// It does not enqueue from the log, because the statement that does is a join
+// across three tables and a watermark, and a fake that reimplemented it would
+// be testing itself. What a test sets here is what the queue already holds.
+type DeliveryRepository struct {
+	mu   sync.Mutex
+	rows []*delivery.Delivery
+	// Enqueued is what EnqueuePending reports, since nothing here fills the
+	// queue from the log.
+	Enqueued int64
+	// Err, when set, is what every method reports.
+	Err error
+}
+
+// DeliveryRepository satisfies the port the use cases hold.
+var _ delivery.Repository = (*DeliveryRepository)(nil)
+
+// NewDeliveryRepository returns an empty queue.
+func NewDeliveryRepository() *DeliveryRepository { return &DeliveryRepository{} }
+
+// EnqueuePending reports what the test set.
+func (r *DeliveryRepository) EnqueuePending(context.Context) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.Enqueued, r.Err
+}
+
+// Enqueue owes an operation to each of the nodes.
+func (r *DeliveryRepository) Enqueue(
+	_ context.Context, operationID uuid.UUID, servers []uuid.UUID,
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.Err != nil {
+		return r.Err
+	}
+
+	for _, serverID := range servers {
+		if r.find(operationID, serverID) != nil {
+			continue
+		}
+
+		owed, err := delivery.New(operationID, serverID)
+		if err != nil {
+			return err
+		}
+
+		r.rows = append(r.rows, owed)
+	}
+
+	return nil
+}
+
+// ListPending reads what is still owed to one node, oldest attempt first.
+func (r *DeliveryRepository) ListPending(
+	_ context.Context, batch *delivery.Batch,
+) ([]*delivery.Delivery, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.Err != nil {
+		return nil, r.Err
+	}
+
+	pending := make([]*delivery.Delivery, 0, len(r.rows))
+
+	for _, row := range r.rows {
+		if row.ServerID != batch.ServerID || !row.IsPending() || !ready(row, batch) {
+			continue
+		}
+
+		pending = append(pending, row)
+	}
+
+	slices.SortStableFunc(pending, func(left, right *delivery.Delivery) int {
+		switch {
+		case left.LastAttemptAt == nil && right.LastAttemptAt == nil:
+			return 0
+		case left.LastAttemptAt == nil:
+			return -1
+		case right.LastAttemptAt == nil:
+			return 1
+		default:
+			return left.LastAttemptAt.Compare(*right.LastAttemptAt)
+		}
+	})
+
+	if len(pending) > batch.Size {
+		return pending[:batch.Size], nil
+	}
+
+	return pending, nil
+}
+
+// ready reports whether a row's backoff has elapsed, on the rule the statement
+// applies.
+func ready(row *delivery.Delivery, batch *delivery.Batch) bool {
+	if row.LastAttemptAt == nil {
+		return true
+	}
+
+	exponent := min(row.Attempts, delivery.MaxBackoffExponent)
+	wait := batch.Backoff * (1 << exponent)
+
+	return row.LastAttemptAt.Add(wait).Before(batch.Now)
+}
+
+// PendingServers reads the nodes anything is still owed to.
+func (r *DeliveryRepository) PendingServers(context.Context) ([]uuid.UUID, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.Err != nil {
+		return nil, r.Err
+	}
+
+	servers := make([]uuid.UUID, 0, len(r.rows))
+
+	for _, row := range r.rows {
+		if row.IsPending() && !slices.Contains(servers, row.ServerID) {
+			servers = append(servers, row.ServerID)
+		}
+	}
+
+	return servers, nil
+}
+
+// Record applies the outcome of one try to every delivery of the batch.
+func (r *DeliveryRepository) Record(
+	_ context.Context, serverID uuid.UUID, operations []uuid.UUID, attempt *delivery.Attempt,
+) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.Err != nil {
+		return 0, r.Err
+	}
+
+	changed := int64(0)
+
+	for _, operationID := range operations {
+		row := r.find(operationID, serverID)
+		if row == nil || !row.IsPending() {
+			continue
+		}
+
+		row.Record(attempt)
+		changed++
+	}
+
+	return changed, nil
+}
+
+// Owe adds a row to the queue.
+func (r *DeliveryRepository) Owe(operationID, serverID uuid.UUID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	owed, err := delivery.New(operationID, serverID)
+	if err != nil {
+		return
+	}
+
+	r.rows = append(r.rows, owed)
+}
+
+// Rows is every row the queue holds.
+func (r *DeliveryRepository) Rows() []*delivery.Delivery {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return slices.Clone(r.rows)
+}
+
+// find is the row for one pair, or nil.
+func (r *DeliveryRepository) find(operationID, serverID uuid.UUID) *delivery.Delivery {
+	for _, row := range r.rows {
+		if row.OperationID == operationID && row.ServerID == serverID {
+			return row
+		}
+	}
+
+	return nil
+}
+
+// Peers is a federation of one node that answers whatever the test set.
+type Peers struct {
+	mu sync.Mutex
+	// Err, when set, is what Replicate reports: the peer not answering, which
+	// is the ordinary state of a node belonging to another operator.
+	Err error
+	// Silent, when set, is how many of the changes offered the destination
+	// answers nothing about — the reply that was cut short rather than the
+	// call that never happened.
+	Silent int
+	// Refuse, when set, is the verdict the destination gives every change.
+	Refuse *operation.Verdict
+
+	offered [][]uuid.UUID
+}
+
+// Peers satisfies the port the use cases hold.
+var _ service.Peers = (*Peers)(nil)
+
+// NewPeers returns a federation that applies everything it is offered.
+func NewPeers() *Peers { return &Peers{} }
+
+// Replicate answers about what it was offered.
+func (p *Peers) Replicate(
+	_ context.Context, _, _ uuid.UUID, operations []*operation.Operation,
+) ([]operation.Result, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Recorded before the failure, because the call was made: a test that
+	// asserts a peer was left alone by a backoff is asserting about the dial
+	// and not about the answer.
+	batch := make([]uuid.UUID, 0, len(operations))
+	for _, op := range operations {
+		batch = append(batch, op.ID)
+	}
+
+	p.offered = append(p.offered, batch)
+
+	if p.Err != nil {
+		return nil, p.Err
+	}
+
+	answered := max(len(operations)-p.Silent, 0)
+	results := make([]operation.Result, 0, answered)
+
+	for _, op := range operations[:answered] {
+		verdict := operation.Applied()
+		if p.Refuse != nil {
+			verdict = *p.Refuse
+		}
+
+		results = append(results, operation.Result{OperationID: op.ID, Verdict: verdict})
+	}
+
+	return results, nil
+}
+
+// Offered is every batch the federation was handed, in order.
+func (p *Peers) Offered() [][]uuid.UUID {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return slices.Clone(p.offered)
 }

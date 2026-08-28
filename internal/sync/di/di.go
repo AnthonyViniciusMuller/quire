@@ -15,33 +15,43 @@
 // arrives the same way, and for a reason of its own: a second hybrid logical
 // clock in this process would be a second answer to what "after" means here.
 //
-// Nothing here can fail. This slice holds no secret, chooses no provider and,
-// so far, reaches no peer — the outbound half of replication arrives with the
-// worker, and it is the first thing in this container that will be able to.
+// It can fail, and only for one reason: this node's own certificate. The
+// outbound half of replication presents it to every peer, so a key pair the
+// process cannot read is a deployment fault — and a node that discovered it at
+// the first tick would have started, answered every device, and quietly
+// replicated to nobody.
 package di
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	federationserver "github.com/anthonyvsmuller/quire/internal/federation/domain/server"
 
 	librarycollection "github.com/anthonyvsmuller/quire/internal/library/domain/collection"
 	libraryebook "github.com/anthonyvsmuller/quire/internal/library/domain/ebook"
 	librarymembership "github.com/anthonyvsmuller/quire/internal/library/domain/membership"
 	readingannotation "github.com/anthonyvsmuller/quire/internal/reading/domain/annotation"
 	readingprogress "github.com/anthonyvsmuller/quire/internal/reading/domain/progress"
+	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/hlc"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 	pulloperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/pulloperations"
 	pushoperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/pushoperations"
+	replicateusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/replicate"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pulloperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pushoperations"
 	syncstream "github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/sync"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/syncservice"
+	deliveryrepository "github.com/anthonyvsmuller/quire/internal/sync/infra/repository/delivery"
 	operationrepository "github.com/anthonyvsmuller/quire/internal/sync/infra/repository/operation"
 	changesservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/changes"
 	clockservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/clock"
+	peersservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/peers"
 	recordsservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/records"
+	"github.com/anthonyvsmuller/quire/internal/sync/infra/worker"
 )
 
 // streamPoll is how often an open stream looks for changes nobody told it
@@ -77,14 +87,40 @@ type Records struct {
 type Container struct {
 	// Service is the gRPC surface of the slice, ready to be registered.
 	Service *syncservice.Service
+
+	// Worker drains the delivery queue on a timer. It is the one thing the
+	// node has to run rather than register: replication is driven from the
+	// side that owes the data, and that side has nobody to be prompted by.
+	Worker *worker.Replication
+
+	// closer releases the channels the outbound half holds open to its peers.
+	closer func() error
 }
 
-// Initialize builds the slice over the node's connection pool, its clock and
-// the repositories of the records that replicate through it.
-func Initialize(pool *pgxpool.Pool, stamps *hlc.Clock, records *Records) *Container {
+// Close releases what the slice holds. The node defers it.
+func (c *Container) Close() error {
+	if c.closer == nil {
+		return nil
+	}
+
+	return c.closer()
+}
+
+// Initialize builds the slice over the node's connection pool, its clock, the
+// catalogue of nodes it may replicate to, and the repositories of the records
+// that replicate through it.
+func Initialize(
+	cfg *config.Config,
+	pool *pgxpool.Pool,
+	stamps *hlc.Clock,
+	catalogue federationserver.Repository,
+	records *Records,
+	logger *slog.Logger,
+) (*Container, error) {
 	manager := persist.NewManager(pool)
 
 	log := operationrepository.New(manager)
+	deliveries := deliveryrepository.New(manager)
 
 	clock := clockservice.New(stamps)
 	hub := changesservice.New()
@@ -99,11 +135,23 @@ func Initialize(pool *pgxpool.Pool, stamps *hlc.Clock, records *Records) *Contai
 	push := pushoperationsusecase.New(log, reconciler, clock, manager, hub)
 	pull := pulloperationsusecase.New(log)
 
+	outbound, err := peersservice.New(&cfg.Federation, catalogue)
+	if err != nil {
+		return nil, err
+	}
+
+	pass := replicateusecase.New(deliveries, log, outbound, clock,
+		cfg.Federation.ReplicationInterval, cfg.Federation.ReplicationBatchSize)
+
 	controllers := syncservice.Controllers{
 		PushOperations: pushoperations.New(push),
 		PullOperations: pulloperations.New(pull),
 		Sync:           syncstream.New(push, pull, hub, streamPoll),
 	}
 
-	return &Container{Service: syncservice.New(&controllers)}
+	return &Container{
+		Service: syncservice.New(&controllers),
+		Worker:  worker.New(pass, cfg.Federation.ReplicationInterval, logger),
+		closer:  outbound.Close,
+	}, nil
 }

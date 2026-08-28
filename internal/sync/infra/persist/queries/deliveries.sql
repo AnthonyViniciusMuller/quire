@@ -23,7 +23,7 @@ INSERT INTO sync.deliveries (operation_id, server_id)
 SELECT sqlc.arg(operation_id), unnest(sqlc.arg(server_ids)::uuid[])
 ON CONFLICT (operation_id, server_id) DO NOTHING;
 
--- What is still owed to one node, oldest attempt first.
+-- What is still owed to one node, oldest attempt first and then in log order.
 --
 -- The backoff is in the predicate rather than in the worker, because the
 -- alternative is reading rows in order to skip them: a peer that has been
@@ -31,20 +31,29 @@ ON CONFLICT (operation_id, server_id) DO NOTHING;
 -- filtered in Go would page through all of them on every tick. Doubling once
 -- per attempt is bounded by the caller, which passes the exponent ceiling.
 --
--- deliveries_pending_idx serves the ordering and the destination, and its
+-- The order is the log's and not the queue's, and the join is what buys it: a
+-- peer is offered a reader's changes in the order this node committed them, so
+-- a batch cannot carry an update ahead of the insert it depends on — which the
+-- reconciler at the far end would refuse outright. The row identifier would
+-- have been the cheap tie-break and is exactly the wrong one: it is a random
+-- uuid, so it would have shuffled a reader's history into an order no node
+-- could apply.
+--
+-- deliveries_pending_idx serves the destination and the backoff, and its
 -- partial predicate keeps it the size of the backlog rather than of the
 -- history.
 -- name: ListPendingDeliveries :many
-SELECT id, operation_id, server_id, applied_at, attempts, last_attempt_at, last_error
-FROM sync.deliveries
-WHERE server_id = sqlc.arg(server_id)
-  AND applied_at IS NULL
-  AND (last_attempt_at IS NULL
-       OR last_attempt_at < sqlc.arg(now)::timestamptz
+SELECT d.id, d.operation_id, d.server_id, d.applied_at, d.attempts, d.last_attempt_at, d.last_error
+FROM sync.deliveries d
+    JOIN sync.operations o ON o.id = d.operation_id
+WHERE d.server_id = sqlc.arg(server_id)
+  AND d.applied_at IS NULL
+  AND (d.last_attempt_at IS NULL
+       OR d.last_attempt_at < sqlc.arg(now)::timestamptz
             - sqlc.arg(backoff_seconds)::double precision
-              * power(2, least(attempts, sqlc.arg(max_exponent)::integer))
+              * power(2, least(d.attempts, sqlc.arg(max_exponent)::integer))
               * interval '1 second')
-ORDER BY last_attempt_at NULLS FIRST, id
+ORDER BY last_attempt_at NULLS FIRST, o.user_id, o.position
 LIMIT sqlc.arg(page_size)::integer;
 
 -- The nodes this instance owes anything to at all.
@@ -86,3 +95,42 @@ SET attempts        = attempts + 1,
 WHERE server_id = sqlc.arg(server_id)
   AND operation_id = ANY (sqlc.arg(operation_ids)::uuid[])
   AND applied_at IS NULL;
+
+-- Owe every peer everything the reader has authorized it for and it has not
+-- been offered yet.
+--
+-- This is where the queue is filled, and it is filled here rather than by the
+-- call that stored the operation, for a reason that only shows up on the second
+-- peer. A node authorized as a replica today holds none of the reader's history
+-- (RF16, UC15), and rows written when the change happened would carry only what
+-- happened afterwards — the peer would be permanently missing everything from
+-- before its own authorization, and nothing would ever notice. Filling the
+-- queue from the log instead makes the two cases one: a peer authorized a
+-- moment ago and a peer that missed a week are both simply owed what they have
+-- not been offered.
+--
+-- The subquery is the watermark that keeps it from being a scan of the whole
+-- log on every tick. Deliveries are enqueued in position order and never
+-- skipped, so the highest position already owed to a pair is a floor for what
+-- is left, and the ON CONFLICT is what makes the statement safe when it is not.
+--
+-- This node's own row is excluded, and so is a peer discovery has learned about
+-- but the operator has stopped: an inactive node keeps what it already owes and
+-- is offered nothing new.
+-- name: EnqueuePendingDeliveries :execrows
+INSERT INTO sync.deliveries (operation_id, server_id)
+SELECT o.id, r.server_id
+FROM federation.user_replicas r
+    JOIN federation.servers s ON s.id = r.server_id
+    JOIN sync.operations o ON o.user_id = r.user_id
+WHERE r.active
+  AND s.active
+  AND NOT s.is_local
+  AND o.position > COALESCE((
+      SELECT max(owed.position)
+      FROM sync.deliveries d
+          JOIN sync.operations owed ON owed.id = d.operation_id
+      WHERE d.server_id = r.server_id
+        AND owed.user_id = r.user_id
+  ), 0)
+ON CONFLICT (operation_id, server_id) DO NOTHING;

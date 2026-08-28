@@ -15,6 +15,7 @@ import (
 // The operations reported by this file, in the form the errs package expects.
 const (
 	opEnqueue        = "sync/delivery: enqueue"
+	opEnqueuePending = "sync/delivery: enqueue pending"
 	opListPending    = "sync/delivery: list pending"
 	opPendingServers = "sync/delivery: pending servers"
 	opRecord         = "sync/delivery: record"
@@ -36,6 +37,14 @@ func New(manager *persist.Manager) *Repository {
 // queries binds the generated statements to whatever ctx is running in.
 func (r *Repository) queries(ctx context.Context) *syncdb.Queries {
 	return syncdb.New(r.manager.Executor(ctx))
+}
+
+// EnqueuePending owes every peer everything the readers who authorized it have
+// not offered it yet.
+func (r *Repository) EnqueuePending(ctx context.Context) (int64, error) {
+	rows, err := r.queries(ctx).EnqueuePendingDeliveries(ctx)
+
+	return rows, persist.Classify(err, opEnqueuePending)
 }
 
 // Enqueue records that an operation is owed to each of the nodes.

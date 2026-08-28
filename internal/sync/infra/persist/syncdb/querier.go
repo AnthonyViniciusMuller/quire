@@ -68,6 +68,28 @@ type Querier interface {
 	// committed without its delivery rows is a change no worker will ever send,
 	// and nothing afterwards would notice.
 	EnqueueDeliveries(ctx context.Context, arg EnqueueDeliveriesParams) error
+	// Owe every peer everything the reader has authorized it for and it has not
+	// been offered yet.
+	//
+	// This is where the queue is filled, and it is filled here rather than by the
+	// call that stored the operation, for a reason that only shows up on the second
+	// peer. A node authorized as a replica today holds none of the reader's history
+	// (RF16, UC15), and rows written when the change happened would carry only what
+	// happened afterwards — the peer would be permanently missing everything from
+	// before its own authorization, and nothing would ever notice. Filling the
+	// queue from the log instead makes the two cases one: a peer authorized a
+	// moment ago and a peer that missed a week are both simply owed what they have
+	// not been offered.
+	//
+	// The subquery is the watermark that keeps it from being a scan of the whole
+	// log on every tick. Deliveries are enqueued in position order and never
+	// skipped, so the highest position already owed to a pair is a floor for what
+	// is left, and the ON CONFLICT is what makes the statement safe when it is not.
+	//
+	// This node's own row is excluded, and so is a peer discovery has learned about
+	// but the operator has stopped: an inactive node keeps what it already owes and
+	// is offered nothing new.
+	EnqueuePendingDeliveries(ctx context.Context) (int64, error)
 	// Count a try that did not land, and record what it said.
 	//
 	// The count is what the backoff above is computed from, which is why a worker
@@ -110,7 +132,7 @@ type Querier interface {
 	// grouped by reader: the peer-facing call names one reader, since the
 	// certificate identifies the node and not any of the readers it replicates.
 	ListOperationsByID(ctx context.Context, ids []uuid.UUID) ([]SyncOperation, error)
-	// What is still owed to one node, oldest attempt first.
+	// What is still owed to one node, oldest attempt first and then in log order.
 	//
 	// The backoff is in the predicate rather than in the worker, because the
 	// alternative is reading rows in order to skip them: a peer that has been
@@ -118,7 +140,15 @@ type Querier interface {
 	// filtered in Go would page through all of them on every tick. Doubling once
 	// per attempt is bounded by the caller, which passes the exponent ceiling.
 	//
-	// deliveries_pending_idx serves the ordering and the destination, and its
+	// The order is the log's and not the queue's, and the join is what buys it: a
+	// peer is offered a reader's changes in the order this node committed them, so
+	// a batch cannot carry an update ahead of the insert it depends on — which the
+	// reconciler at the far end would refuse outright. The row identifier would
+	// have been the cheap tie-break and is exactly the wrong one: it is a random
+	// uuid, so it would have shuffled a reader's history into an order no node
+	// could apply.
+	//
+	// deliveries_pending_idx serves the destination and the backoff, and its
 	// partial predicate keeps it the size of the backlog rather than of the
 	// history.
 	ListPendingDeliveries(ctx context.Context, arg ListPendingDeliveriesParams) ([]SyncDelivery, error)

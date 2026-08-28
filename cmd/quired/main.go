@@ -123,13 +123,18 @@ func run(ctx context.Context) error {
 	// every one of them through the repository its own slice declares. Wiring
 	// that is this file's job — the sync slice imports no container but its
 	// own.
-	synchronization := syncdi.Initialize(pool, clock, &syncdi.Records{
+	synchronization, err := syncdi.Initialize(cfg, pool, clock, federation.Servers, &syncdi.Records{
 		Works:     library.Ebooks,
 		Groupings: library.Collections,
 		Filings:   library.Memberships,
 		Marks:     reading.Annotations,
 		Positions: reading.Progress,
-	})
+	}, logger)
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = synchronization.Close() }()
 
 	grpcServer, err := grpcx.New(ctx, &cfg.Server,
 		grpcx.WithChain(grpcx.NewChain(logger).Around(registry.GRPCServerInterceptors())),
@@ -181,6 +186,11 @@ func run(ctx context.Context) error {
 	group, serving := errgroup.WithContext(ctx)
 	group.Go(func() error { return grpcServer.Serve(serving) })
 	group.Go(func() error { return httpServer.Serve(serving) })
+	// The third member of the group is not a server. Replication is driven
+	// from the side that owes the data, so nobody calls it and nothing would
+	// start it — and it stops with the two listeners because a node that kept
+	// replicating after it stopped answering would be half a node.
+	group.Go(func() error { return synchronization.Worker.Run(serving) })
 
 	if err := group.Wait(); err != nil {
 		return err

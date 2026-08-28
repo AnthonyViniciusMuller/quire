@@ -48,6 +48,20 @@ type Batch struct {
 // owes its peers. It belongs to the domain; what satisfies it lives in
 // internal/sync/infra/repository/delivery.
 type Repository interface {
+	// EnqueuePending owes every peer everything the readers who authorized it
+	// have not offered it yet, and reports how many rows it wrote.
+	//
+	// It is what fills the queue, and it is a statement over the log rather
+	// than a call the ingest makes for a reason that only shows up on the
+	// second peer: a node authorized as a replica today holds none of the
+	// reader's history (RF16, UC15), and rows written when a change happened
+	// would carry only what happened afterwards. That peer would be
+	// permanently missing everything from before its own authorization, and
+	// nothing would ever notice. Filling from the log makes the two cases one
+	// — a peer authorized a moment ago and a peer that missed a week are both
+	// owed what they have not been offered.
+	EnqueuePending(ctx context.Context) (int64, error)
+
 	// Enqueue records that an operation is owed to each of the nodes, and does
 	// nothing for a pair that already has a row.
 	//
