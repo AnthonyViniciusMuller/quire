@@ -182,6 +182,23 @@ name is the reference's and it is kept; the stutter check alone is excluded for
 `internal/*/domain/*` in [`.golangci.yml`](../.golangci.yml), and the rest of `revive` still
 applies there.
 
+### The reference client is not a slice
+
+[`internal/client`](../internal/client) has none of the four layers above, and should not: it
+is not part of the node. It is the other end of the contract — a device — and what a slice's
+layers separate is a domain from the transport that carries it, which is a separation a client
+of one transport has nothing to gain from.
+
+It follows the two rules that do apply to everything here. Nothing in it reads an environment
+variable or resolves a default path, so its whole configuration surface is one struct that
+`cmd/quirectl` fills in, exactly as `cmd/quired` fills in the node's. And the program at the
+edge only translates: `cmd/quirectl` decodes flags, calls one method, and prints — which is
+the same rule a gRPC controller follows, applied to a terminal.
+
+The dependency goes one way. The client imports the shared core and the generated contract,
+because a device stamps the same clock and speaks the same messages; no package of the node
+imports the client, and the end-to-end suites are what drive it.
+
 ### A value object two entities share gets a package of its own
 
 The reference's `domain/` holds one package per entity and nothing else. The reading slice has

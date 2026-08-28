@@ -774,6 +774,25 @@ Mentioned in section 2.6 but absent from RNF12 and from the deployment diagram.
 Needed to exercise the end-to-end suites without the Flutter application, and used to
 demonstrate the system to the examining board.
 
+**Status** open. Implemented in phase 10, as `internal/client` with `cmd/quirectl` over it.
+Two things about it belong in 4.2.4 alongside the mention of the client itself.
+
+It is a device and not a caller. It is bound to an origin server, it carries the identifier
+its vector clock entries are keyed by, it stamps its own writes on a hybrid logical clock of
+its own (C01), and it keeps all of that between two commands in one file — so two state files
+on one machine are two devices, which is what makes UC10 demonstrable on a laptop. A change is
+one method whichever path it takes: a client that cannot reach the node stamps the change and
+appends it to its local log, and one that can calls the RPC, which is the contract's own
+requirement that the two be indistinguishable once applied.
+
+What it deliberately does not keep is a copy of the reader's collection. It remembers the
+causal version it last saw of each record it touched — which is what a later change has to be
+stamped on top of — and reads the collection from the node. A local replica would have to be
+maintained by applying incoming operations to it, which is a second reconciler in the same
+repository and therefore a second answer to what RN02 converges on; the device the thesis
+describes has one because it has to render a library offline, and that is a property of the
+application rather than of the protocol.
+
 ### D06 — discovery publishes an explicit gRPC authority
 
 The MER gives `servidor` a single `url_base`, "o endpoint efetivo obtido pelo descobrimento".

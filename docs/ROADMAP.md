@@ -326,7 +326,24 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 ## Phase 10 — Client and end-to-end
 
-- [ ] `feat: add quirectl reference client` — and the `make build` target grows its second binary back
+- [x] `feat: add quirectl reference client` — and the `make build` target grows its second
+      binary back. It is a device and not a caller, which is the whole of why it is a package
+      rather than a handful of generated stubs: it is bound to an origin server, it carries
+      the identifier every vector clock entry is keyed by, it stamps its own writes on a
+      hybrid logical clock of its own, and it keeps all of that between two commands in one
+      file — so a second `--state` is a second device, and UC10 is demonstrable on one
+      laptop. A write is one method whichever path it takes: offline it is stamped and
+      appended to the local log, connected it is the RPC, and the caller does not branch,
+      which is the contract's own requirement that the two be indistinguishable once applied.
+      What the client deliberately does not keep is a copy of the collection — it remembers
+      the causal version it last saw of each record it touched, because that is what a later
+      change has to be stamped on top of, and a local replica would have to be maintained by
+      applying operations to it, which is a second reconciler in this repository. The client
+      is `internal/client` and the terminal program over it is `cmd/quirectl`, recorded in
+      [`architecture.md`](architecture.md) as the one thing under `internal/` that is not a
+      slice; the command tree is `spf13/cobra`, which costs one direct dependency and two
+      indirect ones against the twenty and sixty-six D08 measured. D05 in
+      [`tcc-corrections.md`](tcc-corrections.md) records what of this has to reach 4.2.4
 - [ ] `build: add docker compose with two federated nodes` — both need
       `QUIRE_FEDERATION_ALLOW_INSECURE_DISCOVERY`, since the `.well-known` documents are
       plain HTTP there and the discovery client refuses that without it

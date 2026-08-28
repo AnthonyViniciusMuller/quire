@@ -166,9 +166,13 @@ linters:
           - noctx
           - unparam
       # The reference client is a terminal program: printing is its output.
+      # It repeats the words a command tree repeats — "list", "create", and the
+      # headings of the tables it prints — and a constant named for the word
+      # "list" would be a name for the word list.
       - path: ^cmd/quirectl/
         linters:
           - forbidigo
+          - goconst
       # The domain packages are named after the entity they own — user.User,
       # device.Device — which is the layout docs/architecture.md follows. Only
       # the stutter check is excluded; the rest of revive still applies there.
