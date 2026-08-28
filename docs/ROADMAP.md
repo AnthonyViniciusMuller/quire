@@ -578,9 +578,9 @@ argument are in C01. Whether a node with no way to deliver a recovery should sta
 2026-08-28: the question was the wrong way round, and the missing component was built instead —
 the transport and the queue are both in C13, which is now settled, and 4.3 gains a component.
 And whether the integration suite should have a container library start its dependencies, on
-2026-08-27: it should not, and phase 7 confirmed it rather than reopening it. That second one leaves no entry in
-[`tcc-corrections.md`](tcc-corrections.md), because it is a question about this project's
-tooling and not about the specification — the suite now needs a MinIO as well as a
+2026-08-27: it should not, and phase 7 confirmed it rather than reopening it. That last one
+leaves no entry in [`tcc-corrections.md`](tcc-corrections.md), because it is a question about
+this project's tooling and not about the specification — the suite now needs a MinIO as well as a
 PostgreSQL, `make test-up` brings both up, and the 87 modules testcontainers costs are
 still 87 modules.
 
