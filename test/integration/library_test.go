@@ -35,6 +35,7 @@ import (
 	clockservice "github.com/anthonyvsmuller/quire/internal/library/infra/service/clock"
 	"github.com/anthonyvsmuller/quire/internal/shared/errs"
 	"github.com/anthonyvsmuller/quire/internal/shared/grpcx"
+	"github.com/anthonyvsmuller/quire/internal/shared/hlc"
 	"github.com/anthonyvsmuller/quire/internal/shared/logging"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 )
@@ -87,7 +88,7 @@ func serveLibrary(t *testing.T) library {
 		t.Fatalf("building the identity slice: %v", err)
 	}
 
-	libraryContainer, err := librarydi.Initialize(t.Context(), cfg, pool)
+	libraryContainer, err := librarydi.Initialize(t.Context(), cfg, pool, hlc.New())
 	if err != nil {
 		t.Fatalf("building the library slice: %v", err)
 	}
@@ -904,7 +905,7 @@ func TestFilingAWorkSerializesWithDeletingTheGrouping(t *testing.T) {
 	works := ebookrepository.New(manager)
 	collections := collectionrepository.New(manager)
 	memberships := membershiprepository.New(manager)
-	clock := clockservice.New()
+	clock := clockservice.New(hlc.New())
 
 	reader, device := seedReader(t)
 	at := time.Now().UTC().Truncate(time.Microsecond)

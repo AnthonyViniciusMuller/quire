@@ -44,6 +44,7 @@ import (
 	progressrepository "github.com/anthonyvsmuller/quire/internal/reading/infra/repository/progress"
 	clockservice "github.com/anthonyvsmuller/quire/internal/reading/infra/service/clock"
 	worksservice "github.com/anthonyvsmuller/quire/internal/reading/infra/service/works"
+	"github.com/anthonyvsmuller/quire/internal/shared/hlc"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 )
 
@@ -55,14 +56,14 @@ type Container struct {
 
 // Initialize builds the slice over the node's connection pool and the library
 // slice's works repository.
-func Initialize(pool *pgxpool.Pool, library libraryebook.Repository) *Container {
+func Initialize(pool *pgxpool.Pool, library libraryebook.Repository, stamps *hlc.Clock) *Container {
 	manager := persist.NewManager(pool)
 
 	marks := annotationrepository.New(manager)
 	positions := progressrepository.New(manager)
 
 	works := worksservice.New(library)
-	clock := clockservice.New()
+	clock := clockservice.New(stamps)
 
 	controllers := readingservice.Controllers{
 		CreateAnnotation: createannotation.New(

@@ -65,6 +65,7 @@ import (
 	stagingservice "github.com/anthonyvsmuller/quire/internal/library/infra/service/staging"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/errs"
+	"github.com/anthonyvsmuller/quire/internal/shared/hlc"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 )
 
@@ -110,7 +111,9 @@ func (c *Container) Close() error {
 // Nothing is dialled. A store that is down is a failed call and not a node
 // that refuses to start: this slice also serves metadata for readers whose
 // files it does not hold, and it should keep serving it.
-func Initialize(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (*Container, error) {
+func Initialize(
+	ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, stamps *hlc.Clock,
+) (*Container, error) {
 	manager := persist.NewManager(pool)
 
 	works := ebookrepository.New(manager)
@@ -124,7 +127,7 @@ func Initialize(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (*C
 	}
 
 	staging := stagingservice.New()
-	clock := clockservice.New()
+	clock := clockservice.New(stamps)
 
 	// The manager itself is the unit of work: its Within is the port, so no
 	// adapter stands between them.

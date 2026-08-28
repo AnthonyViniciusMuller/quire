@@ -234,7 +234,13 @@ the thesis — corrections to the specification and deliberate divergences from 
       moves into the append statement as a data-modifying CTE, which is what makes C08's
       requirement — allocate in the transaction that inserts — structural rather than a
       comment somebody has to obey, since a statement cannot straddle two transactions
-- [ ] `feat: add hybrid logical clock`
+- [x] `feat: add hybrid logical clock` — the other half of C01, node-wide, in the shared
+      core rather than in the slice: it is what the library and reading `Clock` ports have
+      been promising since phase 7, and swapping the wall clock behind them for it changed no
+      use case. Hand-written after measuring the alternatives — every published Go
+      implementation carries the Kulkarni pair of an instant and a counter, which is two
+      values where C01 stamps one `timestamptz`, and `lafikl/hlc` keeps both of them
+      unexported with no accessor at all
 - [ ] `feat: add operation reconciler with crdt merge` — the tie-break is
       `(updated_at, device_id)` over the hybrid logical clock, per C01 in
       [`tcc-corrections.md`](tcc-corrections.md)

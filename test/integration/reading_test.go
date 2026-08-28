@@ -29,6 +29,7 @@ import (
 	progressrepository "github.com/anthonyvsmuller/quire/internal/reading/infra/repository/progress"
 	"github.com/anthonyvsmuller/quire/internal/shared/errs"
 	"github.com/anthonyvsmuller/quire/internal/shared/grpcx"
+	"github.com/anthonyvsmuller/quire/internal/shared/hlc"
 	"github.com/anthonyvsmuller/quire/internal/shared/logging"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 )
@@ -69,14 +70,14 @@ func serveReading(t *testing.T) reading {
 		t.Fatalf("building the identity slice: %v", err)
 	}
 
-	libraryContainer, err := librarydi.Initialize(t.Context(), cfg, pool)
+	libraryContainer, err := librarydi.Initialize(t.Context(), cfg, pool, hlc.New())
 	if err != nil {
 		t.Fatalf("building the library slice: %v", err)
 	}
 
 	t.Cleanup(func() { _ = libraryContainer.Close() })
 
-	readingContainer := readingdi.Initialize(pool, libraryContainer.Ebooks)
+	readingContainer := readingdi.Initialize(pool, libraryContainer.Ebooks, hlc.New())
 
 	grpcServer, err := grpcx.New(t.Context(), &cfg.Server,
 		grpcx.WithChain(grpcx.NewChain(logging.Discard())),

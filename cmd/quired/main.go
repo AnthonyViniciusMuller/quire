@@ -27,6 +27,7 @@ import (
 	readingdi "github.com/anthonyvsmuller/quire/internal/reading/di"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/grpcx"
+	"github.com/anthonyvsmuller/quire/internal/shared/hlc"
 	"github.com/anthonyvsmuller/quire/internal/shared/httpx"
 	"github.com/anthonyvsmuller/quire/internal/shared/logging"
 	"github.com/anthonyvsmuller/quire/internal/shared/metrics"
@@ -75,6 +76,12 @@ func run(ctx context.Context) error {
 		return err
 	}
 
+	// One clock for the node, and every slice that stamps a replication
+	// timestamp shares it. C01 makes that instant causally monotonic rather
+	// than a reading of the machine's clock, and a second clock in this
+	// process would be a second answer to what "after" means here.
+	clock := hlc.New()
+
 	// The federation slice comes first because the identity slice needs the
 	// catalogue from it: a reader is bound to the node that hosts them (UC14),
 	// and the row that says which node this is lives in federation.servers.
@@ -96,7 +103,7 @@ func run(ctx context.Context) error {
 	// or a service account key the node cannot read is a deployment fault. A
 	// node that cannot store a file cannot serve UC02 at all, and should say
 	// so before it starts answering.
-	library, err := librarydi.Initialize(ctx, cfg, pool)
+	library, err := librarydi.Initialize(ctx, cfg, pool, clock)
 	if err != nil {
 		return err
 	}
@@ -108,7 +115,7 @@ func run(ctx context.Context) error {
 	// so whose a mark or a position is is established through the library's
 	// works repository. Wiring the two is this file's job — neither slice
 	// imports the other's container.
-	reading := readingdi.Initialize(pool, library.Ebooks)
+	reading := readingdi.Initialize(pool, library.Ebooks, clock)
 
 	grpcServer, err := grpcx.New(ctx, &cfg.Server,
 		grpcx.WithChain(grpcx.NewChain(logger).Around(registry.GRPCServerInterceptors())),

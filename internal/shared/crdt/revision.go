@@ -128,9 +128,12 @@ func (r Revision) IsZero() bool {
 // earlier timestamp and the tie-break cannot cycle.
 //
 // The other half is node-wide, over every timestamp the replica has observed
-// rather than over one row, and it belongs to the hybrid logical clock of
-// phase 9. The two compose: a maximum of maxima is a maximum, so the clock
-// replacing the wall clock reading here strengthens this without changing it.
+// rather than over one row, and it is
+// [github.com/anthonyvsmuller/quire/internal/shared/hlc], which is what the
+// reading passed in comes from. The two compose: a maximum of maxima is a
+// maximum, so that clock strengthens this without changing it — and this one
+// is what still holds when that one is restarted and has observed nothing,
+// which is why the floor stayed here rather than moving there.
 //
 // The truncation is what makes the value survive a round trip through a
 // timestamptz, and what makes "one step" mean the smallest difference the

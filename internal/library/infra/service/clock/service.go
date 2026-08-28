@@ -1,32 +1,38 @@
-// Package clock is the wall clock adapter of the library slice's time port.
+// Package clock is the library slice's adapter of the time port, over the
+// node's hybrid logical clock.
 //
-// It truncates to the microsecond a timestamptz holds, so that an instant a use
-// case stamped and the one a later read returns are the same value. Without it
-// a test that writes and reads back compares two instants that differ by
-// nanoseconds the database never stored.
+// Every instant this slice stamps is a replication timestamp and not a reading
+// of the machine's clock. C01 in docs/tcc-corrections.md requires it to be
+// causally monotonic: a causally later version of a record carrying an earlier
+// instant is one bad edge, and one bad edge makes the last-writer-wins
+// relation cyclic, which costs associativity and with it the eventual
+// consistency of RNF03.
 //
-// It is a wall clock, and every timestamp this slice stamps is not one. The
-// replication timestamp of C01 has to be causally monotonic; what supplies that
-// today is the per-record floor in crdt.Revision, over the reading this adapter
-// returns, and phase 9 replaces this adapter with the node-wide hybrid logical
-// clock. The port does not change, and neither does any use case.
+// What supplies that is [github.com/anthonyvsmuller/quire/internal/shared/hlc]
+// over the whole node, and the per-record floor in crdt.Revision over the row
+// being written. The two compose, and the clock is shared with every other
+// slice that stamps one: a second clock in this process would be a second
+// answer to what "after" means here.
 package clock
 
 import (
 	"time"
 
 	"github.com/anthonyvsmuller/quire/internal/library/application/service"
-	"github.com/anthonyvsmuller/quire/internal/shared/crdt"
+	"github.com/anthonyvsmuller/quire/internal/shared/hlc"
 )
 
-// Service reads the machine's clock.
-type Service struct{}
+// Service stamps from the node's clock.
+type Service struct {
+	clock *hlc.Clock
+}
 
 // Service satisfies the port the use cases hold.
 var _ service.Clock = (*Service)(nil)
 
-// New returns the adapter.
-func New() *Service { return &Service{} }
+// New returns the adapter over the node's clock.
+func New(clock *hlc.Clock) *Service { return &Service{clock: clock} }
 
-// Now is the current instant, in UTC, at the resolution the database keeps.
-func (*Service) Now() time.Time { return time.Now().UTC().Truncate(crdt.Resolution) }
+// Now is the instant to stamp the next write with, in UTC and at the
+// resolution the database keeps.
+func (s *Service) Now() time.Time { return s.clock.Now() }

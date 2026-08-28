@@ -95,11 +95,24 @@ skew. `atualizado_em` is `timestamptz`, so its microsecond resolution is the `+1
 semilattice, proved by property test in `internal/shared/crdt`. The defect was only in the
 tie-break layered on top of it.
 
-**Status** settled 2026-08-26: hybrid logical clock, as above. Extends RN02 and RNF03 and has
-to be recorded alongside them in the text. In the code it lands as `feat: add hybrid logical
-clock` before the reconciler, and on the wire as a distinct `HybridTimestamp` message rather
-than a `google.protobuf.Timestamp`, so that nothing can compare it against a wall clock by
-accident.
+**Implemented in two levels, and the text should say why.** The rule is applied over one
+record in `internal/shared/crdt` — a revision is stamped no earlier than one step past the
+version it was derived from — and over the whole node in `internal/shared/hlc`. A maximum of
+maxima is a maximum, so the second strengthens the first without changing it.
+
+Two consequences follow, and both are properties of the correction rather than of the code.
+The node-wide clock is held in memory, so a restart forgets it; that is survivable because
+the cycle above lives between versions of *one* record, and every write reads the record it
+is about to stamp, so the per-record floor holds whether or not the node-wide one does. And
+an instant observed from a peer is adopted only within a five-minute ceiling: without one, a
+single peer whose clock is a year fast pushes this node a year into the future and keeps
+every tie there, and refusing the observation is safe for exactly the reason a restart is.
+
+**Status** settled 2026-08-26, implemented 2026-08-28. Extends RN02 and RNF03 and has to be
+recorded alongside them in the text, together with the two consequences above. In the code it
+is `internal/shared/hlc`, behind the `Clock` port of the library and reading slices, and on
+the wire a distinct `HybridTimestamp` message rather than a `google.protobuf.Timestamp`, so
+that nothing can compare it against a wall clock by accident.
 
 ### C02 — Quadros 18, 19 and 20 omit the attributes a replicable entity needs
 
