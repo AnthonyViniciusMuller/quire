@@ -18,8 +18,10 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/authn"
 	pulloperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/pulloperations"
 	pushoperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/pushoperations"
+	replicateoperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/replicateoperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pulloperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pushoperations"
+	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/replicateoperations"
 	syncstream "github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/sync"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/syncservice"
 	changesservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/changes"
@@ -108,11 +110,14 @@ func TestEveryCallReachesItsController(t *testing.T) {
 	}
 }
 
-// ReplicateOperations is the one method of this contract whose caller is a peer
-// node and not a device, and it is authenticated by a certificate rather than
-// by a token. It is not served yet, and a test names that so it is a decision
-// rather than an omission.
-func TestReplicateOperationsIsNotServedYet(t *testing.T) {
+// ReplicateOperations is the one method of this contract whose caller is a
+// peer node and not a device, and it is authenticated by the certificate that
+// caller presented rather than by a token.
+//
+// It is served, and what proves it is served is what it refuses: a caller with
+// no certificate is told this call is addressed to a node, which is an answer
+// only the peer-facing controller can give.
+func TestReplicateOperationsRefusesACallerThatIsNotANode(t *testing.T) {
 	t.Parallel()
 
 	var calls []string
@@ -120,8 +125,16 @@ func TestReplicateOperationsIsNotServedYet(t *testing.T) {
 	_, err := newService(&calls).ReplicateOperations(
 		authenticated(t), &quirev1.ReplicateOperationsRequest{})
 
-	if status.Code(err) != codes.Unimplemented {
-		t.Errorf("ReplicateOperations = %v, want Unimplemented until the peer-facing half lands", err)
+	if status.Code(err) == codes.Unimplemented {
+		t.Fatal("ReplicateOperations answers Unimplemented, so the service does not serve it")
+	}
+
+	if err == nil {
+		t.Fatal("ReplicateOperations answered a caller that presented no certificate")
+	}
+
+	if len(calls) != 0 {
+		t.Errorf("the call reached %v before the caller had been identified", calls)
 	}
 }
 
@@ -134,10 +147,15 @@ func newService(calls *[]string) *syncservice.Service {
 		name: "PullOperations", calls: calls,
 	}
 
+	replicate := recorder[replicateoperationsusecase.Input, replicateoperationsusecase.Output]{
+		name: "ReplicateOperations", calls: calls,
+	}
+
 	return syncservice.New(&syncservice.Controllers{
-		PushOperations: pushoperations.New(push),
-		PullOperations: pulloperations.New(pull),
-		Sync:           syncstream.New(push, pull, changesservice.New(), time.Hour),
+		PushOperations:      pushoperations.New(push),
+		PullOperations:      pulloperations.New(pull),
+		Sync:                syncstream.New(push, pull, changesservice.New(), time.Hour),
+		ReplicateOperations: replicateoperations.New(replicate),
 	})
 }
 

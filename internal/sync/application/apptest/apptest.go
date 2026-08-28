@@ -20,6 +20,7 @@ import (
 	"uuid"
 
 	"github.com/anthonyvsmuller/quire/internal/shared/crdt"
+	"github.com/anthonyvsmuller/quire/internal/shared/errs"
 	"github.com/anthonyvsmuller/quire/internal/sync/application/service"
 	"github.com/anthonyvsmuller/quire/internal/sync/domain/delivery"
 	"github.com/anthonyvsmuller/quire/internal/sync/domain/operation"
@@ -642,4 +643,76 @@ func (p *Peers) Offered() [][]uuid.UUID {
 	defer p.mu.Unlock()
 
 	return slices.Clone(p.offered)
+}
+
+// Replicas is a catalogue of one node and the readers that authorized it.
+type Replicas struct {
+	mu         sync.Mutex
+	pins       map[string]uuid.UUID
+	authorized map[uuid.UUID]map[uuid.UUID]bool
+	// Err, when set, is what Identify reports.
+	Err error
+}
+
+// Replicas satisfies the port the use cases hold.
+var _ service.Replicas = (*Replicas)(nil)
+
+// NewReplicas returns an empty catalogue: no node is known and nobody has
+// authorized anything, which is what a node that has never federated looks
+// like.
+func NewReplicas() *Replicas {
+	return &Replicas{
+		pins:       map[string]uuid.UUID{},
+		authorized: map[uuid.UUID]map[uuid.UUID]bool{},
+	}
+}
+
+// Know records a node under the pin it publishes.
+func (r *Replicas) Know(pin string, serverID uuid.UUID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.pins[pin] = serverID
+}
+
+// Authorize records that a reader lets the node hold a copy of their data.
+func (r *Replicas) Authorize(serverID, userID uuid.UUID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, known := r.authorized[serverID]; !known {
+		r.authorized[serverID] = map[uuid.UUID]bool{}
+	}
+
+	r.authorized[serverID][userID] = true
+}
+
+// Identify returns the node that published the pin.
+func (r *Replicas) Identify(_ context.Context, pin string) (uuid.UUID, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.Err != nil {
+		return uuid.UUID{}, r.Err
+	}
+
+	serverID, known := r.pins[pin]
+	if !known {
+		return uuid.UUID{}, errs.New(errs.KindPermissionDenied,
+			"this node is not replicating with you")
+	}
+
+	return serverID, nil
+}
+
+// Authorized reports nil when the reader lets the node hold a copy.
+func (r *Replicas) Authorized(_ context.Context, serverID, userID uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.authorized[serverID][userID] {
+		return nil
+	}
+
+	return errs.New(errs.KindPermissionDenied, "the reader has not authorized this node")
 }

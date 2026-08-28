@@ -37,6 +37,7 @@ import (
 	removeserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/removeserver"
 	revokereplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/revokereplica"
 	updateserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/updateserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/domain/replica"
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/server"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/addknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/authorizereplica"
@@ -63,6 +64,11 @@ type Container struct {
 	// slice reaches it through its own port, which is what binds a reader to
 	// this node.
 	Servers server.Repository
+	// Authorizations is which readers let which nodes hold a copy of their
+	// data. The sync slice reaches it through its own port, which is what
+	// refuses a peer offering changes for a reader who never allowed it (RN03,
+	// RF16) — the one call in the contract refused on a reader's instruction.
+	Authorizations replica.Repository
 	// Service is the gRPC surface of the slice, ready to be registered.
 	Service *federationservice.Service
 }
@@ -104,7 +110,8 @@ func Initialize(cfg *config.Config, pool *pgxpool.Pool) *Container {
 	}
 
 	return &Container{
-		Servers: servers,
-		Service: federationservice.New(&controllers),
+		Servers:        servers,
+		Authorizations: replicas,
+		Service:        federationservice.New(&controllers),
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"syscall"
 
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 
 	federationdi "github.com/anthonyvsmuller/quire/internal/federation/di"
 	"github.com/anthonyvsmuller/quire/internal/identity/application/service"
@@ -34,6 +35,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 	"github.com/anthonyvsmuller/quire/internal/shared/wellknown"
 	syncdi "github.com/anthonyvsmuller/quire/internal/sync/di"
+	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/peerauthn"
 )
 
 func main() {
@@ -123,20 +125,37 @@ func run(ctx context.Context) error {
 	// every one of them through the repository its own slice declares. Wiring
 	// that is this file's job — the sync slice imports no container but its
 	// own.
-	synchronization, err := syncdi.Initialize(cfg, pool, clock, federation.Servers, &syncdi.Records{
-		Works:     library.Ebooks,
-		Groupings: library.Collections,
-		Filings:   library.Memberships,
-		Marks:     reading.Annotations,
-		Positions: reading.Progress,
-	}, logger)
+	synchronization, err := syncdi.Initialize(cfg, pool, clock,
+		federation.Servers, federation.Authorizations, &syncdi.Records{
+			Works:     library.Ebooks,
+			Groupings: library.Collections,
+			Filings:   library.Memberships,
+			Marks:     reading.Annotations,
+			Positions: reading.Progress,
+		}, logger)
 	if err != nil {
 		return err
 	}
 
 	defer func() { _ = synchronization.Close() }()
 
+	// What the listener presents, and nil in a deployment with no certificate
+	// of its own. It serves devices and peers alike: a device authenticates
+	// with a token and carries no certificate, and a peer is identified by the
+	// one it does — which is why the client certificate is requested and never
+	// required.
+	peerCredentials, err := peerauthn.ServerCredentials(&cfg.Federation)
+	if err != nil {
+		return err
+	}
+
+	serverOptions := make([]grpc.ServerOption, 0, 1)
+	if peerCredentials != nil {
+		serverOptions = append(serverOptions, grpc.Creds(peerCredentials))
+	}
+
 	grpcServer, err := grpcx.New(ctx, &cfg.Server,
+		grpcx.WithServerOptions(serverOptions...),
 		grpcx.WithChain(grpcx.NewChain(logger).Around(registry.GRPCServerInterceptors())),
 		// Nearest the handler, and after the chain above on purpose. A call it
 		// rejects is still counted, still carries the request identifier, is

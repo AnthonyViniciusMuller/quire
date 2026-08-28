@@ -286,7 +286,16 @@ the thesis — corrections to the specification and deliberate divergences from 
       and is a random uuid, so it would have shuffled a history into an order the far end
       would refuse. The client speaks mTLS and pins the peer's public key per C12, including
       on a resumed session, where TLS 1.3 skips the certificate callback entirely
-- [ ] `feat: add node to node replication handler with mtls`
+- [x] `feat: add node to node replication handler with mtls` — the inbound half, and the
+      credentials the listener presents. The client certificate is requested and never
+      required, because one listener serves devices and peers: a device carries a token and
+      no certificate, so requiring one would refuse every device in order to identify a
+      handful of nodes. The caller is read off the connection as a reader's identity is read
+      off a token, and it is checked against the pin the catalogue learned from the peer's
+      own discovery document — the two ends pin the same bytes. It is the only call in the
+      contract refused on a reader's own instruction (RN03), and a reader who never
+      authorized the node and one who is not hosted here are given the same words, because a
+      peer able to tell them apart could enumerate this node's readers
 - [ ] `feat: add home server migration use case`
 - [ ] `test: add integration tests for sync reconciliation`
 

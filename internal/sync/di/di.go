@@ -4,8 +4,9 @@
 //
 // It is the only place where a concrete adapter of this slice is named, and the
 // slice with the most of somebody else's: the reconciler writes the records
-// five repositories in two other slices own, so Initialize takes them and wraps
-// them behind the one port the use cases hold. That is the shape
+// five repositories in two other slices own, and the peer-facing call reads the
+// federation slice's catalogue and its authorizations, so Initialize takes all
+// seven and wraps them behind the two ports the use cases hold. That is the shape
 // internal/reading/infra/service/works set, and it is wired the same way — in
 // cmd/quired, where the containers meet, so that no slice imports another's di.
 //
@@ -28,6 +29,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	federationreplica "github.com/anthonyvsmuller/quire/internal/federation/domain/replica"
 	federationserver "github.com/anthonyvsmuller/quire/internal/federation/domain/server"
 
 	librarycollection "github.com/anthonyvsmuller/quire/internal/library/domain/collection"
@@ -41,8 +43,10 @@ import (
 	pulloperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/pulloperations"
 	pushoperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/pushoperations"
 	replicateusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/replicate"
+	replicateoperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/replicateoperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pulloperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pushoperations"
+	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/replicateoperations"
 	syncstream "github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/sync"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/syncservice"
 	deliveryrepository "github.com/anthonyvsmuller/quire/internal/sync/infra/repository/delivery"
@@ -51,6 +55,7 @@ import (
 	clockservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/clock"
 	peersservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/peers"
 	recordsservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/records"
+	replicasservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/replicas"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/worker"
 )
 
@@ -114,6 +119,7 @@ func Initialize(
 	pool *pgxpool.Pool,
 	stamps *hlc.Clock,
 	catalogue federationserver.Repository,
+	authorizations federationreplica.Repository,
 	records *Records,
 	logger *slog.Logger,
 ) (*Container, error) {
@@ -143,10 +149,14 @@ func Initialize(
 	pass := replicateusecase.New(deliveries, log, outbound, clock,
 		cfg.Federation.ReplicationInterval, cfg.Federation.ReplicationBatchSize)
 
+	inbound := replicateoperationsusecase.New(
+		replicasservice.New(catalogue, authorizations), push)
+
 	controllers := syncservice.Controllers{
-		PushOperations: pushoperations.New(push),
-		PullOperations: pulloperations.New(pull),
-		Sync:           syncstream.New(push, pull, hub, streamPoll),
+		PushOperations:      pushoperations.New(push),
+		PullOperations:      pulloperations.New(pull),
+		Sync:                syncstream.New(push, pull, hub, streamPoll),
+		ReplicateOperations: replicateoperations.New(inbound),
 	}
 
 	return &Container{

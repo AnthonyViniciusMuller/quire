@@ -9,7 +9,9 @@
 // The Unimplemented struct is embedded because the contract requires it and
 // because buf.gen.yaml says why. What that costs is that a forgotten method
 // answers Unimplemented instead of failing to build, so a test calls all four
-// and refuses that answer.
+// and refuses that answer. Three of them reach a controller; the fourth is
+// refused by the certificate check before it can, which is an answer only the
+// peer-facing controller could have given.
 package syncservice
 
 import (
@@ -20,6 +22,7 @@ import (
 	quirev1 "github.com/anthonyvsmuller/quire/internal/gen/quire/v1"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pulloperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pushoperations"
+	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/replicateoperations"
 	syncstream "github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/sync"
 )
 
@@ -31,6 +34,8 @@ type Controllers struct {
 	PullOperations *pulloperations.PullOperations
 	// The one that serves UC10 and UC11 by staying open.
 	Sync *syncstream.Sync
+	// The one whose caller is a peer node rather than a device.
+	ReplicateOperations *replicateoperations.ReplicateOperations
 }
 
 // Service is the gRPC surface of the sync slice.
@@ -70,4 +75,11 @@ func (s *Service) PullOperations(
 // Sync is the same push and pull, kept open (UC10, UC11).
 func (s *Service) Sync(stream quirev1.SyncService_SyncServer) error {
 	return s.controllers.Sync.Handle(stream)
+}
+
+// ReplicateOperations accepts a reader's changes from a peer node (RF16, RN03).
+func (s *Service) ReplicateOperations(
+	ctx context.Context, request *quirev1.ReplicateOperationsRequest,
+) (*quirev1.ReplicateOperationsResponse, error) {
+	return s.controllers.ReplicateOperations.Handle(ctx, request)
 }
