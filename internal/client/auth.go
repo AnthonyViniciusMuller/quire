@@ -113,19 +113,19 @@ func (c *Client) Login(ctx context.Context, in *Credentials) (*quirev1.LoginResp
 
 // adopt records who this device now is.
 //
-// A session for a reader other than the one the state was holding empties the
-// causal state with it: the pending log, the cursors and the versions this
-// device has seen are all one reader's, and offering them to another reader's
-// account would be offering changes nobody made. Arriving at a new node as the
-// same reader is not that case and does not come through here — a migration
-// keeps every one of them, because pushing them is what the migration is for.
+// What it does not do is clear anything. A session for a reader whose
+// identifier is not the one the state was holding is the ordinary shape of
+// UC16 — a reader who moved keeps their devices and gets a new identifier on
+// the new node (C11) — and the devices that did not make the call arrive at
+// their new home by logging into it, holding a log this node has not seen. A
+// client that emptied the causal state on the change of account would complete
+// the migration by discarding what was being migrated.
+//
+// The state file is therefore one device of one reader, and pointing it at a
+// second reader is an operator's mistake rather than a case handled here. It is
+// not a dangerous one: what such a client offered would name records belonging
+// to somebody else, and the node refuses those on the reader they belong to.
 func (c *Client) adopt(reader *quirev1.User, appliance *quirev1.Device, session *quirev1.Session) {
-	if id := parseID(reader.GetId()); id != c.state.User.ID {
-		c.state.Records = map[string]Record{}
-		c.state.Cursors = map[string]int64{}
-		c.state.Pending = nil
-	}
-
 	c.state.User = User{
 		ID:          parseID(reader.GetId()),
 		LocalName:   reader.GetLocalName(),

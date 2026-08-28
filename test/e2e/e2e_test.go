@@ -265,6 +265,43 @@ func (d *device) reconnect(t *testing.T) {
 	d.Client = open(t, d.on, d.statePath, false)
 }
 
+// moveTo points the device at another node, which is what a device migrating
+// its reader's account does: the same appliance, the same identifier, the same
+// clock and the same log, and a different server (UC16).
+func (d *device) moveTo(t *testing.T, on *node) {
+	t.Helper()
+
+	_ = d.Close()
+	d.on = on
+	d.Client = open(t, on, d.statePath, false)
+}
+
+// dial opens a connection to a node the way anything outside the federation
+// does: over TLS, verified against the certificate the node presents, which is
+// self-signed because what identifies a node here is the key it published.
+//
+// It is for the calls this suite makes without a client of its own, which is
+// the one call in the contract that takes no session and that the reference
+// client always fills in for: a migration always carries the device making it,
+// so a migration carrying none has to be assembled here.
+func dial(t *testing.T, on *node) *grpc.ClientConn {
+	t.Helper()
+
+	transport, err := credentials.NewClientTLSFromFile(on.ca, "")
+	if err != nil {
+		t.Fatalf("reading the certificate of %s: %v", on.domain, err)
+	}
+
+	connection, err := grpc.NewClient(on.address, grpc.WithTransportCredentials(transport))
+	if err != nil {
+		t.Fatalf("dialing %s: %v", on.domain, err)
+	}
+
+	t.Cleanup(func() { _ = connection.Close() })
+
+	return connection
+}
+
 // open builds a client for one device against one node.
 func open(t *testing.T, on *node, statePath string, offline bool) *client.Client {
 	t.Helper()

@@ -396,7 +396,19 @@ the thesis — corrections to the specification and deliberate divergences from 
       peer whose key is not the one pinned is not spoken to (C12) — and the second of those
       has to put the pin back, because the catalogue is node-wide (C15) and a wrong pin left
       behind is a wrong pin for every reader on that node
-- [ ] `test: add end to end suite for home server migration`
+- [x] `test: add end to end suite for home server migration` — a reader moves to a node they
+      had no account on, carrying two devices, and both go on writing where they left off:
+      what each was holding and had not handed over is pushed to the new node and applied
+      there under the identifiers it was authored with, which is the whole of C11. The
+      previous node is not asked anything and loses nothing, and a device binding there
+      afterwards still finds the reader it always had. The identifier a reader arrives under
+      is checked where it is visible at all — the database — because it is provenance and
+      appears in no reply. It cost one change to the client: a session for a reader whose
+      identifier is not the one the state was holding no longer clears the causal state,
+      because that is the ordinary shape of UC16 and clearing it would complete the
+      migration by discarding what was being migrated. The refusal of a migration carrying
+      no device is checked with a hand-assembled call, since the client always sends the
+      device making it
 
 ## Phase 11 — Kubernetes and delivery
 
