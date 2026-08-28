@@ -11,23 +11,124 @@ import (
 )
 
 type Querier interface {
-	// Allocate this node's next position in a user's operation log.
+	// The log of changes this node holds for its readers (RF10, RF12; UC09, UC11).
 	//
-	// The statement is the whole of C08 in docs/tcc-corrections.md. The upsert
-	// takes the row lock and holds it until the transaction commits, so a second
-	// writer cannot obtain its number before the first has committed: the order of
-	// the numbers is the order of the commits, and a reader that has seen position
-	// N has necessarily seen every position below it. That is what a cursor needs
-	// and what neither a timestamp nor a sequence provides, since both are assigned
-	// when the row is written rather than when it becomes visible.
+	// Three properties hold across every statement here and are what make the rest
+	// of them small.
 	//
-	// The ON CONFLICT branch also means a user's stream needs no separate creation:
-	// the first operation opens it.
+	// The identifier is the author's. A device mints it and it is the same uuid on
+	// every node that ever sees the operation, so receiving is an
+	// INSERT ... ON CONFLICT (id) DO NOTHING and no statement here generates one.
 	//
-	// It has to run inside the same transaction as the INSERT into sync.operations.
-	// Allocated in one transaction and used in another, the lock is released before
-	// the operation is visible and the guarantee is gone.
-	AllocatePosition(ctx context.Context, userID uuid.UUID) (int64, error)
+	// The position is this node's. It is allocated from sync.streams inside the
+	// writing transaction, and the whole of C08 in docs/tcc-corrections.md is why
+	// it has to be: the row lock is held until commit, so a second writer cannot
+	// obtain its number before the first has committed, and the order of the
+	// numbers is therefore the order of the commits rather than the order of the
+	// inserts.
+	//
+	// The log is append-only. Nothing here updates a row; what changes is the
+	// delivery rows that point at it, which are in deliveries.sql.
+	// Store an operation, allocating this node's position for it in the same
+	// statement.
+	//
+	// The allocation is a data-modifying CTE rather than a separate call, and that
+	// is what makes C08's requirement structural instead of a comment somebody has
+	// to obey: a statement cannot straddle two transactions, so the lock the upsert
+	// takes cannot be released before the operation it numbered is visible.
+	//
+	// A duplicate returns no row, which is how the caller learns that this node
+	// already had the operation. It consumes a position doing so, and the gap that
+	// leaves is expected and harmless — the cursor is a lower bound on what has
+	// been seen, not a count of what exists.
+	AppendOperation(ctx context.Context, arg AppendOperationParams) (int64, error)
+	// Close the deliveries of one batch that the destination confirmed.
+	//
+	// Already-confirmed rows are excluded rather than rewritten, so a reply that
+	// arrives twice does not count a second attempt or move the instant the
+	// operation was applied at.
+	ConfirmDeliveries(ctx context.Context, arg ConfirmDeliveriesParams) (int64, error)
+	// What this node still owes its peers, one row per operation and destination
+	// (MER: entrega_sync, the entity C07 in docs/tcc-corrections.md splits out of
+	// operacao_sync).
+	//
+	// The table is a queue and not a history. A row exists because a change has to
+	// reach a node and has not yet; what closes it is the destination's own
+	// confirmation, which is safe to act on precisely because receiving is
+	// idempotent by operation identifier — a delivery retried after a reply that
+	// was lost costs one call and changes nothing there.
+	// Owe an operation to each of the nodes.
+	//
+	// The pair is unique, so a second enqueue of the same pair does nothing: the
+	// statement is written to be safe under the retry the transaction manager
+	// performs after a serialization failure, and under an operation that arrives
+	// again from a second peer.
+	//
+	// It must run in the transaction that appended the operation. A change
+	// committed without its delivery rows is a change no worker will ever send,
+	// and nothing afterwards would notice.
+	EnqueueDeliveries(ctx context.Context, arg EnqueueDeliveriesParams) error
+	// Count a try that did not land, and record what it said.
+	//
+	// The count is what the backoff above is computed from, which is why a worker
+	// must record a failure rather than merely logging it: a failure nobody
+	// counted is a peer retried at full rate for ever.
+	FailDeliveries(ctx context.Context, arg FailDeliveriesParams) (int64, error)
+	// The position allocator, one row per reader (C08 in docs/tcc-corrections.md).
+	//
+	// The allocation itself is not here. It is the data-modifying CTE of
+	// AppendOperation in operations.sql, because the whole guarantee is that the
+	// row lock the upsert takes is held until the operation it numbered has
+	// committed — and a statement that allocated on its own could be called from a
+	// transaction that then did something else, which is exactly the failure the
+	// correction removes. What is left here is the read.
+	// This node's last allocated position for a reader, and zero for a reader
+	// whose log is empty.
+	//
+	// A device that has just pushed learns from it whether there is anything to
+	// pull, without asking. It is the head of the log and not the position of the
+	// last operation returned by a page, and the contract keeps the two apart for
+	// that reason.
+	//
+	// The scalar subquery is what makes an absent stream a zero rather than an
+	// empty result: a reader whose log has never been written has the same head as
+	// one whose log is empty, and a caller should not have to tell them apart.
+	GetStreamHead(ctx context.Context, userID uuid.UUID) (int64, error)
+	// One page of a reader's log, in the order this node committed it (RN06).
+	//
+	// The cursor is a position and not a timestamp, for the reason C08 gives: an
+	// operation stamped early and committed late is skipped by a cursor that has
+	// already moved past it, and it is not delayed, it is lost.
+	//
+	// operations_user_position_idx serves the whole statement: the reader selects,
+	// the ordering is the index order, and the cursor is a seek into it.
+	ListOperationsAfter(ctx context.Context, arg ListOperationsAfterParams) ([]SyncOperation, error)
+	// The operations a batch of deliveries owes, by the identifiers their authors
+	// minted.
+	//
+	// The order is the reader and then the position, because the caller sends them
+	// grouped by reader: the peer-facing call names one reader, since the
+	// certificate identifies the node and not any of the readers it replicates.
+	ListOperationsByID(ctx context.Context, ids []uuid.UUID) ([]SyncOperation, error)
+	// What is still owed to one node, oldest attempt first.
+	//
+	// The backoff is in the predicate rather than in the worker, because the
+	// alternative is reading rows in order to skip them: a peer that has been
+	// unreachable for a week has every one of its rows waiting, and a worker that
+	// filtered in Go would page through all of them on every tick. Doubling once
+	// per attempt is bounded by the caller, which passes the exponent ceiling.
+	//
+	// deliveries_pending_idx serves the ordering and the destination, and its
+	// partial predicate keeps it the size of the backlog rather than of the
+	// history.
+	ListPendingDeliveries(ctx context.Context, arg ListPendingDeliveriesParams) ([]SyncDelivery, error)
+	// The nodes this instance owes anything to at all.
+	//
+	// The worker asks this rather than walking the catalogue, because the two are
+	// different sets: a node authorized a moment ago is owed nothing yet, and a
+	// node whose authorization was revoked may still be owed what was enqueued
+	// before the revocation.
+	ListPendingServers(ctx context.Context) ([]uuid.UUID, error)
 }
 
 var _ Querier = (*Queries)(nil)

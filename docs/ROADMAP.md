@@ -228,7 +228,12 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 ## Phase 9 — sync slice (UC09–11, UC16)
 
-- [ ] `feat: add sync operation entity and repository`
+- [x] `feat: add sync operation entity and repository` — the delivery entity and its
+      repository land with them: it is the second entity the slice owns, C07 is what split it
+      out of the first, and one sqlc run generates both. The position allocator of phase 2
+      moves into the append statement as a data-modifying CTE, which is what makes C08's
+      requirement — allocate in the transaction that inserts — structural rather than a
+      comment somebody has to obey, since a statement cannot straddle two transactions
 - [ ] `feat: add hybrid logical clock`
 - [ ] `feat: add operation reconciler with crdt merge` — the tie-break is
       `(updated_at, device_id)` over the hybrid logical clock, per C01 in

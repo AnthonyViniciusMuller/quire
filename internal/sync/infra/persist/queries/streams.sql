@@ -1,23 +1,22 @@
--- Allocate this node's next position in a user's operation log.
+-- The position allocator, one row per reader (C08 in docs/tcc-corrections.md).
 --
--- The statement is the whole of C08 in docs/tcc-corrections.md. The upsert
--- takes the row lock and holds it until the transaction commits, so a second
--- writer cannot obtain its number before the first has committed: the order of
--- the numbers is the order of the commits, and a reader that has seen position
--- N has necessarily seen every position below it. That is what a cursor needs
--- and what neither a timestamp nor a sequence provides, since both are assigned
--- when the row is written rather than when it becomes visible.
---
--- The ON CONFLICT branch also means a user's stream needs no separate creation:
--- the first operation opens it.
---
--- It has to run inside the same transaction as the INSERT into sync.operations.
--- Allocated in one transaction and used in another, the lock is released before
--- the operation is visible and the guarantee is gone.
+-- The allocation itself is not here. It is the data-modifying CTE of
+-- AppendOperation in operations.sql, because the whole guarantee is that the
+-- row lock the upsert takes is held until the operation it numbered has
+-- committed — and a statement that allocated on its own could be called from a
+-- transaction that then did something else, which is exactly the failure the
+-- correction removes. What is left here is the read.
 
--- name: AllocatePosition :one
-INSERT INTO sync.streams (user_id, last_position)
-VALUES ($1, 1)
-ON CONFLICT (user_id) DO UPDATE
-    SET last_position = sync.streams.last_position + 1
-RETURNING last_position;
+-- This node's last allocated position for a reader, and zero for a reader
+-- whose log is empty.
+--
+-- A device that has just pushed learns from it whether there is anything to
+-- pull, without asking. It is the head of the log and not the position of the
+-- last operation returned by a page, and the contract keeps the two apart for
+-- that reason.
+--
+-- The scalar subquery is what makes an absent stream a zero rather than an
+-- empty result: a reader whose log has never been written has the same head as
+-- one whose log is empty, and a caller should not have to tell them apart.
+-- name: GetStreamHead :one
+SELECT COALESCE((SELECT last_position FROM sync.streams WHERE user_id = $1), 0)::bigint AS head;

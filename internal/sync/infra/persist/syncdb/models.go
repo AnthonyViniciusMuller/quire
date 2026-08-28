@@ -3,3 +3,34 @@
 //   sqlc v1.31.1
 
 package syncdb
+
+import (
+	"encoding/json"
+	"time"
+
+	"github.com/anthonyvsmuller/quire/internal/shared/crdt"
+	"uuid"
+)
+
+type SyncDelivery struct {
+	ID            uuid.UUID
+	OperationID   uuid.UUID
+	ServerID      uuid.UUID
+	AppliedAt     *time.Time
+	Attempts      int32
+	LastAttemptAt *time.Time
+	LastError     *string
+}
+
+type SyncOperation struct {
+	ID           uuid.UUID
+	UserID       uuid.UUID
+	DeviceID     uuid.UUID
+	Position     int64
+	TargetEntity string
+	TargetID     uuid.UUID
+	Operation    string
+	Delta        json.RawMessage
+	VectorClock  crdt.VectorClock
+	CreatedAt    time.Time
+}
