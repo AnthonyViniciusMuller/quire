@@ -361,7 +361,7 @@ the thesis — corrections to the specification and deliberate divergences from 
       presents it to devices too, since one listener serves both, so the certificates carry
       the loopback address beside the domain and `quirectl` names one with `--ca`; and
       `QUIRE_FEDERATION_TLS_CA_FILE` is read by nothing, because the pin of C12 replaced the
-      authority it was for
+      authority it was for — removed in phase 12
 - [x] `fix: let a peer reach the replication handler` — not in the original plan, and found
       by the federation above: `ReplicateOperations` is not in the identity slice's list of
       methods that need no access token, so the authentication interceptor refuses every
@@ -572,6 +572,14 @@ the entry in [`tcc-corrections.md`](tcc-corrections.md) the answer produced.
       attribute for, and its length would be a number chosen by feel — too short to help the
       network it is for, or long enough to be the reuse it is meant to tell apart from an
       accident. This was the last question phase 5 left open
+- [x] `refactor: drop the federation ca file setting` — it was declared, validated by nothing
+      and read by nothing, which phase 10 noticed and left in place. Both ends of a federated
+      connection turn the library's chain verification off on purpose — `InsecureSkipVerify`
+      with the pin check outbound, `RequestClientCert` with no verification inbound — because
+      a peer is identified by the key it published (C12) and two operators share no authority.
+      A bundle had nowhere to be consulted, and one that existed read as a second way of
+      trusting a peer that this node does not have. `internal/shared/config` claims that
+      reading one struct is reading every knob there is, and it was one knob short of true
 
 ## Design decisions settled
 

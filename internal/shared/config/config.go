@@ -400,10 +400,16 @@ type Federation struct {
 	// TLSCertFile is the certificate presented to peers on node-to-node calls.
 	TLSCertFile string `env:"QUIRE_FEDERATION_TLS_CERT_FILE"`
 	// TLSKeyFile is the private key matching TLSCertFile.
+	//
+	// There is deliberately no CA file beside these two. A peer is identified
+	// by the public key it published in its own discovery document (C12), and
+	// both ends of a federated connection therefore turn the library's chain
+	// verification off and check that pin instead — the outbound half in
+	// internal/sync/infra/service/peers, the inbound half in
+	// internal/sync/infra/grpc/peerauthn. A bundle would have nowhere to be
+	// consulted, and one that existed would read as a second way of trusting a
+	// peer that this node does not have.
 	TLSKeyFile string `env:"QUIRE_FEDERATION_TLS_KEY_FILE"`
-	// TLSCAFile is the bundle used to verify peer certificates. When it is
-	// empty the system trust store is used.
-	TLSCAFile string `env:"QUIRE_FEDERATION_TLS_CA_FILE"`
 	// AllowInsecureDiscovery permits discovering peers over plain HTTP. It is
 	// rejected outside the development profile.
 	AllowInsecureDiscovery bool `env:"QUIRE_FEDERATION_ALLOW_INSECURE_DISCOVERY" envDefault:"false"`
