@@ -397,8 +397,16 @@ func setPin(
 	return previous
 }
 
-// describes reads what a node publishes about itself, over the same plain HTTP
-// the other node's discovery client reads it over.
+// describes reads what a node publishes about itself, the way the other node's
+// discovery client reads it.
+//
+// It verifies the document server against the same certificate file the gRPC
+// half of this suite uses, rather than against the machine's trust store. Both
+// federations this suite runs on need that for different reasons: compose serves
+// the documents over plain HTTP, where it costs nothing, and the cluster serves
+// them over HTTPS with a certificate from an authority that exists only in that
+// cluster. A suite that leaned on the ambient trust store would pass on one and
+// fail on the other for a reason that is not about Quire.
 func describes(t *testing.T, published *node) wellknown.ServerDocument {
 	t.Helper()
 
@@ -408,7 +416,7 @@ func describes(t *testing.T, published *node) wellknown.ServerDocument {
 		t.Fatalf("addressing %s: %v", published.domain, err)
 	}
 
-	response, err := http.DefaultClient.Do(request)
+	response, err := published.httpClient(t).Do(request)
 	if err != nil {
 		t.Fatalf("reading what %s publishes: %v", published.domain, err)
 	}

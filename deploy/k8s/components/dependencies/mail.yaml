@@ -49,11 +49,14 @@ spec:
               value: /certs/tls.crt
             - name: MP_SMTP_TLS_KEY
               value: /certs/tls.key
-            # In memory, because what is being kept is a development credential
-            # whose whole life is the minute between requesting a recovery and
-            # using it.
-            - name: MP_DATABASE
-              value: ""
+            # Mailpit keeps its messages in a file, and with no MP_DATABASE it
+            # picks one under /tmp — which a read-only root filesystem refuses,
+            # and it exits. The volume below is that /tmp, and it is a memory
+            # medium: what is being kept is a development credential whose whole
+            # life is the minute between requesting a recovery and using it, so
+            # it should not touch a disk and should not survive the pod.
+            - name: TMPDIR
+              value: /tmp
           ports:
             - name: smtp
               containerPort: 1025
@@ -74,10 +77,16 @@ spec:
             - name: certs
               mountPath: /certs
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: certs
           secret:
             secretName: quire-mail-tls
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service

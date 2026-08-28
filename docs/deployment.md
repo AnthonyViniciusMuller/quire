@@ -65,6 +65,20 @@ The mesh's own mutual TLS is disabled on port 9090 for the same reason, with `po
 on the `PeerAuthentication`. What arrives there is already mutually authenticated, by two
 parties the mesh has no identity for.
 
+**The node's API port is named `tls-grpc` and not `grpc`, and that is load-bearing.** Istio
+decides how to treat a port from the prefix of its name. What crosses 9090 is not gRPC — it is
+TLS, terminated by the node itself — so a port named `grpc` has the sidecar reading a
+ClientHello as an HTTP/2 frame, and the handshake dies inside the mesh with no useful error at
+either end. The price is the rest of C23: the mesh can offer no per-method telemetry and no
+per-method authorization for the API, because it cannot see inside a connection it must not
+terminate. What it can still say is which workload talked to which, and for how long.
+
+**Each node's gateway carries a label of its own**, patched by the overlay to
+`istio: quire-gateway-<namespace>`. An Istio `Gateway` binds to every proxy in the mesh whose
+labels match its selector, in *any* namespace, so two nodes sharing the value are two gateways
+each serving whichever configuration istiod resolved last — which looks, from outside, like a
+gateway answering for somebody else's domain.
+
 `QUIRE_GRPC_ADVERTISED_ADDRESS` is what makes two ports workable at all: the node publishes
 the authority peers dial rather than assuming one, and the configuration refuses to load
 without it outside development.
@@ -141,7 +155,10 @@ make kind-down
 ```
 
 `kind-up` is idempotent: running it again against a cluster that is already up is how a
-change to the manifests is applied. It generates every credential fresh on each run and
+change to the manifests is applied. Credentials are generated once and then left alone —
+PostgreSQL reads `POSTGRES_PASSWORD` when it initializes an empty data directory and never
+again, and MinIO does the same, so a second run that generated new ones would leave a stack
+whose own secrets no longer open it. It generates every credential fresh on each run and
 restarts the node afterwards, since a pod holding the previous password is a pod that has
 stopped being able to connect.
 
@@ -213,6 +230,25 @@ make bench
 On the compose federation, 2000 calls at concurrency 16, that reads 3.15 ms at the 95th
 percentile for `PullOperations` and 4.53 ms for `PushOperations`.
 
+### The gateway and its certificate
+
+The gateway is handed its certificate over SDS, and istiod serves it only after asking the API
+server whether the *gateway's service account* may read secrets in that namespace. The
+`Role` beside the gateway is what answers yes. It cannot be narrowed to the one secret, and
+that was tried: istiod asks about `list` with no resource name, so a Role restricted by
+`resourceNames` answers no to exactly the question being asked.
+
+What keeps that safe is the line above it: the gateway's service account has
+`automountServiceAccountToken: false`. The proxy authenticates to the mesh with the projected
+`istio-token` the injection adds and needs nothing from the API server itself, so the
+permission exists for istiod's check and the pod carries no token to exercise it with. Without
+that, a gateway sharing a namespace with the node could read the node's signing key.
+
+A gateway with no certificate is a listener that resets every connection, and the symptom is a
+handshake failure with nothing in the node's log. `istioctl proxy-config secret
+deploy/quire-gateway -n <namespace>` says `WARMING` instead of `ACTIVE`, and istiod's log says
+`attempted to access unauthorized certificates`.
+
 ### Rotating the signing key
 
 Add the new key under a new `QUIRE_AUTH_KEY_ID` and restart. Tokens signed with the previous
@@ -243,3 +279,13 @@ anything — and no call in the contract can tell it any of that. That is C22, a
 in the specification rather than in this deployment.
 
 **The migration job will not apply.** See above: delete it first.
+
+**The migration job fails on one node and succeeds on the other.** golang-migrate does not wait
+for anything: it connects, and a database that is still starting is a job that fails. The init
+container beside it is what compose says with `depends_on: condition: service_healthy`, and
+Kubernetes has no equivalent of.
+
+**The relay crashes on a read-only root filesystem.** Mailpit keeps its messages in a file and
+picks one under `/tmp` when none is configured. The dependencies component mounts a memory
+`emptyDir` there, which keeps the root read-only and keeps a development recovery credential
+off any disk.

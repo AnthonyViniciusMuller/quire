@@ -30,6 +30,13 @@ spec:
         app.kubernetes.io/component: gateway
         # What the Gateway resource selects on, and what tells the mesh this
         # pod is a gateway rather than a workload with a sidecar.
+        #
+        # The overlay patches it to carry the namespace, and that is not
+        # decoration: an Istio Gateway binds to every proxy in the mesh whose
+        # labels match its selector, in any namespace. Two nodes sharing this
+        # value are two gateways each serving whichever configuration istiod
+        # resolved last — which is what happened, and what it looked like was a
+        # gateway in quire-b answering for SNI quire-a.example.
         istio: quire-gateway
         sidecar.istio.io/inject: "true"
         app: quire-gateway
@@ -62,6 +69,52 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: quire-gateway
+# The proxy authenticates to the mesh with the projected istio-token the
+# injection adds, and needs nothing from the API server itself. Turning the
+# default token off is what makes the Role below safe to grant: istiod's
+# authorization check is about what this account *may* do, and without a token
+# in the pod there is nothing that can do it.
+automountServiceAccountToken: false
+---
+# What lets the gateway be handed its own certificate.
+#
+# Istio serves a `credentialName` over SDS only after asking the API server
+# whether the *proxy's* service account may read that secret, so a gateway with
+# no rights to it gets a listener with no certificate and every handshake fails
+# in the transport — which is what happened, and what the mesh reported as
+# "attempted to access unauthorized certificates".
+#
+# It cannot be narrowed to the one certificate, and that was tried first: istiod
+# asks whether the account may *list* secrets in the namespace, with no name in
+# the question, so a Role restricted by resourceNames answers no to exactly the
+# question being asked. This is the same Role the default ingress gateway ships
+# with.
+#
+# What makes it acceptable is the line above. The gateway shares a namespace
+# with the node, and that namespace holds the node's signing key and its
+# database password — a gateway that could read them would be one compromise
+# away from the whole account system. It cannot: the permission exists for
+# istiod's check and the pod carries no token to exercise it with.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: quire-gateway-sds
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, watch, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: quire-gateway-sds
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: quire-gateway-sds
+subjects:
+  - kind: ServiceAccount
+    name: quire-gateway
 ---
 apiVersion: v1
 kind: Service

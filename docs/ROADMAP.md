@@ -588,6 +588,19 @@ the entry in [`tcc-corrections.md`](tcc-corrections.md) the answer produced.
       container cannot override the image's command and MinIO's needs `server /data`, so the
       object store could not have been declared as one. One way of starting the dependencies
       is what keeps CI and a laptop from disagreeing about what the suite needs
+- [x] `fix: make the deployment work when it is actually run` — the manifests of phase 11 were
+      verified statically, and running them found six defects that no amount of `kubectl
+      kustomize` would have. The node's API port was named `grpc`, so the sidecar read a
+      ClientHello as an HTTP/2 frame and the federation handshake died inside the mesh; it is
+      `tls-grpc`, which is C23 arriving one level below where it was written. Both gateways
+      carried the same `istio` label, and an Istio `Gateway` binds across namespaces, so the
+      replica's gateway served the origin's routes. The gateway's service account could not
+      read its own certificate, and the narrow `Role` that would have fixed it answers the
+      wrong question — so it is the broad one with the pod's token taken away. `kind-up`
+      regenerated credentials the volumes had already been initialized with. The migration job
+      raced a database that was still starting. And the mail relay could not write the file it
+      keeps messages in. With those, `make test-kind` passes: the whole suite, against two
+      nodes under `QUIRE_ENV=production`, in 116 s
 
 ## Design decisions settled
 

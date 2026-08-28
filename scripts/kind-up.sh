@@ -89,9 +89,12 @@ kubectl apply -k "$repository/deploy/k8s/certmanager/cluster"
 say "building the images"
 make -C "$repository" images >/dev/null
 
-image="$(make -C "$repository" -s image-name | head -1)"
-migrate_image="$(make -C "$repository" -s image-name | tail -1)"
-tag="${image##*:}"
+# Both tags come out of one invocation, and are split without a pipe: `head -1`
+# closes the pipe on the first line, make takes the SIGPIPE, and a script under
+# `set -e` dies on a command that did exactly what it was asked.
+tags="$(make -C "$repository" -s image-name)"
+image="$(printf '%s\n' "$tags" | sed -n 1p)"
+migrate_image="$(printf '%s\n' "$tags" | sed -n 2p)"
 
 say "loading $image and $migrate_image into the cluster"
 kind load docker-image --name "$cluster" "$image" "$migrate_image"
@@ -179,9 +182,19 @@ port_index() {
         python3 -c "import json,sys;print([p['name'] for p in json.load(sys.stdin)['spec']['ports']].index('$3'))"
 }
 
-# The credentials, generated here and written straight into the cluster. They
-# are recreated on every run, which is why the node is restarted below: a pod
-# holding the previous password is a pod that stops being able to connect.
+# The credentials, generated here and written straight into the cluster.
+#
+# Generated *once* and then left alone, which is the one thing this function
+# learned the hard way. PostgreSQL reads POSTGRES_PASSWORD when it initializes
+# an empty data directory and never again, and MinIO does the same with its root
+# credentials — and both keep that directory on a volume that outlives the pod.
+# A second run that generated new ones would leave a stack whose own secrets no
+# longer open it, which is exactly what happened: `password authentication
+# failed for user "quire"` against a database that had been up for twenty
+# minutes.
+#
+# The mail section is not a credential and is applied every time, so that
+# changing where the relay is does not need the secret deleted first.
 secrets() {
     local namespace="$1" domain="$2"
     local password signing_key
@@ -190,17 +203,21 @@ secrets() {
     signing_key="$(openssl ecparam -name prime256v1 -genkey -noout 2>/dev/null |
         openssl pkcs8 -topk8 -nocrypt 2>/dev/null)"
 
-    apply_secret "$namespace" quire-postgres \
+    # The database password is written twice on purpose: once as PostgreSQL
+    # expects to read it, and once inside the connection string everything else
+    # dials with. They are generated together so they cannot disagree, and both
+    # are created once so they cannot disagree with the volume either.
+    ensure_secret "$namespace" quire-postgres \
         "POSTGRES_PASSWORD=$password"
 
-    apply_secret "$namespace" quire-database \
+    ensure_secret "$namespace" quire-database \
         "QUIRE_DATABASE_URL=postgres://quire:$password@quire-postgres:5432/quire?sslmode=disable"
 
-    apply_secret "$namespace" quire-signing-key \
+    ensure_secret "$namespace" quire-signing-key \
         "QUIRE_AUTH_PRIVATE_KEY_PEM=$signing_key" \
         "QUIRE_AUTH_KEY_ID=$namespace-$(date +%Y-%m)"
 
-    apply_secret "$namespace" quire-storage \
+    ensure_secret "$namespace" quire-storage \
         "QUIRE_STORAGE_MINIO_ENDPOINT=quire-storage:9000" \
         "QUIRE_STORAGE_MINIO_ACCESS_KEY_ID=quire" \
         "QUIRE_STORAGE_MINIO_SECRET_ACCESS_KEY=$(openssl rand -hex 20)"
@@ -215,10 +232,23 @@ secrets() {
         "QUIRE_MAIL_FROM_NAME=Quire"
 }
 
+# ensure_secret writes one secret and leaves an existing one alone, which is
+# what a credential the volumes were initialized with needs.
+ensure_secret() {
+    local namespace="$1" name="$2"
+    shift 2
+
+    if kubectl -n "$namespace" get secret "$name" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    apply_secret "$namespace" "$name" "$@"
+}
+
 # apply_secret writes one secret, replacing whatever was there. The literals go
-# through a here-document rather than a command line so that a key never
-# appears in the process table, where every other user of the machine can read
-# it.
+# through --from-literal rather than a shell command line of their own so that a
+# key never appears in the process table, where every other user of the machine
+# can read it.
 apply_secret() {
     local namespace="$1" name="$2"
     shift 2
@@ -263,8 +293,8 @@ for entry in "${nodes[@]}"; do
     patch_node_port "$namespace" quire-gateway tls-federation "$federation_port"
     patch_node_port "$namespace" quire-postgres tcp-postgres "$database_port"
 
-    # The credentials were rewritten above, so whatever is running is holding
-    # the previous ones.
+    # The mail section may have been rewritten above, and a pod holds the
+    # environment it started with.
     kubectl -n "$namespace" rollout restart deployment/quire >/dev/null
 done
 

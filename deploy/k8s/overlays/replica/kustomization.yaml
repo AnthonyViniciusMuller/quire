@@ -52,6 +52,24 @@ patches:
       - op: replace
         path: /spec/dnsNames/0
         value: quire-b.example
+  # The label that binds this node's Gateway to this node's proxy. A Gateway
+  # selects across the whole mesh, so two nodes sharing the value are two
+  # gateways serving one configuration.
+  - target:
+      kind: Deployment
+      name: quire-gateway
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/labels/istio
+        value: quire-gateway-quire-b
+  - target:
+      kind: Gateway
+      name: quire
+    patch: |-
+      - op: replace
+        path: /spec/selector/istio
+        value: quire-gateway-quire-b
+
   # Only the SNI, and only on the federation route. The two routes match any
   # authority, because a gateway belongs to one node and an authority carries a
   # port; SNI is a name, carries none, and is what a caller verifies the

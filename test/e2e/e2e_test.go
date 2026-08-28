@@ -29,8 +29,11 @@ package e2e_test
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -132,6 +135,34 @@ func requiredEnv(name string) string {
 	}
 
 	return value
+}
+
+// httpClient reads this node's documents, verifying it against the certificate
+// file this suite was given rather than against the machine's trust store.
+//
+// The authority is the node's own: in the compose federation the certificate is
+// self-signed, because two nodes share none (C12), and in the cluster it comes
+// from an authority that exists only there. Neither is in any trust store, and
+// neither should have to be.
+func (n *node) httpClient(t *testing.T) *http.Client {
+	t.Helper()
+
+	authority := x509.NewCertPool()
+
+	bundle, err := os.ReadFile(n.ca)
+	if err != nil {
+		t.Fatalf("reading %s: %v", n.ca, err)
+	}
+
+	if !authority.AppendCertsFromPEM(bundle) {
+		t.Fatalf("%s holds no certificate", n.ca)
+	}
+
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{RootCAs: authority, MinVersion: tls.VersionTLS12},
+		},
+	}
 }
 
 // reachable asks the node something it will refuse, because a refusal is the

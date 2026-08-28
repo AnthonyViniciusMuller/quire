@@ -46,6 +46,36 @@ spec:
         runAsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
+      # golang-migrate does not wait for anything: it connects, and a database
+      # that is still starting is a job that fails. Compose says this with
+      # `depends_on: condition: service_healthy`, which Kubernetes has no
+      # equivalent of, so it is an init container — and it is the database's own
+      # image, because pg_isready is the tool that answers this question and the
+      # image is already on the node.
+      #
+      # Without it the job is a race that the origin lost and the replica won on
+      # the same cluster: six quick retries against a PostgreSQL that had not
+      # finished starting, and then BackoffLimitExceeded.
+      initContainers:
+        - name: wait-for-the-database
+          image: postgres:17-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          command: [sh, -c]
+          args:
+            - until pg_isready -d "$QUIRE_DATABASE_URL"; do sleep 2; done
+          envFrom:
+            - secretRef:
+                name: quire-database
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
       containers:
         - name: migrate
           image: ghcr.io/anthonyvsmuller/quire-migrate:dev
