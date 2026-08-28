@@ -412,6 +412,19 @@ the thesis — corrections to the specification and deliberate divergences from 
 
 ## Phase 11 — Kubernetes and delivery
 
+- [x] `feat: add smtp delivery adapter for password recovery` — not in the original plan, and
+      what unblocks everything below it: the node could not start under `QUIRE_ENV=production`
+      at all, because the only adapter of the delivery port writes the credential to the log
+      and refuses to be built there — so a manifest that declared the production profile
+      declared a container that exits. C13 in [`tcc-corrections.md`](tcc-corrections.md) named
+      the missing component; this is it, and the answer to the design decision that named it a
+      blocker. The transport is `net/smtp` rather than a mail library, and the measurement is
+      in the commit: what a library would replace is four standard-library calls for one
+      plain-text message with no attachments and no alternatives, which is the trade this
+      project refused for chi and accepted for the object store SDKs — the difference being
+      whether the library is the code the service's own documentation describes. The `di`
+      picks the adapter by which section of the configuration is filled in, never by a
+      variable naming the transport, as the object store already does
 - [ ] `build: add container image for the node server` — phase 10 already built one, in
       [`deploy/docker/Dockerfile`](../deploy/docker/Dockerfile), because a compose file that
       cannot build the node is not a federation. What is left here is whatever a cluster

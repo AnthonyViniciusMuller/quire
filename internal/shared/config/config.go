@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/mail"
 	"net/url"
 	"os"
 	"strings"
@@ -65,6 +66,8 @@ type Config struct {
 	Storage Storage
 	// Auth configures token issuance and password handling.
 	Auth Auth
+	// Mail configures the transport that delivers to a reader's address.
+	Mail Mail
 	// Federation configures discovery and node-to-node replication.
 	Federation Federation
 	// Log configures the structured logger.
@@ -283,6 +286,108 @@ type Auth struct {
 	BcryptCost int `env:"QUIRE_AUTH_BCRYPT_COST" envDefault:"12"`
 }
 
+// MailTransport names which outbound transport delivers to a reader's address.
+//
+// Like [StorageProvider] it is never configured directly. The node infers it
+// from which section of [Mail] the deployment filled in, which is what
+// [Mail.Transport] answers — a section that is filled in cannot disagree with
+// itself, and a variable naming the transport can disagree with the
+// credentials beside it.
+type MailTransport string
+
+// The transports the node can deliver through.
+const (
+	// MailTransportNone is no section filled in, and therefore a node that
+	// cannot deliver a password recovery at all. C13 in
+	// docs/tcc-corrections.md is what that costs, and the adapter in
+	// internal/identity/infra/service/mailer is what refuses to ship it
+	// outside development.
+	MailTransportNone MailTransport = ""
+	// MailTransportSMTP is a relay the node submits to over SMTP.
+	MailTransportSMTP MailTransport = "smtp"
+)
+
+// MailSecurity names how the connection to the relay is protected.
+type MailSecurity string
+
+// The recognized ways of protecting a submission.
+const (
+	// MailSecurityStartTLS connects in the clear and upgrades with STARTTLS,
+	// which is what a submission port (587) expects.
+	MailSecurityStartTLS MailSecurity = "starttls"
+	// MailSecurityTLS dials the relay over TLS from the first byte, which is
+	// what an implicit-TLS port (465) expects.
+	MailSecurityTLS MailSecurity = "tls"
+	// MailSecurityNone submits in the clear. It exists for the relay a
+	// developer runs beside the node, and is refused in production for the
+	// same reason plain HTTP to the object store is: a recovery credential
+	// crosses this connection, and it is the one credential that replaces a
+	// password.
+	MailSecurityNone MailSecurity = "none"
+)
+
+// Mail describes how the node delivers a password recovery to the address on
+// record (RF09, UC08).
+//
+// The address is the only channel a reader who has lost their password still
+// has, so a node with no transport here cannot serve the first half of UC08 at
+// all. C13 in docs/tcc-corrections.md is that finding; this section is the
+// configuration it says the architecture is missing.
+type Mail struct {
+	// FromAddress is the envelope sender and the From header. Every transport
+	// needs one and it is the same value for all of them, so it is here rather
+	// than in each section — as [Storage.Bucket] is.
+	FromAddress string `env:"QUIRE_MAIL_FROM_ADDRESS"`
+	// FromName is the display name beside it.
+	FromName string `env:"QUIRE_MAIL_FROM_NAME" envDefault:"Quire"`
+	// DeliveryTimeout bounds one delivery attempt. It is not the caller's
+	// budget: the delivery is handed to a worker and the call that asked for it
+	// has already been answered, so this bounds how long the worker waits on a
+	// relay that has stopped talking.
+	DeliveryTimeout time.Duration `env:"QUIRE_MAIL_DELIVERY_TIMEOUT" envDefault:"30s"`
+	// QueueSize bounds how many deliveries may be waiting at once. A full
+	// queue drops the oldest request rather than blocking the call, because a
+	// call that blocked on the queue would take longer for an address that
+	// exists — which is the channel the queue was introduced to close.
+	QueueSize int `env:"QUIRE_MAIL_QUEUE_SIZE" envDefault:"256"`
+
+	// SMTP is a relay the node submits to.
+	SMTP MailSMTP
+}
+
+// MailSMTP addresses an SMTP relay.
+type MailSMTP struct {
+	// Host is the relay, and the variable that selects this section.
+	Host string `env:"QUIRE_MAIL_SMTP_HOST"`
+	// Port is where it answers. The default is the submission port, which is
+	// the one a relay expects a program to use.
+	Port int `env:"QUIRE_MAIL_SMTP_PORT" envDefault:"587"`
+	// Username identifies the credentials, and empty means the relay accepts
+	// this node without any — which is what an in-cluster relay reached over
+	// the mesh does.
+	Username string `env:"QUIRE_MAIL_SMTP_USERNAME"`
+	// Password authenticates them.
+	Password Secret `env:"QUIRE_MAIL_SMTP_PASSWORD"`
+	// Security is how the connection is protected.
+	Security MailSecurity `env:"QUIRE_MAIL_SMTP_SECURITY" envDefault:"starttls"`
+}
+
+// Transport reports which section the deployment filled in, and
+// MailTransportNone when it filled in none.
+//
+// A section counts as filled in when any of the variables that address the
+// relay is set, on the same reasoning as [Storage.Provider]: a deployment that
+// set the credentials and forgot the host has chosen SMTP and got it wrong,
+// and being told that is more useful than being told it configured no
+// transport.
+func (m *Mail) Transport() MailTransport {
+	if m.SMTP.Host != "" || m.SMTP.Username != "" || !m.SMTP.Password.IsZero() {
+		return MailTransportSMTP
+	}
+
+	return MailTransportNone
+}
+
 // Federation describes how the node discovers and talks to its peers.
 type Federation struct {
 	// DiscoveryTimeout bounds a .well-known lookup against a peer.
@@ -383,6 +488,7 @@ func (c *Config) Validate() error {
 		errors.Join(c.validateDatabase()...),
 		errors.Join(c.validateAuth()...),
 		errors.Join(c.validateStorage()...),
+		errors.Join(c.validateMail()...),
 		errors.Join(c.validateFederation()...),
 	)
 }
@@ -599,6 +705,99 @@ func (c *Config) validateStorageS3() []error {
 	if s3.AccessKeyID == "" || s3.SecretAccessKey == "" {
 		errs = append(errs, errors.New(
 			"QUIRE_STORAGE_S3_ACCESS_KEY_ID and QUIRE_STORAGE_S3_SECRET_ACCESS_KEY: both are required"))
+	}
+
+	return errs
+}
+
+// The bounds of a TCP port, which is what a relay is addressed by.
+const (
+	minPort = 1
+	maxPort = 65535
+)
+
+// validateMail checks the transport the deployment named, and nothing when it
+// named none.
+//
+// A node with no transport is not refused here. It is refused by the adapter
+// that would otherwise write a reader's recovery credential to the log, which
+// declines to be built outside development — the refusal belongs where the
+// substitute is, so that the reason travels with the thing being substituted.
+func (c *Config) validateMail() []error {
+	if c.Mail.Transport() == MailTransportNone {
+		return nil
+	}
+
+	var errs []error
+
+	if c.Mail.DeliveryTimeout <= 0 {
+		errs = append(errs, errors.New("QUIRE_MAIL_DELIVERY_TIMEOUT: must be positive"))
+	}
+
+	if c.Mail.QueueSize < 1 {
+		errs = append(errs, errors.New("QUIRE_MAIL_QUEUE_SIZE: must be at least 1"))
+	}
+
+	// The envelope sender is checked as an address rather than as a non-empty
+	// string, because a relay that rejects it rejects the whole submission and
+	// the reader is the one who does not receive the message.
+	if c.Mail.FromAddress == "" {
+		errs = append(errs, errors.New(
+			"QUIRE_MAIL_FROM_ADDRESS: required once a delivery transport is configured"))
+	} else if _, err := mail.ParseAddress(c.Mail.FromAddress); err != nil {
+		errs = append(errs, fmt.Errorf("QUIRE_MAIL_FROM_ADDRESS: %q is not an address: %w",
+			c.Mail.FromAddress, err))
+	}
+
+	return append(errs, c.validateMailSMTP()...)
+}
+
+// validateMailSMTP checks the section SMTP needs in full.
+func (c *Config) validateMailSMTP() []error {
+	var errs []error
+
+	smtp := &c.Mail.SMTP
+
+	if smtp.Host == "" {
+		errs = append(errs, errors.New("QUIRE_MAIL_SMTP_HOST: required once the SMTP section is used"))
+	}
+
+	// SplitHostPort rather than a search for a colon: a bare IPv6 literal is
+	// full of them and is a legitimate host, while relay.example:587 is a port
+	// written in the wrong variable — and only the second of those splits.
+	if _, _, err := net.SplitHostPort(smtp.Host); strings.Contains(smtp.Host, "://") || err == nil {
+		errs = append(errs, fmt.Errorf("QUIRE_MAIL_SMTP_HOST: %q must be a bare host, "+
+			"without a scheme or a port; use QUIRE_MAIL_SMTP_PORT for the port", smtp.Host))
+	}
+
+	if smtp.Port < minPort || smtp.Port > maxPort {
+		errs = append(errs, fmt.Errorf("QUIRE_MAIL_SMTP_PORT: %d is outside the range %d to %d",
+			smtp.Port, minPort, maxPort))
+	}
+
+	// One half of a credential is a submission the relay refuses, and it
+	// refuses it after the connection is up, which is the slowest way to
+	// discover a typo.
+	if (smtp.Username == "") != smtp.Password.IsZero() {
+		errs = append(errs, errors.New(
+			"QUIRE_MAIL_SMTP_USERNAME and QUIRE_MAIL_SMTP_PASSWORD: set both or neither"))
+	}
+
+	switch smtp.Security {
+	case MailSecurityStartTLS, MailSecurityTLS:
+	case MailSecurityNone:
+		// The recovery credential is what replaces a password, so it is held
+		// to the same standard the password itself is: the check is on the
+		// profile rather than on the value, because the relay a developer runs
+		// beside the node speaks no TLS at all.
+		if c.Environment.IsProduction() {
+			errs = append(errs, errors.New(
+				"QUIRE_MAIL_SMTP_SECURITY: submitting a recovery credential in the clear "+
+					"is not allowed in production"))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("QUIRE_MAIL_SMTP_SECURITY: %q must be one of %s, %s, %s",
+			smtp.Security, MailSecurityStartTLS, MailSecurityTLS, MailSecurityNone))
 	}
 
 	return errs

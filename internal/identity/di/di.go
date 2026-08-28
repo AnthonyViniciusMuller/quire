@@ -60,6 +60,7 @@ import (
 	hashservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/hash"
 	localserverservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/localserver"
 	mailerservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/mailer"
+	smtpservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/smtp"
 	tokenservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/token"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
@@ -112,11 +113,7 @@ func Initialize(cfg *config.Config, pool *pgxpool.Pool, servers server.Repositor
 		return nil, err
 	}
 
-	// C13 in docs/tcc-corrections.md: the architecture has no component that
-	// can deliver a recovery to an address, and the one adapter there is
-	// refuses to be built outside development rather than write a reader's
-	// credential to the logs.
-	notifier, err := mailerservice.New(cfg.Environment)
+	notifier, err := mailer(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -162,4 +159,26 @@ func Initialize(cfg *config.Config, pool *pgxpool.Pool, servers server.Repositor
 		Service:     authservice.New(&controllers),
 		Migration:   migratehomeserver.New(migration),
 	}, nil
+}
+
+// mailer builds the adapter that delivers a password recovery, chosen by which
+// section of the configuration the deployment filled in — never by a variable
+// naming the transport, for the reason config.Mail.Transport gives.
+//
+// The default case is the same as the empty one on purpose. A transport this
+// function has not been taught about is a deployment that asked for a delivery
+// this node cannot make, and the adapter below is the one that says so and
+// refuses to be built in production — which is a better answer than a node
+// that starts and silently delivers nowhere.
+func mailer(cfg *config.Config) (service.Mailer, error) {
+	switch cfg.Mail.Transport() {
+	case config.MailTransportSMTP:
+		return smtpservice.New(&cfg.Mail, cfg.Server.Name)
+
+	case config.MailTransportNone:
+		return mailerservice.New(cfg.Environment)
+
+	default:
+		return mailerservice.New(cfg.Environment)
+	}
 }

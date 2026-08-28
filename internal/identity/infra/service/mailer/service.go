@@ -1,16 +1,18 @@
 // Package mailer is the development adapter of the delivery port: it writes the
 // recovery credential to the log instead of sending it.
 //
-// It exists so that UC08 can be exercised end to end without a transport, and
-// it refuses to be built outside the development profile. That refusal is the
-// point. A node that wrote a reader's recovery credential to its logs in
-// production would hand every recovery to whoever reads them — and logs are read
-// by more people, and kept in more places, than a mailbox is.
+// It is what a node with no transport configured gets, so that UC08 can be
+// exercised end to end on a laptop with no relay on it — and it refuses to be
+// built outside the development profile. That refusal is the point. A node that
+// wrote a reader's recovery credential to its logs in production would hand
+// every recovery to whoever reads them, and logs are read by more people, and
+// kept in more places, than a mailbox is.
 //
-// C13 in docs/tcc-corrections.md records what is missing: the architecture the
-// thesis describes has no component that can deliver to an address, and no
-// configuration for one. Until that lands, this package is what stops the gap
-// from being shipped by accident.
+// The transport beside it is internal/identity/infra/service/smtp, and the di
+// picks between the two by which section of the configuration the deployment
+// filled in. C13 in docs/tcc-corrections.md is why there was a period with only
+// this one: the architecture the thesis describes names no component that can
+// deliver to an address.
 package mailer
 
 import (
@@ -42,7 +44,8 @@ func New(environment config.Environment) (*Service, error) {
 	if environment.IsProduction() {
 		return nil, errs.New(errs.KindFailedPrecondition,
 			"this node has no way to deliver a password recovery, and will not write one to its logs").
-			WithOp(opNew)
+			WithOp(opNew).
+			WithField("QUIRE_MAIL_SMTP_HOST", "it must name the relay this node submits a recovery to")
 	}
 
 	return &Service{}, nil

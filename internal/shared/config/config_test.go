@@ -552,3 +552,203 @@ func TestSecretIsZero(t *testing.T) {
 		t.Error("non-empty secret reports as unset")
 	}
 }
+
+// smtpEnv is the smallest mail section that decodes: a relay and a sender.
+func smtpEnv() map[string]string {
+	return map[string]string{
+		"QUIRE_MAIL_SMTP_HOST":    "relay.quire-a.example",
+		"QUIRE_MAIL_FROM_ADDRESS": "no-reply@quire-a.example",
+	}
+}
+
+func TestMailTransportIsInferredFromTheSectionFilledIn(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		env  map[string]string
+		want config.MailTransport
+	}{
+		{"nothing configured", nil, config.MailTransportNone},
+		{"the relay", smtpEnv(), config.MailTransportSMTP},
+		{
+			// Half a section is a deployment that chose SMTP and got it wrong,
+			// which is more useful to be told than that it chose nothing.
+			name: "credentials without a relay",
+			env: map[string]string{
+				"QUIRE_MAIL_SMTP_USERNAME": "quire",
+				"QUIRE_MAIL_SMTP_PASSWORD": "secret",
+			},
+			want: config.MailTransportSMTP,
+		},
+		{
+			// The sender is shared by every transport, as the bucket is by
+			// every object store, so it selects nothing on its own.
+			name: "a sender alone",
+			env:  map[string]string{"QUIRE_MAIL_FROM_ADDRESS": "no-reply@quire-a.example"},
+			want: config.MailTransportNone,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			// The half-configured cases do not load, so the section is read off
+			// a value the decoder filled in rather than off a whole config.
+			cfg, err := config.LoadFrom(envWith(t, test.env))
+			if err != nil && test.want == config.MailTransportNone {
+				t.Fatalf("LoadFrom() error = %v, want nil", err)
+			}
+
+			if cfg == nil {
+				cfg = &config.Config{Mail: mailFrom(test.env)}
+			}
+
+			if got := cfg.Mail.Transport(); got != test.want {
+				t.Errorf("Transport() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+// mailFrom builds the section by hand, for the environments that do not load.
+func mailFrom(env map[string]string) config.Mail {
+	return config.Mail{
+		FromAddress: env["QUIRE_MAIL_FROM_ADDRESS"],
+		SMTP: config.MailSMTP{
+			Host:     env["QUIRE_MAIL_SMTP_HOST"],
+			Username: env["QUIRE_MAIL_SMTP_USERNAME"],
+			Password: config.Secret(env["QUIRE_MAIL_SMTP_PASSWORD"]),
+		},
+	}
+}
+
+func TestLoadFromAppliesMailDefaults(t *testing.T) {
+	t.Parallel()
+
+	cfg := load(t, envWith(t, smtpEnv()))
+
+	tests := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{"port", cfg.Mail.SMTP.Port, 587},
+		{"security", cfg.Mail.SMTP.Security, config.MailSecurityStartTLS},
+		{"from name", cfg.Mail.FromName, "Quire"},
+		{"delivery timeout", cfg.Mail.DeliveryTimeout, 30 * time.Second},
+		{"queue size", cfg.Mail.QueueSize, 256},
+	}
+
+	for _, test := range tests {
+		if test.got != test.want {
+			t.Errorf("%s = %v, want %v", test.name, test.got, test.want)
+		}
+	}
+}
+
+func TestLoadFromRejectsAnUnusableMailSection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{
+			name: "no sender",
+			env:  map[string]string{"QUIRE_MAIL_SMTP_HOST": "relay.quire-a.example"},
+			want: "QUIRE_MAIL_FROM_ADDRESS",
+		},
+		{
+			name: "a sender that is not an address",
+			env: map[string]string{
+				"QUIRE_MAIL_SMTP_HOST":    "relay.quire-a.example",
+				"QUIRE_MAIL_FROM_ADDRESS": "quire-a.example",
+			},
+			want: "QUIRE_MAIL_FROM_ADDRESS",
+		},
+		{
+			name: "credentials without a relay",
+			env: map[string]string{
+				"QUIRE_MAIL_FROM_ADDRESS":  "no-reply@quire-a.example",
+				"QUIRE_MAIL_SMTP_USERNAME": "quire",
+				"QUIRE_MAIL_SMTP_PASSWORD": "secret",
+			},
+			want: "QUIRE_MAIL_SMTP_HOST",
+		},
+		{
+			name: "a port written into the host",
+			env: map[string]string{
+				"QUIRE_MAIL_FROM_ADDRESS": "no-reply@quire-a.example",
+				"QUIRE_MAIL_SMTP_HOST":    "relay.quire-a.example:587",
+			},
+			want: "QUIRE_MAIL_SMTP_HOST",
+		},
+		{
+			name: "a port outside the range",
+			env: map[string]string{
+				"QUIRE_MAIL_FROM_ADDRESS": "no-reply@quire-a.example",
+				"QUIRE_MAIL_SMTP_HOST":    "relay.quire-a.example",
+				"QUIRE_MAIL_SMTP_PORT":    "70000",
+			},
+			want: "QUIRE_MAIL_SMTP_PORT",
+		},
+		{
+			name: "half a credential",
+			env: map[string]string{
+				"QUIRE_MAIL_FROM_ADDRESS":  "no-reply@quire-a.example",
+				"QUIRE_MAIL_SMTP_HOST":     "relay.quire-a.example",
+				"QUIRE_MAIL_SMTP_USERNAME": "quire",
+			},
+			want: "QUIRE_MAIL_SMTP_PASSWORD",
+		},
+		{
+			name: "an unknown way of protecting the connection",
+			env: map[string]string{
+				"QUIRE_MAIL_FROM_ADDRESS":  "no-reply@quire-a.example",
+				"QUIRE_MAIL_SMTP_HOST":     "relay.quire-a.example",
+				"QUIRE_MAIL_SMTP_SECURITY": "ssl",
+			},
+			want: "QUIRE_MAIL_SMTP_SECURITY",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := loadErr(t, envWith(t, test.env)); !strings.Contains(got, test.want) {
+				t.Errorf("LoadFrom() error = %q, want it to name %s", got, test.want)
+			}
+		})
+	}
+}
+
+// A recovery credential is what replaces a password, so the connection that
+// carries it is held to the standard the password itself is — and the check is
+// on the profile, because the relay a developer runs beside the node speaks no
+// TLS at all.
+func TestProductionRefusesToSubmitARecoveryInTheClear(t *testing.T) {
+	t.Parallel()
+
+	env := envWith(t, smtpEnv())
+	env["QUIRE_ENV"] = string(config.Production)
+	env["QUIRE_GRPC_ADVERTISED_ADDRESS"] = "quire-a.example:443"
+	env["QUIRE_STORAGE_MINIO_USE_TLS"] = "true"
+	env["QUIRE_MAIL_SMTP_SECURITY"] = string(config.MailSecurityNone)
+
+	if got := loadErr(t, env); !strings.Contains(got, "QUIRE_MAIL_SMTP_SECURITY") {
+		t.Errorf("LoadFrom() error = %q, want it to name QUIRE_MAIL_SMTP_SECURITY", got)
+	}
+
+	// The same deployment with the connection protected is a deployment that
+	// loads, which is what makes the check above about the clear text and not
+	// about the profile.
+	env["QUIRE_MAIL_SMTP_SECURITY"] = string(config.MailSecurityStartTLS)
+
+	if cfg := load(t, env); cfg.Mail.Transport() != config.MailTransportSMTP {
+		t.Errorf("Transport() = %q, want %q", cfg.Mail.Transport(), config.MailTransportSMTP)
+	}
+}
