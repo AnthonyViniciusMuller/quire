@@ -64,11 +64,6 @@ const (
 // test run, on a federation that exists on one machine.
 const thePassword = "correct horse battery staple"
 
-// settleFor bounds how long a test waits for something that happens on its own
-// — a replication pass, a stream delivering a change. The federation runs its
-// worker every five seconds, so this is a few passes and not a guess.
-const settleFor = 30 * time.Second
-
 // node is one of the two nodes the local federation runs.
 type node struct {
 	// domain is what the node calls itself inside the federation, and the

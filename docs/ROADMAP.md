@@ -508,7 +508,14 @@ the thesis — corrections to the specification and deliberate divergences from 
       password to bring up a test cluster is a script nobody should run. `istioctl validate`
       is what caught the two port names the mesh would have refused, `smtp` and `postgres`,
       and the four workloads whose telemetry would have arrived unattributed
-- [ ] `ci: add end to end job on kind cluster`
+- [x] `ci: add end to end job on kind cluster` — the manifests run rather than rendered, which
+      is the one job that can answer whether a node starts under `QUIRE_ENV=production` and
+      whether two of them find each other through a mesh that terminates one port and passes
+      another through. It is also where the `kind` build tag finally earns the place
+      `.golangci.yml` has held for it since phase 0: the only thing it changes is how long a
+      test waits, because the manifests declare the production replication interval of thirty
+      seconds and the compose file overrides it to five. Everything else is the same suite,
+      seen through a mesh instead of through a bridge network
 - [ ] `test: add grpc latency benchmark script`
 - [ ] `docs: add deployment and operations guide`
 

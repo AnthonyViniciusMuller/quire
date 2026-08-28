@@ -219,10 +219,41 @@ test-e2e:
 	QUIRE_TEST_NODE_B_DATABASE_URL="$(TEST_NODE_B_DATABASE_URL)" \
 		$(GO) test -tags=e2e -timeout=20m -count=1 ./test/e2e/...
 
+# The same suite against the cluster `make kind-up` brings up. The nodes are
+# reached by their domains and not by 127.0.0.1, because the gateway routes the
+# federation port on SNI and presents a certificate for the domain — which is
+# why kind-up asks for the two /etc/hosts entries and why they are the one thing
+# it will not do itself.
+#
+# The two database URLs are read out of the cluster rather than written down:
+# the passwords are generated per run by kind-up, so a value in this file would
+# be a value that is wrong after the first one. What is rewritten is only where
+# the database answers — inside it is a service, and from here it is a port kind
+# published.
+TEST_KIND_NODE_A         ?= quire-a.example:19443
+TEST_KIND_NODE_B         ?= quire-b.example:29443
+TEST_KIND_NODE_A_HTTP    ?= https://quire-a.example:18443
+TEST_KIND_NODE_B_HTTP    ?= https://quire-b.example:28443
+TEST_KIND_CA             ?= $(BIN)/kind/ca.crt
+TEST_KIND_DB_A           ?= 127.0.0.1:15433
+TEST_KIND_DB_B           ?= 127.0.0.1:25433
+
+kind-database-url = $(shell kubectl -n $(1) get secret quire-database \
+	-o jsonpath='{.data.QUIRE_DATABASE_URL}' 2>/dev/null | base64 -d | \
+	sed -e 's|@quire-postgres:5432|@$(2)|')
+
 ## test-kind: end-to-end tests inside the kind cluster
 .PHONY: test-kind
 test-kind:
-	$(GO) test -tags=e2e,kind -timeout=30m ./test/e2e/...
+	QUIRE_TEST_NODE_A="$(TEST_KIND_NODE_A)" \
+	QUIRE_TEST_NODE_B="$(TEST_KIND_NODE_B)" \
+	QUIRE_TEST_NODE_A_HTTP="$(TEST_KIND_NODE_A_HTTP)" \
+	QUIRE_TEST_NODE_B_HTTP="$(TEST_KIND_NODE_B_HTTP)" \
+	QUIRE_TEST_NODE_A_CA="$(TEST_KIND_CA)" \
+	QUIRE_TEST_NODE_B_CA="$(TEST_KIND_CA)" \
+	QUIRE_TEST_NODE_A_DATABASE_URL="$(call kind-database-url,quire-a,$(TEST_KIND_DB_A))" \
+	QUIRE_TEST_NODE_B_DATABASE_URL="$(call kind-database-url,quire-b,$(TEST_KIND_DB_B))" \
+		$(GO) test -tags=e2e,kind -timeout=30m -count=1 ./test/e2e/...
 
 ## cover: unit tests with a coverage profile in ./bin/coverage.out
 .PHONY: cover

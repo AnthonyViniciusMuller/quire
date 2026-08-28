@@ -121,3 +121,75 @@ jobs:
         run: make test-integration
         env:
           TEST_DATABASE_URL: postgres://quire:quire@127.0.0.1:5432/quire?sslmode=disable
+
+  # The manifests, run rather than rendered.
+  #
+  # It is the one job that answers a question none of the others can: whether a
+  # node starts under QUIRE_ENV=production, whether two of them find each other
+  # through a mesh that terminates one port and passes another through, and
+  # whether the certificate a peer pins survives the trip. A YAML file that
+  # parses is not a deployment, and the two findings of this phase — C23 and the
+  # authority the discovery documents are verified against — are both things
+  # only a running cluster says out loud.
+  #
+  # It is slow, and that is priced in: it builds two images, installs a mesh and
+  # a certificate authority, and waits for a replication interval that is the
+  # production one.
+  kind:
+    name: end-to-end on kind
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Pinned for the reason everything else in this repository is: a cluster
+      # that installed whatever was newest is a cluster nobody can reproduce,
+      # and the mesh version decides how a passed-through port behaves.
+      - name: Install kind and istioctl
+        env:
+          KIND_VERSION: v0.32.0
+          ISTIO_VERSION: 1.30.3
+        run: |
+          curl -fsSLo /tmp/kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          sudo install -m 0755 /tmp/kind /usr/local/bin/kind
+          curl -fsSL \
+            "https://github.com/istio/istio/releases/download/${ISTIO_VERSION}/istioctl-${ISTIO_VERSION}-linux-amd64.tar.gz" \
+            | tar -xz -C /tmp
+          sudo install -m 0755 /tmp/istioctl /usr/local/bin/istioctl
+
+      # The suite reaches each node by its domain and not by the loopback
+      # address, because the gateway routes the federation port on SNI and
+      # presents a certificate for the domain. kind-up asks for this and will
+      # not do it itself: a script that needed a password to bring up a test
+      # cluster is a script nobody should run.
+      - name: Resolve the federation domains
+        run: echo "127.0.0.1 quire-a.example quire-b.example" | sudo tee -a /etc/hosts
+
+      - name: Bring up the federation
+        run: make kind-up
+
+      - name: End-to-end tests
+        run: make test-kind
+
+      # A failure here is a deployment failure, and the deployment is what has to
+      # be read to understand it. The node's own log is last because it is the
+      # longest, and the events above it are usually what actually happened.
+      - name: What the cluster said
+        if: failure()
+        run: |
+          kubectl get nodes -o wide
+          for namespace in quire-a quire-b; do
+            echo "::group::$namespace"
+            kubectl -n "$namespace" get all,certificates
+            kubectl -n "$namespace" get events --sort-by=.lastTimestamp | tail -40
+            kubectl -n "$namespace" describe pods
+            kubectl -n "$namespace" logs -l app.kubernetes.io/component=node \
+              --tail=300 --all-containers --ignore-errors || true
+            echo "::endgroup::"
+          done
