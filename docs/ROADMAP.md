@@ -259,7 +259,13 @@ the thesis — corrections to the specification and deliberate divergences from 
       and `Records` ports and its `apptest` doubles land with it; the clock is the one port
       in the node with a second method, because this is the slice that meets other people's
       clocks
-- [ ] `feat: add pull operations use case`
+- [x] `feat: add pull operations use case` — the whole of RN06, over the position C08
+      settled on. The page includes the caller's own changes, which costs one comparison on
+      the device and is what keeps the cursor meaning "everything this node holds below
+      here": a page that hid them would leave gaps a device could not tell from gaps nobody
+      told it about. An empty page leaves the cursor where the caller had it, since
+      answering with a zero would send a device that had drained the log back to its
+      beginning
 - [ ] `feat: add bidirectional sync stream handler`
 - [ ] `feat: add replication worker for authorized nodes`
 - [ ] `feat: add node to node replication handler with mtls`
