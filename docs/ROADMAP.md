@@ -580,6 +580,14 @@ the entry in [`tcc-corrections.md`](tcc-corrections.md) the answer produced.
       A bundle had nowhere to be consulted, and one that existed read as a second way of
       trusting a peer that this node does not have. `internal/shared/config` claims that
       reading one struct is reading every knob there is, and it was one knob short of true
+- [x] `ci: start the object store the integration suite needs` — the job supplied a
+      PostgreSQL and nothing else, and the suite has needed an object store since
+      `test: add integration tests for library service` landed on the same day the job was
+      last touched: it panics on an endpoint that is not answering. It now starts both the
+      way a developer does, with `make test-up`, and that is not a preference — a service
+      container cannot override the image's command and MinIO's needs `server /data`, so the
+      object store could not have been declared as one. One way of starting the dependencies
+      is what keeps CI and a laptop from disagreeing about what the suite needs
 
 ## Design decisions settled
 

@@ -90,25 +90,6 @@ jobs:
     name: integration tests
     runs-on: ubuntu-latest
 
-    # The suite runs against a real PostgreSQL rather than a fake, because what
-    # it covers is the statements and the indexes. The runner supplies one, so
-    # the repository takes no dependency on a container library in order to
-    # start it — see the note in test/integration.
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: quire
-          POSTGRES_PASSWORD: quire
-          POSTGRES_DB: quire
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U quire"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
     steps:
       - uses: actions/checkout@v7
 
@@ -117,10 +98,29 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # The suite runs against a real PostgreSQL and a real object store rather
+      # than fakes, because what it covers is the statements, the indexes and
+      # the bytes. It starts them the way a developer does — `make test-up` is
+      # two `docker run` lines and no container library, which is the note in
+      # test/integration — rather than through service containers, and that is
+      # not a preference. A service container cannot override the image's
+      # command, and MinIO's needs `server /data`, so the object store could not
+      # be declared as one at all.
+      #
+      # Both ways existed here for a while and only one of them worked: the
+      # database was a service container and the object store was nothing, so
+      # the suite panicked on an endpoint that was not answering. One way of
+      # starting the dependencies is what keeps CI and a laptop from disagreeing
+      # about what the suite needs.
+      - name: Start the database and the object store
+        run: make test-up
+
       - name: Integration tests
         run: make test-integration
-        env:
-          TEST_DATABASE_URL: postgres://quire:quire@127.0.0.1:5432/quire?sslmode=disable
+
+      - name: Stop them
+        if: always()
+        run: make test-down
 
   # The manifests, run rather than rendered.
   #
