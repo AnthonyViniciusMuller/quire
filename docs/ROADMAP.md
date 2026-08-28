@@ -241,9 +241,14 @@ the thesis — corrections to the specification and deliberate divergences from 
       implementation carries the Kulkarni pair of an instant and a counter, which is two
       values where C01 stamps one `timestamptz`, and `lafikl/hlc` keeps both of them
       unexported with no accessor at all
-- [ ] `feat: add operation reconciler with crdt merge` — the tie-break is
+- [x] `feat: add operation reconciler with crdt merge` — the tie-break is
       `(updated_at, device_id)` over the hybrid logical clock, per C01 in
-      [`tcc-corrections.md`](tcc-corrections.md)
+      [`tcc-corrections.md`](tcc-corrections.md). The rule itself lands in
+      `internal/shared/crdt` beside the merge laws it is proved with, and the property tests
+      there now cover the join over whole revisions: order-independent reduction over
+      generated histories, and C01's own counterexample reduced two ways to show what a wall
+      clock costs. The adapter is what knows the five tables, and writing it found three
+      things the specification does not say — C17, C18 and C19
 - [ ] `feat: add push operations use case`
 - [ ] `feat: add pull operations use case`
 - [ ] `feat: add bidirectional sync stream handler`

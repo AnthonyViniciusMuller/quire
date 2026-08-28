@@ -587,6 +587,101 @@ Record it in 4.2.2 as a precondition of UC02.
 **Status** open. Implemented in phase 7: the upload refuses a digest no work of the caller's
 names, with a failed precondition.
 
+### C17 — per-field last-writer-wins is not representable with one revision per row
+
+**Where** RN02, the reconciliation described in 4.2.4, and the `update_mask` on every update
+in the contract, which is documented as claiming a set of fields.
+
+**What the TCC says** Reconciliation is per-field last-writer-wins: the vector clock decides
+first, and a write that names two fields claims those two and leaves every other field to
+whichever device wrote it last.
+
+**Why it does not hold** Deciding *per field* requires knowing, per field, which write the
+record currently reflects. What Appendix A gives a replicable entity — and what C02 completes
+— is one `relogio_vetorial`, one `atualizado_em`, one `id_dispositivo` and one `removido`,
+for the whole row. There is nowhere to record that the title came from one write and the
+author from another.
+
+The difference is not academic, and it loses a write nobody contested. A record with a title
+and an author; device A, offline, writes the title at `10:00`; device B, offline, writes the
+author at `09:59`. The two are concurrent. Per field, both survive: each wrote a field the
+other did not touch. Per row, A's version wins the tie-break and B's operation is superseded
+whole — the author it wrote is dropped, although no write ever contested it.
+
+**Correction, in the text** State the granularity the model actually supports: the causal
+decision is per *record*, and what is per field is the *write* — a delta names the fields it
+changed, so the winner overwrites only those and the loser changes nothing. The mask is
+therefore still load-bearing, and for the reason the contract already gives: a path the call
+cannot write is refused rather than ignored, because an ignored path is a change nobody made.
+
+**The alternative, and why it was not taken.** Genuine per-field reconciliation needs
+per-field metadata — a jsonb of `{field: {relogio_vetorial, atualizado_em, id_dispositivo}}`
+on each replicable entity — which multiplies the replication metadata by the number of
+columns, has to be maintained by every write in the library and reading slices, and reopens
+the attribute set C02 settled. The second alternative is to replay the log per record, which
+is exact and needs no schema change, but requires the whole history of the record to be
+present on the node deciding — which a node that was authorized as a replica after the record
+was written does not have.
+
+**Status** open. Implemented per record in `internal/sync/infra/service/records`, with the
+delta applied field-wise. Amend 4.2.4 and the wording of the `update_mask` comments.
+
+### C18 — a surrogate key minted per replica cannot identify a replicated record
+
+**Where** Quadro 20 (`ebook_colecao`) and Quadro 21 (`progresso_leitura`), against the
+operation log of Quadro 23, whose `id_entidade` names the record a change was made to.
+
+**What the TCC says** Both associative entities carry their own `id` primary key, and an
+operation names the record it changed by that identifier.
+
+**Why it does not hold** Those two identifiers are minted by whichever replica first writes
+the row, and both entities are written independently on several replicas: two devices that
+file the same work under the same shelf while offline produce two rows with two identifiers
+for one record, and so do two devices reporting a position in the same work. An operation
+that named the record by such an identifier would be an operation no other node could
+resolve — the receiving node holds the same record under a different name.
+
+The e-book, the collection and the annotation do not have the problem, and the reason is
+worth stating: each of them is *created once*, by one device, and the identifier that device
+minted travels with the record for ever. An associative entity has no such moment.
+
+**Correction** Say that `ebook_colecao` and `progresso_leitura` are identified across the
+federation by their natural keys — `(id_ebook, id_colecao)` and `(id_ebook, id_dispositivo)`,
+which are exactly the uniqueness constraints C06 and Quadro 21 already require — and that an
+operation targeting one carries that key in `carga_delta`. The surrogate `id` stays as the
+row's local handle, and `id_entidade` records the author's, which is provenance rather than
+identity.
+
+For `progresso_leitura` the device half is not carried at all: it is the device that authored
+the operation, which C05 establishes is the only device that may write the row. Reading it
+from anywhere else would let one appliance move another's bookmark.
+
+**Status** open. Implemented in `internal/sync/infra/service/records`: those two are resolved
+by pair, the other three by identifier. Add it to 4.2.4 beside C06.
+
+### C19 — `carga_delta` has no specified shape
+
+**Where** Quadro 23 (`operacao_sync.carga_delta`), RN06.
+
+**What the TCC says** The column is `jsonb` and carries only the changed fields.
+
+**Why that is not enough** Two nodes have to agree on how a value is written inside it, or
+the same change is two changes. The field names could be the MER's, the schema's or the
+contract's; a kind could be the enum constant the protobuf declares or the string the column
+holds; an instant could be epoch milliseconds or RFC 3339. Nothing in the specification
+chooses, and the choice is not private to one implementation — it is the wire format between
+two nodes written by two people.
+
+**Correction** State the rule the rest of the design already follows for `entidade_alvo`,
+which 4.2.4 describes as named logically so that the same name travels in the contract, in
+the node's schema and in the SQLite schema on the device. The delta follows it: the keys are
+the field names those three share, and the values are the form the column holds — a kind is
+`"note"`, an instant is RFC 3339, extra metadata is an object. One vocabulary, no translation
+at any hop.
+
+**Status** open. Implemented in `internal/sync/infra/service/records`. Add a paragraph to the
+description of `operacao_sync` in 4.2.4.
+
 ## Divergences
 
 Deliberate departures from a specification that is internally consistent. Subsection 4.2.4
