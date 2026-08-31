@@ -656,12 +656,21 @@ belongs to the gateway RNF12 already requires — so this phase adds manifests a
       `e2e`: the translation is the gateway's, and the compose federation has none. It was
       checked against its own absence — with the `EnvoyFilter` deleted the call comes back
       `415`, and the test says so and names the route
-- [ ] `feat: add watch operations server stream` — UC10's *as it happens*, for a client that
+- [x] `feat: add watch operations server stream` — UC10's *as it happens*, for a client that
       cannot hold the bidirectional stream open. A server stream is the half gRPC-Web does
-      carry, and the cheapest shape is a notification and not a delivery: it says there is
-      something after position N and the caller answers with `PullOperations`, so the durable
-      path stays the one that already exists and the cursor stays where the unary pair already
-      keeps it — with the caller, which is a stronger place for it than the stream's `SyncAck`
+      carry, and the shape is a notification and not a delivery: it carries a position, never
+      an operation, and the caller answers with `PullOperations`. So the delivery path stays
+      the one that already exists, this stream adds no second way for an operation to arrive,
+      and the cursor stays with the caller — which is a stronger place for it than the Sync
+      stream's `SyncAck`, and is why there is no acknowledgement to match one. Nothing is in
+      flight, so there is nothing to hold. It is woken by the same hub the Sync stream is, and
+      falls back to the same ticker for the reason `changes.Hub` documents about itself: the
+      hub is in-process, and two streams open against two replicas do not wake each other. The
+      report is skipped when the head has not moved past what the stream last said, which is
+      what keeps a browser from being handed one notification per push per device, each
+      provoking a pull that returns an empty page. The reference client is untouched: it can
+      hold `Sync` open, so it has no use for this — the caller this serves is a browser, and
+      there is no browser client in this repository yet
 - [ ] `feat: accept a chunked upload` — blocked on the open question below, and the largest
       item here by a distance: it changes the contract, the library slice's use cases and
       handlers, and the reference client

@@ -8,8 +8,8 @@
 //
 // The Unimplemented struct is embedded because the contract requires it and
 // because buf.gen.yaml says why. What that costs is that a forgotten method
-// answers Unimplemented instead of failing to build, so a test calls all four
-// and refuses that answer. Three of them reach a controller; the fourth is
+// answers Unimplemented instead of failing to build, so a test calls all five
+// and refuses that answer. Four of them reach a controller; the fifth is
 // refused by the certificate check before it can, which is an answer only the
 // peer-facing controller could have given.
 package syncservice
@@ -24,6 +24,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pushoperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/replicateoperations"
 	syncstream "github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/sync"
+	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/watchoperations"
 )
 
 // Controllers is every handler the service forwards to, which the slice's
@@ -34,6 +35,10 @@ type Controllers struct {
 	PullOperations *pulloperations.PullOperations
 	// The one that serves UC10 and UC11 by staying open.
 	Sync *syncstream.Sync
+	// The one that serves UC10 alone, for a caller that cannot hold the one
+	// above open — a browser, since gRPC-Web carries no bidirectional stream
+	// (D10).
+	WatchOperations *watchoperations.WatchOperations
 	// The one whose caller is a peer node rather than a device.
 	ReplicateOperations *replicateoperations.ReplicateOperations
 }
@@ -75,6 +80,14 @@ func (s *Service) PullOperations(
 // Sync is the same push and pull, kept open (UC10, UC11).
 func (s *Service) Sync(stream quirev1.SyncService_SyncServer) error {
 	return s.controllers.Sync.Handle(stream)
+}
+
+// WatchOperations tells a caller that the log has grown, so that it can pull
+// (UC10).
+func (s *Service) WatchOperations(
+	request *quirev1.WatchOperationsRequest, stream quirev1.SyncService_WatchOperationsServer,
+) error {
+	return s.controllers.WatchOperations.Handle(request, stream)
 }
 
 // ReplicateOperations accepts a reader's changes from a peer node (RF16, RN03).

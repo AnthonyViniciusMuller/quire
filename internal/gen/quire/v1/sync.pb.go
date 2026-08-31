@@ -1010,6 +1010,109 @@ func (x *SyncPushResult) GetResults() []*OperationResult {
 	return nil
 }
 
+type WatchOperationsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What the caller has already seen, so that the node can tell it about a
+	// backlog immediately rather than only about what happens next. Zero asks to
+	// be told about a log that is not empty, which is what a browser that has
+	// just been bound wants to hear.
+	//
+	// It is a starting point and not a subscription the caller can move. The node
+	// reports what it has told this stream about, and a caller that has fallen
+	// behind is not told twice — it pulls, and its own cursor is what says where
+	// it got to.
+	AfterPosition int64 `protobuf:"varint,1,opt,name=after_position,json=afterPosition,proto3" json:"after_position,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchOperationsRequest) Reset() {
+	*x = WatchOperationsRequest{}
+	mi := &file_quire_v1_sync_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchOperationsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchOperationsRequest) ProtoMessage() {}
+
+func (x *WatchOperationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_sync_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchOperationsRequest.ProtoReflect.Descriptor instead.
+func (*WatchOperationsRequest) Descriptor() ([]byte, []int) {
+	return file_quire_v1_sync_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *WatchOperationsRequest) GetAfterPosition() int64 {
+	if x != nil {
+		return x.AfterPosition
+	}
+	return 0
+}
+
+type WatchOperationsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// This node's head position for the reader: everything up to here exists, and
+	// the caller has seen up to wherever its own cursor is. The gap between the
+	// two is what to pull.
+	//
+	// It is the head and not a page boundary, because nothing is being delivered
+	// and there is no page — a caller pulls until PullOperations reports no more.
+	LastPosition  int64 `protobuf:"varint,1,opt,name=last_position,json=lastPosition,proto3" json:"last_position,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchOperationsResponse) Reset() {
+	*x = WatchOperationsResponse{}
+	mi := &file_quire_v1_sync_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchOperationsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchOperationsResponse) ProtoMessage() {}
+
+func (x *WatchOperationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_sync_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchOperationsResponse.ProtoReflect.Descriptor instead.
+func (*WatchOperationsResponse) Descriptor() ([]byte, []int) {
+	return file_quire_v1_sync_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *WatchOperationsResponse) GetLastPosition() int64 {
+	if x != nil {
+		return x.LastPosition
+	}
+	return 0
+}
+
 type ReplicateOperationsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The reader whose log these operations belong to. A device-facing call takes
@@ -1027,7 +1130,7 @@ type ReplicateOperationsRequest struct {
 
 func (x *ReplicateOperationsRequest) Reset() {
 	*x = ReplicateOperationsRequest{}
-	mi := &file_quire_v1_sync_proto_msgTypes[12]
+	mi := &file_quire_v1_sync_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1039,7 +1142,7 @@ func (x *ReplicateOperationsRequest) String() string {
 func (*ReplicateOperationsRequest) ProtoMessage() {}
 
 func (x *ReplicateOperationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_sync_proto_msgTypes[12]
+	mi := &file_quire_v1_sync_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1052,7 +1155,7 @@ func (x *ReplicateOperationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplicateOperationsRequest.ProtoReflect.Descriptor instead.
 func (*ReplicateOperationsRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_sync_proto_rawDescGZIP(), []int{12}
+	return file_quire_v1_sync_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ReplicateOperationsRequest) GetUserId() string {
@@ -1081,7 +1184,7 @@ type ReplicateOperationsResponse struct {
 
 func (x *ReplicateOperationsResponse) Reset() {
 	*x = ReplicateOperationsResponse{}
-	mi := &file_quire_v1_sync_proto_msgTypes[13]
+	mi := &file_quire_v1_sync_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1093,7 +1196,7 @@ func (x *ReplicateOperationsResponse) String() string {
 func (*ReplicateOperationsResponse) ProtoMessage() {}
 
 func (x *ReplicateOperationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_sync_proto_msgTypes[13]
+	mi := &file_quire_v1_sync_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1106,7 +1209,7 @@ func (x *ReplicateOperationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplicateOperationsResponse.ProtoReflect.Descriptor instead.
 func (*ReplicateOperationsResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_sync_proto_rawDescGZIP(), []int{13}
+	return file_quire_v1_sync_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ReplicateOperationsResponse) GetResults() []*OperationResult {
@@ -1173,7 +1276,11 @@ const file_quire_v1_sync_proto_rawDesc = "" +
 	"\aSyncAck\x12\x1a\n" +
 	"\bposition\x18\x01 \x01(\x03R\bposition\"E\n" +
 	"\x0eSyncPushResult\x123\n" +
-	"\aresults\x18\x01 \x03(\v2\x19.quire.v1.OperationResultR\aresults\"j\n" +
+	"\aresults\x18\x01 \x03(\v2\x19.quire.v1.OperationResultR\aresults\"?\n" +
+	"\x16WatchOperationsRequest\x12%\n" +
+	"\x0eafter_position\x18\x01 \x01(\x03R\rafterPosition\">\n" +
+	"\x17WatchOperationsResponse\x12#\n" +
+	"\rlast_position\x18\x01 \x01(\x03R\flastPosition\"j\n" +
 	"\x1aReplicateOperationsRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x123\n" +
 	"\n" +
@@ -1198,11 +1305,12 @@ const file_quire_v1_sync_proto_rawDesc = "" +
 	"\x19OPERATION_OUTCOME_APPLIED\x10\x01\x12\x1f\n" +
 	"\x1bOPERATION_OUTCOME_DUPLICATE\x10\x02\x12 \n" +
 	"\x1cOPERATION_OUTCOME_SUPERSEDED\x10\x03\x12\x1e\n" +
-	"\x1aOPERATION_OUTCOME_REJECTED\x10\x042\xd6\x02\n" +
+	"\x1aOPERATION_OUTCOME_REJECTED\x10\x042\xb0\x03\n" +
 	"\vSyncService\x12S\n" +
 	"\x0ePushOperations\x12\x1f.quire.v1.PushOperationsRequest\x1a .quire.v1.PushOperationsResponse\x12S\n" +
 	"\x0ePullOperations\x12\x1f.quire.v1.PullOperationsRequest\x1a .quire.v1.PullOperationsResponse\x129\n" +
-	"\x04Sync\x12\x15.quire.v1.SyncRequest\x1a\x16.quire.v1.SyncResponse(\x010\x01\x12b\n" +
+	"\x04Sync\x12\x15.quire.v1.SyncRequest\x1a\x16.quire.v1.SyncResponse(\x010\x01\x12X\n" +
+	"\x0fWatchOperations\x12 .quire.v1.WatchOperationsRequest\x1a!.quire.v1.WatchOperationsResponse0\x01\x12b\n" +
 	"\x13ReplicateOperations\x12$.quire.v1.ReplicateOperationsRequest\x1a%.quire.v1.ReplicateOperationsResponseB@Z>github.com/anthonyvsmuller/quire/internal/gen/quire/v1;quirev1b\x06proto3"
 
 var (
@@ -1218,7 +1326,7 @@ func file_quire_v1_sync_proto_rawDescGZIP() []byte {
 }
 
 var file_quire_v1_sync_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_quire_v1_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_quire_v1_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_quire_v1_sync_proto_goTypes = []any{
 	(TargetEntity)(0),                   // 0: quire.v1.TargetEntity
 	(OperationKind)(0),                  // 1: quire.v1.OperationKind
@@ -1235,18 +1343,20 @@ var file_quire_v1_sync_proto_goTypes = []any{
 	(*SyncStart)(nil),                   // 12: quire.v1.SyncStart
 	(*SyncAck)(nil),                     // 13: quire.v1.SyncAck
 	(*SyncPushResult)(nil),              // 14: quire.v1.SyncPushResult
-	(*ReplicateOperationsRequest)(nil),  // 15: quire.v1.ReplicateOperationsRequest
-	(*ReplicateOperationsResponse)(nil), // 16: quire.v1.ReplicateOperationsResponse
-	(*structpb.Struct)(nil),             // 17: google.protobuf.Struct
-	(*VectorClock)(nil),                 // 18: quire.v1.VectorClock
-	(*HybridTimestamp)(nil),             // 19: quire.v1.HybridTimestamp
+	(*WatchOperationsRequest)(nil),      // 15: quire.v1.WatchOperationsRequest
+	(*WatchOperationsResponse)(nil),     // 16: quire.v1.WatchOperationsResponse
+	(*ReplicateOperationsRequest)(nil),  // 17: quire.v1.ReplicateOperationsRequest
+	(*ReplicateOperationsResponse)(nil), // 18: quire.v1.ReplicateOperationsResponse
+	(*structpb.Struct)(nil),             // 19: google.protobuf.Struct
+	(*VectorClock)(nil),                 // 20: quire.v1.VectorClock
+	(*HybridTimestamp)(nil),             // 21: quire.v1.HybridTimestamp
 }
 var file_quire_v1_sync_proto_depIdxs = []int32{
 	0,  // 0: quire.v1.Operation.target_entity:type_name -> quire.v1.TargetEntity
 	1,  // 1: quire.v1.Operation.operation:type_name -> quire.v1.OperationKind
-	17, // 2: quire.v1.Operation.delta:type_name -> google.protobuf.Struct
-	18, // 3: quire.v1.Operation.vector_clock:type_name -> quire.v1.VectorClock
-	19, // 4: quire.v1.Operation.created_at:type_name -> quire.v1.HybridTimestamp
+	19, // 2: quire.v1.Operation.delta:type_name -> google.protobuf.Struct
+	20, // 3: quire.v1.Operation.vector_clock:type_name -> quire.v1.VectorClock
+	21, // 4: quire.v1.Operation.created_at:type_name -> quire.v1.HybridTimestamp
 	2,  // 5: quire.v1.OperationResult.outcome:type_name -> quire.v1.OperationOutcome
 	3,  // 6: quire.v1.OperationBatch.operations:type_name -> quire.v1.Operation
 	3,  // 7: quire.v1.PushOperationsRequest.operations:type_name -> quire.v1.Operation
@@ -1263,13 +1373,15 @@ var file_quire_v1_sync_proto_depIdxs = []int32{
 	6,  // 18: quire.v1.SyncService.PushOperations:input_type -> quire.v1.PushOperationsRequest
 	8,  // 19: quire.v1.SyncService.PullOperations:input_type -> quire.v1.PullOperationsRequest
 	10, // 20: quire.v1.SyncService.Sync:input_type -> quire.v1.SyncRequest
-	15, // 21: quire.v1.SyncService.ReplicateOperations:input_type -> quire.v1.ReplicateOperationsRequest
-	7,  // 22: quire.v1.SyncService.PushOperations:output_type -> quire.v1.PushOperationsResponse
-	9,  // 23: quire.v1.SyncService.PullOperations:output_type -> quire.v1.PullOperationsResponse
-	11, // 24: quire.v1.SyncService.Sync:output_type -> quire.v1.SyncResponse
-	16, // 25: quire.v1.SyncService.ReplicateOperations:output_type -> quire.v1.ReplicateOperationsResponse
-	22, // [22:26] is the sub-list for method output_type
-	18, // [18:22] is the sub-list for method input_type
+	15, // 21: quire.v1.SyncService.WatchOperations:input_type -> quire.v1.WatchOperationsRequest
+	17, // 22: quire.v1.SyncService.ReplicateOperations:input_type -> quire.v1.ReplicateOperationsRequest
+	7,  // 23: quire.v1.SyncService.PushOperations:output_type -> quire.v1.PushOperationsResponse
+	9,  // 24: quire.v1.SyncService.PullOperations:output_type -> quire.v1.PullOperationsResponse
+	11, // 25: quire.v1.SyncService.Sync:output_type -> quire.v1.SyncResponse
+	16, // 26: quire.v1.SyncService.WatchOperations:output_type -> quire.v1.WatchOperationsResponse
+	18, // 27: quire.v1.SyncService.ReplicateOperations:output_type -> quire.v1.ReplicateOperationsResponse
+	23, // [23:28] is the sub-list for method output_type
+	18, // [18:23] is the sub-list for method input_type
 	18, // [18:18] is the sub-list for extension type_name
 	18, // [18:18] is the sub-list for extension extendee
 	0,  // [0:18] is the sub-list for field type_name
@@ -1296,7 +1408,7 @@ func file_quire_v1_sync_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_quire_v1_sync_proto_rawDesc), len(file_quire_v1_sync_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   14,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -19,10 +19,12 @@ import (
 	pulloperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/pulloperations"
 	pushoperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/pushoperations"
 	replicateoperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/replicateoperations"
+	watchoperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/watchoperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pulloperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pushoperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/replicateoperations"
 	syncstream "github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/sync"
+	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/watchoperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/syncservice"
 	changesservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/changes"
 )
@@ -84,6 +86,11 @@ func TestEveryCallReachesItsController(t *testing.T) {
 
 			//nolint:contextcheck // the stream carries the context, which is what a stream is.
 			return service.Sync(stream)
+		}},
+		{"WatchOperations", func() error {
+			//nolint:contextcheck // the stream carries the context, which is what a stream is.
+			return service.WatchOperations(
+				&quirev1.WatchOperationsRequest{}, newWatchStream(ctx))
 		}},
 	}
 
@@ -151,12 +158,42 @@ func newService(calls *[]string) *syncservice.Service {
 		name: "ReplicateOperations", calls: calls,
 	}
 
+	watch := recorder[watchoperationsusecase.Input, watchoperationsusecase.Output]{
+		name: "WatchOperations", calls: calls,
+	}
+
+	hub := changesservice.New()
+
 	return syncservice.New(&syncservice.Controllers{
 		PushOperations:      pushoperations.New(push),
 		PullOperations:      pulloperations.New(pull),
-		Sync:                syncstream.New(push, pull, changesservice.New(), time.Hour),
+		Sync:                syncstream.New(push, pull, hub, time.Hour),
+		WatchOperations:     watchoperations.New(watch, hub, time.Hour),
 		ReplicateOperations: replicateoperations.New(replicate),
 	})
+}
+
+// watchStream is the server half of a server-streaming call, which the test
+// only has to be able to receive on.
+type watchStream struct {
+	grpc.ServerStream
+
+	ctx      context.Context
+	outgoing chan *quirev1.WatchOperationsResponse
+}
+
+func newWatchStream(ctx context.Context) *watchStream {
+	return &watchStream{ctx: ctx, outgoing: make(chan *quirev1.WatchOperationsResponse, 8)}
+}
+
+// Context is the context the call is served under.
+func (s *watchStream) Context() context.Context { return s.ctx }
+
+// Send records what the node wrote.
+func (s *watchStream) Send(response *quirev1.WatchOperationsResponse) error {
+	s.outgoing <- response
+
+	return nil
 }
 
 // stream is a bidirectional stream a test drives from both ends.

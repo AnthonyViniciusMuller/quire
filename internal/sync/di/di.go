@@ -44,10 +44,12 @@ import (
 	pushoperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/pushoperations"
 	replicateusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/replicate"
 	replicateoperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/replicateoperations"
+	watchoperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/watchoperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pulloperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/pushoperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/replicateoperations"
 	syncstream "github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/sync"
+	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/controller/watchoperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/syncservice"
 	deliveryrepository "github.com/anthonyvsmuller/quire/internal/sync/infra/repository/delivery"
 	operationrepository "github.com/anthonyvsmuller/quire/internal/sync/infra/repository/operation"
@@ -140,6 +142,7 @@ func Initialize(
 
 	push := pushoperationsusecase.New(log, reconciler, clock, manager, hub)
 	pull := pulloperationsusecase.New(log)
+	watch := watchoperationsusecase.New(log)
 
 	outbound, err := peersservice.New(&cfg.Federation, catalogue)
 	if err != nil {
@@ -156,6 +159,7 @@ func Initialize(
 		PushOperations:      pushoperations.New(push),
 		PullOperations:      pulloperations.New(pull),
 		Sync:                syncstream.New(push, pull, hub, streamPoll),
+		WatchOperations:     watchoperations.New(watch, hub, streamPoll),
 		ReplicateOperations: replicateoperations.New(inbound),
 	}
 

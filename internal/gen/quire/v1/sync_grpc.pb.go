@@ -45,6 +45,7 @@ const (
 	SyncService_PushOperations_FullMethodName      = "/quire.v1.SyncService/PushOperations"
 	SyncService_PullOperations_FullMethodName      = "/quire.v1.SyncService/PullOperations"
 	SyncService_Sync_FullMethodName                = "/quire.v1.SyncService/Sync"
+	SyncService_WatchOperations_FullMethodName     = "/quire.v1.SyncService/WatchOperations"
 	SyncService_ReplicateOperations_FullMethodName = "/quire.v1.SyncService/ReplicateOperations"
 )
 
@@ -71,6 +72,26 @@ type SyncServiceClient interface {
 	// rather than at the next poll. A device that has just reconnected drains its
 	// backlog through the same stream it then leaves open.
 	Sync(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SyncRequest, SyncResponse], error)
+	// UC10 for a caller that cannot hold Sync open.
+	//
+	// A browser is the case it exists for. gRPC-Web carries a unary call and a
+	// server stream and neither of the other two, so Sync is unreachable from
+	// one — D10 in docs/tcc-corrections.md is what that costs and why it is
+	// recorded rather than worked around. What a browser can do is push with
+	// PushOperations, pull with PullOperations and be told when to.
+	//
+	// It is a notification and not a delivery, and the difference is the point.
+	// It carries a position, never an operation: the caller learns that this
+	// node's log has grown past what it has seen, and answers with
+	// PullOperations like any other caller. Nothing about durability changes,
+	// because nothing is delivered here — the cursor stays with the caller,
+	// where the unary pair already keeps it, and a notification that was missed
+	// costs a poll rather than an operation.
+	//
+	// That is also why there is no acknowledgement to match SyncAck. The node
+	// holds nothing in flight for this caller and has nothing to hold: it is
+	// reporting a number it would report again on the next notification.
+	WatchOperations(ctx context.Context, in *WatchOperationsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchOperationsResponse], error)
 	// UC09 between nodes rather than between a device and its node.
 	//
 	// This is the only RPC in the contract whose caller is a peer node and not a
@@ -128,6 +149,25 @@ func (c *syncServiceClient) Sync(ctx context.Context, opts ...grpc.CallOption) (
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SyncService_SyncClient = grpc.BidiStreamingClient[SyncRequest, SyncResponse]
 
+func (c *syncServiceClient) WatchOperations(ctx context.Context, in *WatchOperationsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchOperationsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &SyncService_ServiceDesc.Streams[1], SyncService_WatchOperations_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchOperationsRequest, WatchOperationsResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SyncService_WatchOperationsClient = grpc.ServerStreamingClient[WatchOperationsResponse]
+
 func (c *syncServiceClient) ReplicateOperations(ctx context.Context, in *ReplicateOperationsRequest, opts ...grpc.CallOption) (*ReplicateOperationsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReplicateOperationsResponse)
@@ -161,6 +201,26 @@ type SyncServiceServer interface {
 	// rather than at the next poll. A device that has just reconnected drains its
 	// backlog through the same stream it then leaves open.
 	Sync(grpc.BidiStreamingServer[SyncRequest, SyncResponse]) error
+	// UC10 for a caller that cannot hold Sync open.
+	//
+	// A browser is the case it exists for. gRPC-Web carries a unary call and a
+	// server stream and neither of the other two, so Sync is unreachable from
+	// one — D10 in docs/tcc-corrections.md is what that costs and why it is
+	// recorded rather than worked around. What a browser can do is push with
+	// PushOperations, pull with PullOperations and be told when to.
+	//
+	// It is a notification and not a delivery, and the difference is the point.
+	// It carries a position, never an operation: the caller learns that this
+	// node's log has grown past what it has seen, and answers with
+	// PullOperations like any other caller. Nothing about durability changes,
+	// because nothing is delivered here — the cursor stays with the caller,
+	// where the unary pair already keeps it, and a notification that was missed
+	// costs a poll rather than an operation.
+	//
+	// That is also why there is no acknowledgement to match SyncAck. The node
+	// holds nothing in flight for this caller and has nothing to hold: it is
+	// reporting a number it would report again on the next notification.
+	WatchOperations(*WatchOperationsRequest, grpc.ServerStreamingServer[WatchOperationsResponse]) error
 	// UC09 between nodes rather than between a device and its node.
 	//
 	// This is the only RPC in the contract whose caller is a peer node and not a
@@ -193,6 +253,9 @@ func (UnimplementedSyncServiceServer) PullOperations(context.Context, *PullOpera
 }
 func (UnimplementedSyncServiceServer) Sync(grpc.BidiStreamingServer[SyncRequest, SyncResponse]) error {
 	return status.Error(codes.Unimplemented, "method Sync not implemented")
+}
+func (UnimplementedSyncServiceServer) WatchOperations(*WatchOperationsRequest, grpc.ServerStreamingServer[WatchOperationsResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchOperations not implemented")
 }
 func (UnimplementedSyncServiceServer) ReplicateOperations(context.Context, *ReplicateOperationsRequest) (*ReplicateOperationsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReplicateOperations not implemented")
@@ -261,6 +324,17 @@ func _SyncService_Sync_Handler(srv interface{}, stream grpc.ServerStream) error 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SyncService_SyncServer = grpc.BidiStreamingServer[SyncRequest, SyncResponse]
 
+func _SyncService_WatchOperations_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchOperationsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SyncServiceServer).WatchOperations(m, &grpc.GenericServerStream[WatchOperationsRequest, WatchOperationsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SyncService_WatchOperationsServer = grpc.ServerStreamingServer[WatchOperationsResponse]
+
 func _SyncService_ReplicateOperations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReplicateOperationsRequest)
 	if err := dec(in); err != nil {
@@ -305,6 +379,11 @@ var SyncService_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _SyncService_Sync_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "WatchOperations",
+			Handler:       _SyncService_WatchOperations_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "quire/v1/sync.proto",

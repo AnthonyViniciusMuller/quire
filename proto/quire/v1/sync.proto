@@ -52,6 +52,27 @@ service SyncService {
   // backlog through the same stream it then leaves open.
   rpc Sync(stream SyncRequest) returns (stream SyncResponse);
 
+  // UC10 for a caller that cannot hold Sync open.
+  //
+  // A browser is the case it exists for. gRPC-Web carries a unary call and a
+  // server stream and neither of the other two, so Sync is unreachable from
+  // one — D10 in docs/tcc-corrections.md is what that costs and why it is
+  // recorded rather than worked around. What a browser can do is push with
+  // PushOperations, pull with PullOperations and be told when to.
+  //
+  // It is a notification and not a delivery, and the difference is the point.
+  // It carries a position, never an operation: the caller learns that this
+  // node's log has grown past what it has seen, and answers with
+  // PullOperations like any other caller. Nothing about durability changes,
+  // because nothing is delivered here — the cursor stays with the caller,
+  // where the unary pair already keeps it, and a notification that was missed
+  // costs a poll rather than an operation.
+  //
+  // That is also why there is no acknowledgement to match SyncAck. The node
+  // holds nothing in flight for this caller and has nothing to hold: it is
+  // reporting a number it would report again on the next notification.
+  rpc WatchOperations(WatchOperationsRequest) returns (stream WatchOperationsResponse);
+
   // UC09 between nodes rather than between a device and its node.
   //
   // This is the only RPC in the contract whose caller is a peer node and not a
@@ -245,6 +266,29 @@ message SyncAck {
 
 message SyncPushResult {
   repeated OperationResult results = 1;
+}
+
+message WatchOperationsRequest {
+  // What the caller has already seen, so that the node can tell it about a
+  // backlog immediately rather than only about what happens next. Zero asks to
+  // be told about a log that is not empty, which is what a browser that has
+  // just been bound wants to hear.
+  //
+  // It is a starting point and not a subscription the caller can move. The node
+  // reports what it has told this stream about, and a caller that has fallen
+  // behind is not told twice — it pulls, and its own cursor is what says where
+  // it got to.
+  int64 after_position = 1;
+}
+
+message WatchOperationsResponse {
+  // This node's head position for the reader: everything up to here exists, and
+  // the caller has seen up to wherever its own cursor is. The gap between the
+  // two is what to pull.
+  //
+  // It is the head and not a page boundary, because nothing is being delivered
+  // and there is no page — a caller pulls until PullOperations reports no more.
+  int64 last_position = 1;
 }
 
 message ReplicateOperationsRequest {
