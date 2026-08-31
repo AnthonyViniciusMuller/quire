@@ -727,6 +727,57 @@ belongs to the gateway RNF12 already requires — so this phase adds manifests a
       way and then the other against the same node, and the second is told the node already
       holds it, which can only be true if the first stored it under the digest the second
       declared. UC02 is now reachable from a browser, which is what phase 13 set out to do
+- [x] `test: cover the discovery document a browser reads` — the lookup a web client makes
+      before it knows any node, and the one call `DiscoverServer` cannot serve because an RPC
+      has to be addressed to a node already known. It already worked: `wellknown.go` sets
+      `Access-Control-Allow-Origin` on both documents and says a reader's application may well
+      be a page on another origin, which is this caller exactly. The test pins that rather than
+      changing it, and takes either the wildcard the node sends or an echoed origin so that it
+      measures the property and not which layer answered — the failure it guards is silent in
+      the worst way, since the node replies 200, the bytes arrive, and the browser refuses to
+      hand them to the page. What it found is the constraint now written beside the rule that
+      makes it: the authorization policy admits `GET` on `/.well-known/*` and not `OPTIONS`, so
+      a lookup carrying a header a browser would preflight is refused `403` — an authorization
+      failure by appearance and a request shape by cause. A lookup has no reason to send one,
+      so it is recorded rather than removed; removing it means a `corsPolicy` at the gateway
+      setting a header the node already sets
+- [x] `test: cover the browser's server stream through the gateway` — the other half of what
+      gRPC-Web carries, and the half nothing exercised: the lane was proven able to carry a
+      request and an answer and never proven able to hold a response open, which is the whole
+      of what `WatchOperations` is. The property is that an *idle* stream survives, because
+      `report` sends nothing while the head has not moved and a reader nobody is writing for is
+      the common case. Envoy's own defaults are fifteen seconds on the route and five minutes
+      on the stream; Istio overrides both to zero on a gateway, so this deployment was correct
+      by inheriting a default this repository never chose and nothing would have noticed it
+      changing. The idle window is twenty seconds so that it outlasts the fifteen, and it was
+      checked by putting the fifteen back — with `timeout: 15s` on the route the test fails
+      saying the stream was cut, and without it it passes. Writing it found the thing a client
+      author needs and no document held: gRPC sends no response headers until the handler sends
+      its first message, so a browser opening a watch on an empty log has a fetch that has not
+      resolved rather than a stream that is idle, and the two are the same thing on the wire and
+      not in any client API
+- [x] `build: serve grpc-web from the compose federation` — the lane existed only in the
+      cluster, so `flutter run -d chrome` against `make dev-up` reached nothing and every
+      browser-shaped change had to be checked by bringing up kind. One Envoy beside the two
+      nodes running the filter the gateway's `EnvoyFilter` inserts, and one process for both
+      rather than one each: the two differ in a domain and a cluster, and what would have been
+      duplicated is the part that must not drift — which headers a browser may send and which it
+      may read, which are the values `virtualservice.yaml` carries and are those values on
+      purpose. Its listeners are plain HTTP on the loopback address, which every browser treats
+      as a secure context, so nothing has to trust a certificate that `dev-certs.sh` self-signs
+      and no browser would take from a flag; upstream is TLS, verified against the node's own
+      certificate, which is the check `quirectl --ca` makes. It adds a lane and replaces none —
+      the suites still dial `19090` and `29090`, and the discovery documents are still answered
+      by the nodes themselves. Two things it cost, both found by running it. Envoy's *upstream*
+      TLS defaults cap at 1.2 where its downstream defaults do not, and the node's listener is
+      built `MinVersion: tls.VersionTLS13` — so the first working preflight was followed by a
+      `503` carrying a protocol-version alert, and the cluster has to name TLS 1.3 explicitly.
+      And the image's entrypoint script begins by chowning `/dev/stdout`, which fails on a
+      rootless daemon and exits before Envoy runs, so the service calls the binary directly.
+      Checked on both nodes: a browser-shaped `Login` answers `grpc-status:16` with the message
+      and the `grpc-status-details-bin` native gRPC gives for the same call, and
+      `WatchOperations` — the server stream — reaches the interceptor and is refused by it,
+      which is the streaming half of what gRPC-Web carries working through the lane
 
 ## Design decisions settled
 

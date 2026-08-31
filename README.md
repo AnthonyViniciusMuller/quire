@@ -67,8 +67,10 @@ make test-e2e          # end-to-end against the two nodes
 `make dev-up` brings up two nodes that know nothing about each other until a reader says
 so. Inside the compose network they are `quire-a.example` and `quire-b.example`, which is
 what they discover each other by; from the host they answer on `127.0.0.1:19090` and
-`127.0.0.1:29090` for gRPC and on `127.0.0.1:18080` and `127.0.0.1:28080` for the discovery
-documents. They present the self-signed certificates `make dev-certs` generates, so a client
+`127.0.0.1:29090` for gRPC, on `127.0.0.1:18080` and `127.0.0.1:28080` for the discovery
+documents, and on `127.0.0.1:18090` and `127.0.0.1:28090` for gRPC-Web — the lane a browser
+uses, because it cannot speak gRPC itself. Those two are plain HTTP, which a browser accepts
+on a loopback origin without a certificate. They present the self-signed certificates `make dev-certs` generates, so a client
 outside the network names one:
 
 ```bash

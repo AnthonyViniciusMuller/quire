@@ -1,0 +1,214 @@
+# The browser lane for the development federation.
+#
+# A browser cannot speak gRPC: it has no control over HTTP/2 frames and cannot
+# read trailers, which is where gRPC puts the status of a call. gRPC-Web moves
+# the trailers into the body, and something has to translate that back. In a
+# cluster that something is the node's own gateway, patched by
+# deploy/k8s/istio/envoyfilter.yaml; here there is no gateway, so this file is
+# the same filter run as a service beside the two nodes.
+#
+# It is one Envoy for both nodes rather than one each. The alternative is two
+# configurations differing in a domain and a cluster, and the thing that would
+# be duplicated is exactly the part that must not drift: what a browser is
+# allowed to send and which headers it is allowed to read. Two listeners on one
+# process is what keeps that in one place. D10 in docs/tcc-corrections.md is
+# what this serves.
+#
+# What it deliberately does not carry is TLS on the front. Its listeners are
+# published on the loopback address, which every browser treats as a secure
+# context, so a page served from `flutter run -d chrome` reaches them over plain
+# HTTP with no certificate to trust — and the certificates `make dev-certs`
+# writes are self-signed, which a browser will not accept from a flag. Upstream
+# is a different matter: the node speaks TLS and this file verifies it against
+# the node's own certificate, because a self-signed certificate is its own
+# authority and pinning it here is the same check quirectl makes with --ca.
+#
+# The discovery documents are not routed through this. The node already answers
+# them with Access-Control-Allow-Origin, and compose publishes that listener
+# directly on 18080 and 28080 — so a browser fetches them from the node and
+# needs nothing from here.
+
+# The admin interface, bound to the loopback of the container and published
+# nowhere. It is what `docker compose exec grpc-web wget -qO- localhost:9901/...`
+# reaches when a route has to be explained, and it is not on the network any
+# node can see.
+admin:
+  address:
+    socket_address: { address: 127.0.0.1, port_value: 9901 }
+
+static_resources:
+  listeners:
+    - name: quire-a
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 8090 }
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: quire_a
+                codec_type: AUTO
+                # Zero, and it is the setting this whole lane most depends on.
+                # Envoy's own default is five minutes, and WatchOperations is
+                # silent for a reader nobody is writing for — report() sends
+                # nothing when the head has not moved — so the common case for
+                # that stream is an idle response held open indefinitely. A
+                # default left in place here would cut it on a timer, and the
+                # symptom is a client that reconnects forever and still works,
+                # because a missed notification costs a poll.
+                stream_idle_timeout: 0s
+                route_config:
+                  name: quire
+                  virtual_hosts:
+                    - name: quire
+                      domains: ["*"]
+                      # Without this a browser cannot read the outcome of a
+                      # call. gRPC-Web delivers it as grpc-status, and a
+                      # cross-origin response exposes no header the server did
+                      # not name — so a call that failed and one that succeeded
+                      # would look identical to the caller.
+                      #
+                      # The values are the ones deploy/k8s/istio's
+                      # VirtualService carries, and they are the same values on
+                      # purpose: a client that works against this federation and
+                      # not against a deployed node would have been misled here.
+                      typed_per_filter_config:
+                        envoy.filters.http.cors: &cors
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.CorsPolicy
+                          allow_origin_string_match:
+                            - safe_regex: { regex: ".*" }
+                          allow_methods: "POST, OPTIONS"
+                          allow_headers: "content-type,x-grpc-web,x-user-agent,grpc-timeout,authorization"
+                          expose_headers: "grpc-status,grpc-message,grpc-status-details-bin"
+                          max_age: "600"
+                      routes:
+                        # A gRPC path is /<package>.<Service>/<Method>, so one
+                        # prefix covers every service in the contract and
+                        # nothing outside it.
+                        - match: { prefix: "/quire.v1." }
+                          route:
+                            cluster: quire-a
+                            # Envoy's default is fifteen seconds, which is a
+                            # sentence of death for a server stream. Istio
+                            # overrides it to zero on a gateway; nothing
+                            # overrides it here but this line.
+                            timeout: 0s
+                http_filters: &filters
+                  # cors runs before grpc_web, which is the order Istio's own
+                  # chain has and the order a preflight needs: OPTIONS is
+                  # answered by cors and never reaches the translation.
+                  - name: envoy.filters.http.cors
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.Cors
+                  - name: envoy.filters.http.grpc_web
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+    - name: quire-b
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 8091 }
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: quire_b
+                codec_type: AUTO
+                stream_idle_timeout: 0s
+                # The routes differ from the listener above in the cluster
+                # they name and in nothing else. What must not differ is the
+                # CORS policy and the filter order, so both are the anchors
+                # defined above rather than a second copy — a browser that
+                # behaved differently against one node than the other would be
+                # this file's fault and nobody would look here.
+                route_config:
+                  name: quire
+                  virtual_hosts:
+                    - name: quire
+                      domains: ["*"]
+                      typed_per_filter_config:
+                        envoy.filters.http.cors: *cors
+                      routes:
+                        - match: { prefix: "/quire.v1." }
+                          route:
+                            cluster: quire-b
+                            timeout: 0s
+                http_filters: *filters
+
+  clusters:
+    # The two nodes, reached by the aliases compose gives them on its own
+    # network — the same names a peer discovers them by, and never the ports
+    # published on the host.
+    - name: quire-a
+      type: STRICT_DNS
+      connect_timeout: 5s
+      # HTTP/2 upstream, which is not optional: the node speaks gRPC and this
+      # cluster carries what the filter translated back into it.
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: quire-a
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: quire-a.example, port_value: 9090 }
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+          sni: quire-a.example
+          common_tls_context:
+            # TLS 1.3 exactly, because the node accepts nothing else: its
+            # listener is built with MinVersion: tls.VersionTLS13, in
+            # internal/sync/infra/grpc/peerauthn. Envoy's *upstream* default
+            # caps at 1.2 — the downstream default does not, which is why this
+            # is easy to miss — and the node answers a 1.2 hello with a protocol
+            # version alert that reaches a browser as an unexplained 503.
+            tls_params: &tls13
+              tls_minimum_protocol_version: TLSv1_3
+              tls_maximum_protocol_version: TLSv1_3
+            validation_context:
+              # The node's own certificate as the authority, because it is
+              # self-signed and therefore is one. This is the same check
+              # quirectl makes when it is handed --ca, and it is a real check:
+              # a node presenting anything else is refused here rather than
+              # spoken to.
+              trusted_ca: { filename: /etc/quire/tls/quire-a.example.crt.pem }
+              match_typed_subject_alt_names:
+                - san_type: DNS
+                  matcher: { exact: quire-a.example }
+
+    - name: quire-b
+      type: STRICT_DNS
+      connect_timeout: 5s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: quire-b
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: quire-b.example, port_value: 9090 }
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+          sni: quire-b.example
+          common_tls_context:
+            tls_params: *tls13
+            validation_context:
+              trusted_ca: { filename: /etc/quire/tls/quire-b.example.crt.pem }
+              match_typed_subject_alt_names:
+                - san_type: DNS
+                  matcher: { exact: quire-b.example }

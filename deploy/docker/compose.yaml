@@ -229,6 +229,51 @@ services:
       - "127.0.0.1:29090:9090"
       - "127.0.0.1:28080:80"
 
+  # The browser lane, and the one service here that is not part of a node.
+  #
+  # A browser cannot speak gRPC (D10), so something has to translate gRPC-Web
+  # into it. In a cluster that is the node's own gateway, patched by
+  # deploy/k8s/istio/envoyfilter.yaml. There is no gateway here, so this is the
+  # same Envoy filter run beside the two nodes — which is what makes
+  # `flutter run -d chrome` able to reach this federation at all.
+  #
+  # One process for both nodes rather than one each: the two differ in a domain
+  # and a cluster, and what would be duplicated is the part that must not drift —
+  # which headers a browser may send and which it may read. envoy.yaml argues
+  # that and everything else about the configuration.
+  #
+  # It is deliberately not in front of anything else. quirectl and the
+  # end-to-end suites dial the nodes directly on 19090 and 29090, as they always
+  # have, and the discovery documents are answered by the nodes themselves on
+  # 18080 and 28080 with the CORS header a browser needs. This adds a lane; it
+  # replaces none.
+  grpc-web:
+    image: envoyproxy/envoy:v1.34.1
+    container_name: quire-grpc-web
+    # The binary directly, rather than the image's own entrypoint script. That
+    # script begins by chowning /dev/stdout to the envoy user, which fails on a
+    # rootless daemon — the device belongs to the host user the container could
+    # not be given — and the container exits 1 before Envoy is reached. Nothing
+    # in it is needed here: it exists to fix up permissions and to accept a
+    # handful of environment variables this file does not set.
+    entrypoint: [envoy]
+    command: [-c, /etc/envoy/envoy.yaml]
+    depends_on: [node-a, node-b]
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml:ro,z
+      # The same certificates the nodes present, read here as the authority to
+      # verify them against: they are self-signed, so each one is its own.
+      - ./certs:/etc/quire/tls:ro,z
+    networks: [quire]
+    ports:
+      # Plain HTTP, and on the loopback address on purpose. Every browser treats
+      # a loopback origin as a secure context, so a page reaches these without a
+      # certificate — which matters because the certificates here are
+      # self-signed and a browser will not take one from a flag the way quirectl
+      # does with --ca.
+      - "127.0.0.1:18090:8090"
+      - "127.0.0.1:28090:8091"
+
 networks:
   quire:
     name: quire
