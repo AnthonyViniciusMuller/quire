@@ -8,12 +8,20 @@
 #   peer that followed the standard end up on a connection this node will talk
 #   over.
 #
-#   443 is terminated here, because what it serves is the .well-known documents
-#   and those are an HTTP surface: routing by path is the point, and routing by
-#   path means reading the request. The certificate it presents is this node's
-#   document certificate, which is not the one the node itself presents: this
-#   one may rotate whenever cert-manager likes, and the node's may never rotate
-#   its key.
+#   443 is terminated here, because what it serves is an HTTP surface: routing
+#   by path is the point, and routing by path means reading the request. The
+#   certificate it presents is this node's document certificate, which is not
+#   the one the node itself presents: this one may rotate whenever cert-manager
+#   likes, and the node's may never rotate its key.
+#
+#   It serves two things and not one. The .well-known documents are the first.
+#   The second is the browser lane: gRPC-Web arrives here, is translated into
+#   gRPC by the filter envoyfilter.yaml inserts, and is sent on to the node's
+#   API port over a connection this gateway originates. A browser needs both
+#   halves of that — it cannot read the trailers a gRPC status arrives in, and
+#   it will not accept the node's own certificate, which is pinned rather than
+#   chain-signed. Terminating here is what supplies both, and D10 in
+#   docs/tcc-corrections.md is what it costs.
 #
 #   9443 is passed through untouched, because what it carries is the federation
 #   gRPC and terminating it would destroy both halves of the handshake. The node

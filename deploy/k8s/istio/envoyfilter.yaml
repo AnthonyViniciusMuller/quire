@@ -1,0 +1,58 @@
+# The filter that makes a browser's call into a gRPC call.
+#
+# gRPC puts the status of a call in HTTP trailers, and no browser can read one:
+# neither fetch nor XHR exposes them. gRPC-Web answers that by moving the
+# trailers into the body as a final frame, which means the bytes a browser sends
+# and receives are not gRPC and something has to translate them. Envoy ships
+# that translator, and this is the file that turns it on.
+#
+# It is an EnvoyFilter, which is Istio's break-glass API, and that is not the
+# shape anybody would choose. It was checked rather than assumed: Istio 1.30.3
+# builds a gateway's HTTP filter chain with cors, fault, grpc_stats and router,
+# and no grpc_web. The filter is compiled into the proxy — it is listed among
+# the available extensions in the bootstrap — so nothing has to be installed,
+# but nothing configures it either.
+#
+# The cost is that this file is coupled to the structure of Envoy's own
+# configuration, and an Istio upgrade may move what it matches on. That is
+# accepted here for one reason: the alternative is an Envoy Deployment per node
+# whose entire job is to run this same filter, and a workload is a larger thing
+# to own and to explain than a patch that inserts one filter. `kind-up.sh` pins
+# the mesh version, so the coupling is to a version this repository chooses.
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: quire-grpc-web
+spec:
+  workloadSelector:
+    labels:
+      # This node's gateway, and only it. The label is the one the Deployment
+      # carries in the base rather than the `istio` label the overlay patches:
+      # an EnvoyFilter applies within its own namespace, so the namespace is
+      # already doing the work of telling the two nodes' gateways apart, and a
+      # selector needing an overlay patch would be a third place to keep them
+      # in step.
+      app: quire-gateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          # The terminated port, and only it. 9443 is passed through and has no
+          # HTTP filter chain to patch; 8080 redirects.
+          portNumber: 8443
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+              subFilter:
+                # The router is always last, so naming it is how this patch says
+                # "at the end of the chain" without depending on what else is in
+                # it. cors has to run before grpc_web sees a preflight, and it
+                # already does — it is inserted nearer the front by Istio.
+                name: envoy.filters.http.router
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.grpc_web
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb

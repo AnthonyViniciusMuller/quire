@@ -1,0 +1,53 @@
+# The gateway's own view of the API port.
+#
+# It exists because one port carries two truths and a port name can only state
+# one of them. `service.yaml` names 9090 `tls-grpc`, so that the sidecar
+# forwards a ClientHello instead of reading it as an HTTP/2 frame — C23 one
+# level down, and the defect that found it. Istio reads a port's protocol from
+# that name, so 9090 is a TCP port everywhere in the mesh, and an HTTP route to
+# a TCP port is never programmed.
+#
+# The browser lane needs an HTTP route, because the grpc_web filter has to have
+# somewhere to send what it translates. This is that route's destination: a
+# second declaration of the same endpoint, under a name only this node's
+# gateway resolves, saying HTTP/2 where the Service says TLS.
+#
+# The node's inbound configuration is built from the Service and not from here,
+# so it does not change — and both descriptions are true of the same bytes. A
+# TLS stream carrying HTTP/2 frames is what the gateway writes and what the
+# sidecar forwards without looking, exactly as it already does for the
+# federation connection on the same port.
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: quire-api
+spec:
+  hosts:
+    # Not a domain anybody owns, and deliberately not one that resolves. RFC
+    # 8375 reserves `.internal` for names that mean something inside one
+    # deployment and nothing outside it, which is exactly what this is: the
+    # route below names it, the DestinationRule beside this file says how to
+    # dial it, and nothing else in the cluster has heard of it.
+    - quire-api.internal
+  # External, though the endpoint is two pods away. The gateway dials this node
+  # the way a peer does — presenting nothing, verifying the node's own
+  # certificate against the node's own authority — and not the way one mesh
+  # workload dials another. Declaring it internal would invite the mesh to
+  # supply an identity for a connection that is authenticated by C12's pin
+  # instead, which is the confusion `peerauthentication.yaml` already refuses on
+  # this port.
+  location: MESH_EXTERNAL
+  # DNS, so that Envoy resolves the name below rather than being handed pod
+  # addresses: the destination is a Service, and its address is the one thing
+  # about it that survives a rollout.
+  resolution: DNS
+  endpoints:
+    # The namespace has to reach this string, and a namespace transformer does
+    # not rewrite strings — the same reason the principal in
+    # `authorizationpolicy.yaml` is patched per overlay rather than derived.
+    - address: quire.NAMESPACE.svc.cluster.local
+  ports:
+    - number: 9090
+      name: grpc-api
+      # The whole of why this file exists.
+      protocol: HTTP2

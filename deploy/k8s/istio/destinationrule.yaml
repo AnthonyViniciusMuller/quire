@@ -1,0 +1,38 @@
+# How the gateway dials the API port, for the browser lane only.
+#
+# The federation lane never reaches this file: it is a TLS route, passed
+# through, and the gateway does not originate anything on it. This one it must,
+# because it terminated the browser's connection in order to translate it — and
+# what it has to produce on the other side is the connection the node expects,
+# which is TLS the node terminates itself.
+#
+# Nothing here weakens what C12 established. The gateway is not pinning the
+# node's key, because it does not have to: it is inside the same deployment as
+# the node, and cert-manager writes the issuing authority into `ca.crt` beside
+# every certificate it signs, so the ordinary chain check is available and is
+# the honest one to use. A peer, which shares no authority with this node, pins
+# instead — and that connection is the one this file does not touch.
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: quire-api
+spec:
+  host: quire-api.internal
+  trafficPolicy:
+    tls:
+      # Simple and not mutual. The node requests a client certificate and never
+      # requires one, because one listener serves peers and devices alike; a
+      # browser is a device, carries a JWT and no certificate, and the gateway
+      # presenting one here would be asserting a peer identity that the node
+      # would then have to decide about.
+      mode: SIMPLE
+      # The secret cert-manager writes for the node, read from this namespace.
+      # Only `ca.crt` is consulted in this mode, which is the file's whole
+      # requirement of it.
+      credentialName: quire-federation-tls
+      # The node holds one certificate and would present it regardless, but the
+      # name is sent anyway: it is what the node would need if it ever held two,
+      # and an omitted SNI is a silent dependency on that never happening.
+      sni: quire.example
+      subjectAltNames:
+        - quire.example

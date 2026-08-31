@@ -92,3 +92,25 @@ patches:
       - op: replace
         path: /spec/rules/0/from/0/source/principals/0
         value: cluster.local/ns/quire-b/sa/quire-gateway
+
+  # The browser lane names this node twice, and neither is derivable. The
+  # ServiceEntry's endpoint carries the namespace, for the reason the principal
+  # above does; the DestinationRule carries the domain, because what it verifies
+  # is the node's certificate and that certificate asserts one name.
+  - target:
+      kind: ServiceEntry
+      name: quire-api
+    patch: |-
+      - op: replace
+        path: /spec/endpoints/0/address
+        value: quire.quire-b.svc.cluster.local
+  - target:
+      kind: DestinationRule
+      name: quire-api
+    patch: |-
+      - op: replace
+        path: /spec/trafficPolicy/tls/sni
+        value: quire-b.example
+      - op: replace
+        path: /spec/trafficPolicy/tls/subjectAltNames/0
+        value: quire-b.example

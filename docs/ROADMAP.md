@@ -618,24 +618,31 @@ belongs to the gateway RNF12 already requires — so this phase adds manifests a
       cheap one, since `PushOperations` and `PullOperations` are already the same push and pull
       as unary calls and RNF09 asks for a poll in the first place; `UploadEbookContent` is the
       expensive one, and its shape is the question this phase leaves open
-- [ ] `feat: route grpc web through the gateway` — the browser lane. Port 8443 already
+- [x] `feat: route grpc web through the gateway` — the browser lane. Port 8443 already
       terminates for the discovery documents, so what it gains is a second route and the
-      `corsPolicy` that lets a browser read `grpc-status` off the response. Two things had to
-      be checked against a running gateway rather than assumed, and one of them came back the
-      wrong way: Istio 1.30.3 does **not** put `envoy.filters.http.grpc_web` in a gateway's
-      HTTP filter chain. It is compiled into the proxy — it is listed among the available
-      extensions in the bootstrap — but no listener references it, 8443 included, so an
-      `EnvoyFilter` has to insert it. That is Istio's break-glass API and it is version-coupled
-      by construction, which is a cost this phase accepts rather than hides: the alternative is
-      a whole Envoy workload per node whose only job is to run the same filter. The obvious
-      version of this does not work either: `service.yaml` names the API port
+      `corsPolicy` that lets a browser read `grpc-status` off the response. Two things were
+      checked against a running gateway rather than assumed, and one came back the wrong way:
+      Istio 1.30.3 does **not** put `envoy.filters.http.grpc_web` in a gateway's HTTP filter
+      chain. It is compiled into the proxy — it is listed among the available extensions in the
+      bootstrap — but no listener referenced it, 8443 included, so an `EnvoyFilter` inserts it.
+      That is Istio's break-glass API, it warns on every apply, and it is version-coupled by
+      construction; the cost is accepted rather than hidden, because the alternative is a whole
+      Envoy workload per node whose only job is to run the same filter. The obvious version of
+      this does not work either: `service.yaml` names the API port
       `tls-grpc` so the sidecar forwards a ClientHello untouched, that name is what Istio reads
       a port's protocol from, and an HTTP route to a TCP port is never programmed. A
       `ServiceEntry` is what resolves it — a second declaration of the same endpoint, HTTP/2,
       for the gateway's outbound view only, with a `DestinationRule` originating TLS to it and
       verifying the node against the `ca.crt` cert-manager writes beside every certificate it
       signs. The node's inbound view still comes from the `Service` and does not change, and
-      both descriptions are true of the same wire: a TLS stream carrying HTTP/2 frames
+      both descriptions are true of the same wire: a TLS stream carrying HTTP/2 frames. It was
+      verified on the cluster and not by rendering: `grpc_web` is on 8443 and on neither of the
+      other two listeners, the upstream cluster is HTTP/2 with SNI and SAN verification against
+      a CA that Istio resolved out of `ca.crt` on its own, and a browser-shaped `POST` to
+      `/quire.v1.AuthService/Login` comes back as a gRPC-Web trailer frame carrying the node's
+      own `grpc-status: 3`. The three lanes were then checked against each other: the discovery
+      documents still answer, `/metrics` still 404s, `:9443` still serves the federation key
+      and not the gateway's, and `make test-kind` still passes in 117 s
 - [ ] `test: cover the grpc web route` — a browser-shaped call in the kind suite. It is the
       only way to know the route works, since what is being asserted is a translation nothing
       in this repository performs

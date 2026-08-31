@@ -19,11 +19,10 @@ spec:
   gateways:
     - quire
   http:
-    # Only .well-known is routed. Everything else on this port reaches no
-    # destination and the gateway answers 404, which is deliberate: the API is
-    # gRPC and lives on the port below, and a node that also answered its own
-    # HTTP surface to strangers would be publishing /metrics and /readyz to
-    # them.
+    # Two prefixes are routed and everything else on this port reaches no
+    # destination, so the gateway answers 404. That is deliberate: a node that
+    # answered its own HTTP surface to strangers would be publishing /metrics
+    # and /readyz to them.
     - name: discovery-documents
       match:
         - uri:
@@ -33,6 +32,56 @@ spec:
             host: quire
             port:
               number: 8080
+
+    # The browser lane. A gRPC path is /<package>.<Service>/<Method>, so one
+    # prefix covers every service in the contract and nothing outside it.
+    #
+    # The destination is not `quire`. It is the ServiceEntry beside this file,
+    # which is the same endpoint declared HTTP/2 so that this route can exist at
+    # all — serviceentry.yaml is where that is argued.
+    - name: grpc-web
+      match:
+        - uri:
+            prefix: /quire.v1.
+      route:
+        - destination:
+            host: quire-api.internal
+            port:
+              number: 9090
+      # Without this a browser cannot read the outcome of a call. gRPC-Web
+      # delivers the status as grpc-status and grpc-message, and a cross-origin
+      # response exposes no header that is not named here — so a call that
+      # failed and a call that succeeded would look identical to the caller.
+      corsPolicy:
+        # Any origin, which is a decision and not a default. A reader's browser
+        # client is served from wherever its operator put it, and this node has
+        # no way to know that address and no reason to be told it — the same
+        # property that lets a Matrix client talk to a homeserver it has never
+        # met. What makes it safe to say here is that the credential is a bearer
+        # JWT in a header (RNF11) and never a cookie: there is no ambient
+        # authority for a hostile page to borrow, and a page that already holds
+        # the token does not need the browser to use it.
+        allowOrigins:
+          - regex: ".*"
+        # A gRPC-Web call is always a POST; OPTIONS is the preflight that asks
+        # whether it may be.
+        allowMethods:
+          - POST
+          - OPTIONS
+        allowHeaders:
+          - content-type
+          - x-grpc-web
+          - x-user-agent
+          - grpc-timeout
+          - authorization
+        exposeHeaders:
+          - grpc-status
+          - grpc-message
+          - grpc-status-details-bin
+        # How long a browser may remember the preflight. Every call on this
+        # route is a POST with the same headers, so re-asking is a round trip
+        # that establishes nothing.
+        maxAge: 10m
 ---
 apiVersion: networking.istio.io/v1
 kind: VirtualService

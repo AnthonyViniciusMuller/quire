@@ -14,3 +14,9 @@ resources:
   - virtualservice.yaml
   - peerauthentication.yaml
   - authorizationpolicy.yaml
+  # The browser lane. Three files rather than a route, because reaching the API
+  # port over HTTP means telling the gateway a second thing about a port the
+  # Service has already described — serviceentry.yaml argues why.
+  - serviceentry.yaml
+  - destinationrule.yaml
+  - envoyfilter.yaml
