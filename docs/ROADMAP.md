@@ -671,9 +671,21 @@ belongs to the gateway RNF12 already requires — so this phase adds manifests a
       provoking a pull that returns an empty page. The reference client is untouched: it can
       hold `Sync` open, so it has no use for this — the caller this serves is a browser, and
       there is no browser client in this repository yet
-- [ ] `feat: accept a chunked upload` — blocked on the open question below, and the largest
-      item here by a distance: it changes the contract, the library slice's use cases and
-      handlers, and the reference client
+- [x] `docs: settle the browser reachable upload` — D11, settled: UC02 gains an upload
+      session addressed by offset, and the bytes are held where they are held today. The
+      question was never the three calls, it was where the half-received file lives between
+      them — `Staging` holds it in a temporary file unlinked the moment it is opened, so the
+      descriptor cannot be reopened by name and the session has to be held in the process.
+      That makes the node stateful between calls, which it was not, and it is affordable for
+      one reason: the node is already `replicas: 1`, because the sync slice's replication
+      worker ticks per process. This is a second reason for a constraint that already exists,
+      and it is recorded beside the first. Staging into the object store's multipart upload
+      would survive replicas the node cannot currently have, and costs a session table and
+      multipart, server-side copy and abort across all three adapters of D08 — refused as
+      disproportionate rather than wrong
+- [ ] `feat: accept a chunked upload` — the largest item here by a distance: three calls in
+      the contract, the use cases and handlers behind them, the session the node now holds,
+      and the sweeper that ends the ones nobody finished
 
 ## Design decisions settled
 
@@ -682,26 +694,11 @@ before the commit that depended on them. A question stayed here only while it wa
 answered it became an entry in [`tcc-corrections.md`](tcc-corrections.md), so that the answer
 travels with the correction it produced rather than with the doubt it started as.
 
-**One is open.** How UC02 should accept a file from a caller that cannot open a client
-stream, asked on 2026-08-31. `UploadEbookContent` is a client stream, gRPC-Web cannot carry
-one (D10), and a browser therefore has no way to put an e-book on the node at all. The stream
-buys two things and both have to survive whatever replaces it: the description arrives first,
-so a file larger than `QUIRE_STORAGE_MAX_UPLOAD_BYTES` is refused before any of its bytes
-travel; and the node hashes the bytes as it receives them, so a transfer that was truncated or
-altered cannot be stored under a digest that promises otherwise (C16). The candidate is an
-upload session addressed by offset — begin, put a chunk, finish — which keeps both and is
-resumable, where the stream is not: a transfer that dies at nine tenths starts again from
-nothing today. It is not free. It puts partial-upload state somewhere, and the three object
-stores of D08 all offer multipart uploads addressed by part number, so the state can live
-where the bytes are rather than in PostgreSQL. The alternative considered and not chosen is a
-pre-signed `PUT` straight to the object store, which is how a browser normally uploads a large
-file and which cannot hash on arrival — it moves C16's guarantee to a pass that reads the
-object back afterwards, and that is a weaker statement than the one the contract makes today.
+**None is open.** The list below is what was asked and what was decided, kept because the
+questions are part of the record: an answer with no question in front of it reads as an
+assumption.
 
-The list below is what was asked and what was decided, kept because the questions are part of
-the record: an answer with no question in front of it reads as an assumption.
-
-Six have been settled. Whether `updated_at` could break ties as a wall clock, on
+Seven have been settled. Whether `updated_at` could break ties as a wall clock, on
 2026-08-26: it cannot, and it becomes a hybrid logical clock — the counterexample and the
 argument are in C01. Whether a node with no way to deliver a recovery should start at all, on
 2026-08-28: the question was the wrong way round, and the missing component was built instead —
@@ -719,7 +716,7 @@ question about this project's tooling and not about the specification — the su
 PostgreSQL, `make test-up` brings both up, and the 87 modules testcontainers costs are
 still 87 modules.
 
-And, last, whether the reuse trade of D07 is the right way round, on 2026-08-28: it is, and
+Whether the reuse trade of D07 is the right way round, on 2026-08-28: it is, and
 the cost is accepted as stated. A device logged out because its reply was lost on a mobile
 network pays one re-authentication; a grace window would be a stolen credential that keeps
 working for the length of the window, which is the one property rotation exists to remove — and

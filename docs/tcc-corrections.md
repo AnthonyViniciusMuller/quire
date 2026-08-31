@@ -1101,11 +1101,63 @@ that excludes the browser from it.
 exists so that the node can refuse an oversized or unsupported file before any of the bytes
 travel, and so that it can hash them as they arrive — the guarantee that a truncated or
 altered transfer cannot be stored under a name that promises otherwise. Both properties are
-preservable without a client stream, but not without changing the contract, and the shape is
-an open question under [Design decisions settled](ROADMAP.md#design-decisions-settled) rather
-than an answer recorded here.
+preservable without a client stream, but not without changing the contract. D11 is the shape
+that was settled on, and what it costs.
 
 **Record** in 4.2.4 that the browser is a client the implementation accepts and the
 specification does not describe; that its transport is gRPC-Web, translated by the gateway of
 RNF12 rather than by the node; that UC10 degrades to a poll for it, within what RNF09 already
-asks of mobile and desktop; and that UC02 is not reachable from it at the time of writing.
+asks of mobile and desktop; and that UC02 reaches it through the second shape D11 adds.
+
+### D11 — UC02 gains a chunked upload, because a browser cannot open a client stream
+
+`UploadEbookContent` is a client stream: the description first, so that an oversized or
+unsupported file is refused before any of its bytes travel, and then the bytes, hashed as they
+arrive so that a truncated or altered transfer cannot be stored under a digest that promises
+otherwise. gRPC-Web carries no client stream (D10), so a browser cannot call it, and UC02 is
+the one use case a browser has no path to at all.
+
+It gains three unary calls beside the stream — begin an upload, put a chunk at an offset,
+finish it — and every property above is kept rather than traded. The size is declared to the
+first call and checked there, before a byte has moved. The digest is still computed by the node
+over the bytes the node received, and still compared against the one declared before anything
+reaches the object store. C16's precondition is unchanged and is checked in the same place: the
+bytes may be uploaded only for a digest the calling reader already has a work naming.
+
+The pre-signed `PUT` that a browser would normally use for a large file was considered and
+refused. It cannot hash on arrival, because the bytes never pass through the node, so the
+guarantee would move to a pass that reads the object back afterwards — and C16's check would
+have to be made about an object that already exists. That is a weaker statement than the one
+the contract makes today, and UC02 is not worth weakening it for.
+
+What the shape does cost is a piece of state the node did not have. The half-received file has
+to survive between calls, and `Staging` holds it in a temporary file that is unlinked the
+moment it is opened — deliberately, so that the bytes are reachable through the descriptor and
+through nothing else, and so that a node killed mid-upload leaves nothing behind. A descriptor
+with no name cannot be reopened, so the session is held in the process, and the node is now
+stateful between two calls of one reader.
+
+That is affordable here for a reason that predates it: the node already runs as a single
+replica, because the replication worker of the sync slice ticks per process and two of them
+offer the same log to the same peer twice. This adds a second reason to a constraint the
+deployment already has, and it is recorded beside the first rather than left for whoever raises
+`replicas` to discover. The alternative that would survive raising it is to stage into the
+object store's own multipart upload with the running digest persisted between calls — which is
+implementable, since a sha-256 state marshals to a little over a hundred bytes — and it costs a
+session table, multipart, server-side copy and abort in all three adapters of D08, and a sweep
+for parts nobody completed. It was refused as disproportionate to a scaling event this node
+cannot currently have, not as wrong.
+
+There is a property gained that is not about browsers. An upload addressed by offset is
+resumable and a client stream is not: a transfer that dies at nine tenths starts again from
+nothing today, and a chunk arriving at an offset the node does not expect is answered with the
+offset it holds. That is worth having on a mobile network, which is the connection RNF01 and
+RNF07 are written about, and it applies to the desktop and mobile clients RNF04 does name.
+
+**Record** in 4.2.4 that UC02 is served by two shapes rather than one; that they differ in how
+the bytes arrive and in nothing else, the checks of C16 and the digest being the same checks in
+the same order; that the second exists because RNF02's gRPC is not reachable from a browser in
+its streaming forms; and that it makes the node stateful between calls, which is the second
+reason its deployment runs a single replica.
+
+**Status** settled 2026-08-31.
