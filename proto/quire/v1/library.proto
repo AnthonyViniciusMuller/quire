@@ -47,6 +47,39 @@ service LibraryService {
   // refuse an oversized or unsupported file before receiving any of it.
   rpc UploadEbookContent(stream UploadEbookContentRequest) returns (UploadEbookContentResponse);
 
+  // UC02 for a caller that cannot open a client stream.
+  //
+  // A browser is the case these three exist for. gRPC-Web carries a unary call
+  // and a server stream and neither of the other two, so the stream above is
+  // unreachable from one — D10 and D11 in docs/tcc-corrections.md record what
+  // that costs and why this is the answer.
+  //
+  // They differ from the stream in how the bytes arrive and in nothing else.
+  // The description is declared to Begin and checked there, before a byte
+  // travels; the node hashes what it receives as it receives it; and what is
+  // stored is checked against what was declared. The one thing gained is that
+  // an upload addressed by an offset can be resumed, where a stream that died
+  // at nine tenths starts again from nothing.
+  rpc BeginEbookUpload(BeginEbookUploadRequest) returns (BeginEbookUploadResponse);
+
+  // The bytes, one call at a time, each at the offset it continues from.
+  //
+  // A chunk arriving anywhere but at the offset the node is expecting is not
+  // written, and the reply carries the offset it does expect: a caller whose
+  // connection died continues from what arrived, and one that lost a reply and
+  // sent the same chunk again is told so rather than corrupting the file.
+  rpc PutEbookChunk(PutEbookChunkRequest) returns (PutEbookChunkResponse);
+
+  // Ends the upload, checks what arrived against what was declared, and
+  // records that this node holds it.
+  rpc FinishEbookUpload(FinishEbookUploadRequest) returns (FinishEbookUploadResponse);
+
+  // Abandons an upload without finishing it, releasing what the node was
+  // holding. A caller that never sends it is not a leak — the node ends an
+  // upload nobody has sent to for long enough — but a client that has given up
+  // should say so rather than leave a file on the node until it expires.
+  rpc DiscardEbookUpload(DiscardEbookUploadRequest) returns (DiscardEbookUploadResponse);
+
   // Streams the bytes back. A node that replicates this reader without their
   // files answers that it does not hold them — holding the metadata and not
   // the file is a state the authorization makes legitimate, not an error.
@@ -228,6 +261,65 @@ message UploadEbookContentRequest {
 message UploadEbookContentResponse {
   EbookContent content = 1;
 }
+
+message BeginEbookUploadRequest {
+  // What is about to be sent, and the whole of what the node checks before
+  // agreeing to receive it.
+  EbookContent content = 1;
+}
+
+message BeginEbookUploadResponse {
+  // Names the upload, and is sent with every chunk. It is empty when the node
+  // already holds the file, because then there is nothing to send.
+  string upload_id = 1;
+
+  // True when this node already had the bytes and no transfer is needed. It is
+  // the same answer CreateEbook gives through content_missing, repeated here
+  // because the two calls may be minutes apart and another device of the same
+  // reader may have sent the file in between.
+  bool already_held = 2;
+
+  // The file as this node holds it, populated only when already_held is true.
+  EbookContent content = 3;
+}
+
+message PutEbookChunkRequest {
+  string upload_id = 1;
+
+  // Where these bytes belong, counted from the first byte of the file. It is
+  // sent rather than assumed so that a caller which lost a reply can repeat a
+  // chunk without the node appending it twice.
+  int64 offset = 2;
+
+  bytes chunk = 3;
+}
+
+message PutEbookChunkResponse {
+  // How many bytes the node now holds, and therefore the offset the next chunk
+  // must carry. A caller that finds it unchanged sent a chunk the node was not
+  // expecting, and this is where to continue from.
+  int64 received_bytes = 1;
+}
+
+message FinishEbookUploadRequest {
+  string upload_id = 1;
+}
+
+message FinishEbookUploadResponse {
+  // The file as this node now holds it.
+  EbookContent content = 1;
+
+  // True when another upload of the same file finished while this one was
+  // arriving. The bytes are identical by construction, since the digest is the
+  // key, so it is the answer the caller wanted reached by somebody else.
+  bool already_held = 2;
+}
+
+message DiscardEbookUploadRequest {
+  string upload_id = 1;
+}
+
+message DiscardEbookUploadResponse {}
 
 message DownloadEbookContentRequest {
   string ebook_id = 1;

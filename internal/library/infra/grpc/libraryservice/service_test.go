@@ -18,29 +18,37 @@ import (
 	identityapptest "github.com/anthonyvsmuller/quire/internal/identity/application/apptest"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/authn"
 	addtocollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/addtocollection"
+	beginuploadusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/beginupload"
 	createcollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/createcollection"
 	createebookusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/createebook"
 	deletecollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/deletecollection"
 	deleteebookusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/deleteebook"
+	discarduploadusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/discardupload"
 	downloadcontentusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/downloadcontent"
+	finishuploadusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/finishupload"
 	getcollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/getcollection"
 	getebookusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/getebook"
 	listcollectionsusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/listcollections"
 	listebooksusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/listebooks"
+	putchunkusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/putchunk"
 	removefromcollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/removefromcollection"
 	updatecollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/updatecollection"
 	updateebookusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/updateebook"
 	uploadcontentusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/uploadcontent"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/addebooktocollection"
+	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/beginebookupload"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/createcollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/createebook"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/deletecollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/deleteebook"
+	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/discardebookupload"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/downloadebookcontent"
+	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/finishebookupload"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/getcollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/getebook"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/listcollections"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/listebooks"
+	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/putebookchunk"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/removeebookfromcollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/updatecollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/updateebook"
@@ -71,9 +79,9 @@ func (r recorder[In, Out]) Execute(_ context.Context, _ In) (Out, error) {
 //
 // buf.gen.yaml keeps that embedding on purpose, so a method left out of this
 // service compiles and answers Unimplemented rather than failing to build.
-// This calls all fourteen and refuses that answer — and, because each stand-in
+// This calls all eighteen and refuses that answer — and, because each stand-in
 // has a name, it also refuses a forwarding method wired to the wrong
-// controller, which is the mistake a file of fourteen near-identical methods
+// controller, which is the mistake a file of eighteen near-identical methods
 // invites.
 func TestEveryCallReachesItsController(t *testing.T) {
 	t.Parallel()
@@ -94,6 +102,22 @@ func TestEveryCallReachesItsController(t *testing.T) {
 		UploadEbookContent: uploadebookcontent.New(
 			recorder[uploadcontentusecase.Input, uploadcontentusecase.Output]{
 				name: "UploadEbookContent", calls: &calls,
+			}),
+		BeginEbookUpload: beginebookupload.New(
+			recorder[beginuploadusecase.Input, beginuploadusecase.Output]{
+				name: "BeginEbookUpload", calls: &calls,
+			}),
+		PutEbookChunk: putebookchunk.New(
+			recorder[putchunkusecase.Input, putchunkusecase.Output]{
+				name: "PutEbookChunk", calls: &calls,
+			}),
+		FinishEbookUpload: finishebookupload.New(
+			recorder[finishuploadusecase.Input, finishuploadusecase.Output]{
+				name: "FinishEbookUpload", calls: &calls,
+			}),
+		DiscardEbookUpload: discardebookupload.New(
+			recorder[discarduploadusecase.Input, discarduploadusecase.Output]{
+				name: "DiscardEbookUpload", calls: &calls,
 			}),
 		DownloadEbookContent: downloadebookcontent.New(
 			recorder[downloadcontentusecase.Input, downloadcontentusecase.Output]{
@@ -131,6 +155,7 @@ func TestEveryCallReachesItsController(t *testing.T) {
 
 	ctx := authenticated(t)
 	ebookID, collectionID := uuid.New().String(), uuid.New().String()
+	uploadID := uuid.New().String()
 	digest := "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"
 
 	tests := []struct {
@@ -178,6 +203,34 @@ func TestEveryCallReachesItsController(t *testing.T) {
 					},
 				}},
 			})
+		}},
+		{"BeginEbookUpload", func() error {
+			_, err := service.BeginEbookUpload(ctx, &quirev1.BeginEbookUploadRequest{
+				Content: &quirev1.EbookContent{
+					ContentHash: digest, SizeBytes: 3, MediaType: "application/epub+zip",
+				},
+			})
+
+			return err
+		}},
+		{"PutEbookChunk", func() error {
+			_, err := service.PutEbookChunk(ctx, &quirev1.PutEbookChunkRequest{
+				UploadId: uploadID, Offset: 0, Chunk: []byte("abc"),
+			})
+
+			return err
+		}},
+		{"FinishEbookUpload", func() error {
+			_, err := service.FinishEbookUpload(ctx,
+				&quirev1.FinishEbookUploadRequest{UploadId: uploadID})
+
+			return err
+		}},
+		{"DiscardEbookUpload", func() error {
+			_, err := service.DiscardEbookUpload(ctx,
+				&quirev1.DiscardEbookUploadRequest{UploadId: uploadID})
+
+			return err
 		}},
 		{"DownloadEbookContent", func() error {
 			return service.DownloadEbookContent(

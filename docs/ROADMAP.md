@@ -705,9 +705,17 @@ belongs to the gateway RNF12 already requires — so this phase adds manifests a
       behaviour and its tests are the proof: they were untouched apart from how the fixture is
       built. C16 is the reason this is a commit of its own rather than a paragraph in the next
       one. It is a security precondition, and a copy of it is a copy that gets fixed once
-- [ ] `feat: accept a chunked upload` — the three calls on top: begin, put a chunk, finish,
-      with the ceiling and the C16 precondition checked at the first and the digest and the
-      length at the last, against the same staged file a streamed upload produces
+- [x] `feat: accept a chunked upload` — four calls on top, not three: begin, put a chunk,
+      finish, and discard. The fourth is not needed for correctness, since the sweeper ends a
+      session nobody is sending to, and it is there so that a client which gave up on purpose
+      says so rather than leaving a half-received book on the node until it expires. Every
+      decision about the file is the streamed shape's, because both go through
+      `application/upload`: the ceiling and C16 at the first call, before a byte travels, and
+      the digest and the length at the last, against the staged file the session hands over.
+      What the tests assert is that claim rather than restating it — the same file is sent one
+      way and then the other against the same node, and the second is told the node already
+      holds it, which can only be true if the first stored it under the digest the second
+      declared. UC02 is now reachable from a browser, which is what phase 13 set out to do
 
 ## Design decisions settled
 

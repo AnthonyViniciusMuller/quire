@@ -19,15 +19,19 @@ import (
 
 	quirev1 "github.com/anthonyvsmuller/quire/internal/gen/quire/v1"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/addebooktocollection"
+	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/beginebookupload"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/createcollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/createebook"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/deletecollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/deleteebook"
+	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/discardebookupload"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/downloadebookcontent"
+	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/finishebookupload"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/getcollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/getebook"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/listcollections"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/listebooks"
+	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/putebookchunk"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/removeebookfromcollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/updatecollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/updateebook"
@@ -44,7 +48,14 @@ type Controllers struct {
 	UpdateEbook *updateebook.UpdateEbook
 	DeleteEbook *deleteebook.DeleteEbook
 	// The two that carry the file, which is UC02 and the read that answers it.
-	UploadEbookContent   *uploadebookcontent.UploadEbookContent
+	UploadEbookContent *uploadebookcontent.UploadEbookContent
+	// The four that serve UC02 for a caller which cannot open a client
+	// stream — a browser, since gRPC-Web carries none (D10, D11). They
+	// receive the same file the one above does, in pieces.
+	BeginEbookUpload     *beginebookupload.BeginEbookUpload
+	PutEbookChunk        *putebookchunk.PutEbookChunk
+	FinishEbookUpload    *finishebookupload.FinishEbookUpload
+	DiscardEbookUpload   *discardebookupload.DiscardEbookUpload
 	DownloadEbookContent *downloadebookcontent.DownloadEbookContent
 	// The seven that serve UC03.
 	CreateCollection          *createcollection.CreateCollection
@@ -114,6 +125,34 @@ func (s *Service) DeleteEbook(
 // UploadEbookContent receives the bytes of a work (UC02).
 func (s *Service) UploadEbookContent(stream quirev1.LibraryService_UploadEbookContentServer) error {
 	return s.controllers.UploadEbookContent.Handle(stream)
+}
+
+// BeginEbookUpload agrees to receive a file that will arrive in pieces (UC02).
+func (s *Service) BeginEbookUpload(
+	ctx context.Context, request *quirev1.BeginEbookUploadRequest,
+) (*quirev1.BeginEbookUploadResponse, error) {
+	return s.controllers.BeginEbookUpload.Handle(ctx, request)
+}
+
+// PutEbookChunk receives one piece of it (UC02).
+func (s *Service) PutEbookChunk(
+	ctx context.Context, request *quirev1.PutEbookChunkRequest,
+) (*quirev1.PutEbookChunkResponse, error) {
+	return s.controllers.PutEbookChunk.Handle(ctx, request)
+}
+
+// FinishEbookUpload checks what arrived and records it (UC02).
+func (s *Service) FinishEbookUpload(
+	ctx context.Context, request *quirev1.FinishEbookUploadRequest,
+) (*quirev1.FinishEbookUploadResponse, error) {
+	return s.controllers.FinishEbookUpload.Handle(ctx, request)
+}
+
+// DiscardEbookUpload abandons one (UC02).
+func (s *Service) DiscardEbookUpload(
+	ctx context.Context, request *quirev1.DiscardEbookUploadRequest,
+) (*quirev1.DiscardEbookUploadResponse, error) {
+	return s.controllers.DiscardEbookUpload.Handle(ctx, request)
 }
 
 // DownloadEbookContent streams the bytes back.

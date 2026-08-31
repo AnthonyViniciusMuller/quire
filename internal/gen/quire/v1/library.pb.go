@@ -1063,6 +1063,409 @@ func (x *UploadEbookContentResponse) GetContent() *EbookContent {
 	return nil
 }
 
+type BeginEbookUploadRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What is about to be sent, and the whole of what the node checks before
+	// agreeing to receive it.
+	Content       *EbookContent `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BeginEbookUploadRequest) Reset() {
+	*x = BeginEbookUploadRequest{}
+	mi := &file_quire_v1_library_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BeginEbookUploadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BeginEbookUploadRequest) ProtoMessage() {}
+
+func (x *BeginEbookUploadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_library_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BeginEbookUploadRequest.ProtoReflect.Descriptor instead.
+func (*BeginEbookUploadRequest) Descriptor() ([]byte, []int) {
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *BeginEbookUploadRequest) GetContent() *EbookContent {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+type BeginEbookUploadResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Names the upload, and is sent with every chunk. It is empty when the node
+	// already holds the file, because then there is nothing to send.
+	UploadId string `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	// True when this node already had the bytes and no transfer is needed. It is
+	// the same answer CreateEbook gives through content_missing, repeated here
+	// because the two calls may be minutes apart and another device of the same
+	// reader may have sent the file in between.
+	AlreadyHeld bool `protobuf:"varint,2,opt,name=already_held,json=alreadyHeld,proto3" json:"already_held,omitempty"`
+	// The file as this node holds it, populated only when already_held is true.
+	Content       *EbookContent `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BeginEbookUploadResponse) Reset() {
+	*x = BeginEbookUploadResponse{}
+	mi := &file_quire_v1_library_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BeginEbookUploadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BeginEbookUploadResponse) ProtoMessage() {}
+
+func (x *BeginEbookUploadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_library_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BeginEbookUploadResponse.ProtoReflect.Descriptor instead.
+func (*BeginEbookUploadResponse) Descriptor() ([]byte, []int) {
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *BeginEbookUploadResponse) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+func (x *BeginEbookUploadResponse) GetAlreadyHeld() bool {
+	if x != nil {
+		return x.AlreadyHeld
+	}
+	return false
+}
+
+func (x *BeginEbookUploadResponse) GetContent() *EbookContent {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+type PutEbookChunkRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	UploadId string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	// Where these bytes belong, counted from the first byte of the file. It is
+	// sent rather than assumed so that a caller which lost a reply can repeat a
+	// chunk without the node appending it twice.
+	Offset        int64  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	Chunk         []byte `protobuf:"bytes,3,opt,name=chunk,proto3" json:"chunk,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutEbookChunkRequest) Reset() {
+	*x = PutEbookChunkRequest{}
+	mi := &file_quire_v1_library_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutEbookChunkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutEbookChunkRequest) ProtoMessage() {}
+
+func (x *PutEbookChunkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_library_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutEbookChunkRequest.ProtoReflect.Descriptor instead.
+func (*PutEbookChunkRequest) Descriptor() ([]byte, []int) {
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *PutEbookChunkRequest) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+func (x *PutEbookChunkRequest) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *PutEbookChunkRequest) GetChunk() []byte {
+	if x != nil {
+		return x.Chunk
+	}
+	return nil
+}
+
+type PutEbookChunkResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// How many bytes the node now holds, and therefore the offset the next chunk
+	// must carry. A caller that finds it unchanged sent a chunk the node was not
+	// expecting, and this is where to continue from.
+	ReceivedBytes int64 `protobuf:"varint,1,opt,name=received_bytes,json=receivedBytes,proto3" json:"received_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutEbookChunkResponse) Reset() {
+	*x = PutEbookChunkResponse{}
+	mi := &file_quire_v1_library_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutEbookChunkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutEbookChunkResponse) ProtoMessage() {}
+
+func (x *PutEbookChunkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_library_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutEbookChunkResponse.ProtoReflect.Descriptor instead.
+func (*PutEbookChunkResponse) Descriptor() ([]byte, []int) {
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *PutEbookChunkResponse) GetReceivedBytes() int64 {
+	if x != nil {
+		return x.ReceivedBytes
+	}
+	return 0
+}
+
+type FinishEbookUploadRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FinishEbookUploadRequest) Reset() {
+	*x = FinishEbookUploadRequest{}
+	mi := &file_quire_v1_library_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FinishEbookUploadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FinishEbookUploadRequest) ProtoMessage() {}
+
+func (x *FinishEbookUploadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_library_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FinishEbookUploadRequest.ProtoReflect.Descriptor instead.
+func (*FinishEbookUploadRequest) Descriptor() ([]byte, []int) {
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *FinishEbookUploadRequest) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+type FinishEbookUploadResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The file as this node now holds it.
+	Content *EbookContent `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	// True when another upload of the same file finished while this one was
+	// arriving. The bytes are identical by construction, since the digest is the
+	// key, so it is the answer the caller wanted reached by somebody else.
+	AlreadyHeld   bool `protobuf:"varint,2,opt,name=already_held,json=alreadyHeld,proto3" json:"already_held,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FinishEbookUploadResponse) Reset() {
+	*x = FinishEbookUploadResponse{}
+	mi := &file_quire_v1_library_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FinishEbookUploadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FinishEbookUploadResponse) ProtoMessage() {}
+
+func (x *FinishEbookUploadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_library_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FinishEbookUploadResponse.ProtoReflect.Descriptor instead.
+func (*FinishEbookUploadResponse) Descriptor() ([]byte, []int) {
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *FinishEbookUploadResponse) GetContent() *EbookContent {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *FinishEbookUploadResponse) GetAlreadyHeld() bool {
+	if x != nil {
+		return x.AlreadyHeld
+	}
+	return false
+}
+
+type DiscardEbookUploadRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscardEbookUploadRequest) Reset() {
+	*x = DiscardEbookUploadRequest{}
+	mi := &file_quire_v1_library_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscardEbookUploadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscardEbookUploadRequest) ProtoMessage() {}
+
+func (x *DiscardEbookUploadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_library_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscardEbookUploadRequest.ProtoReflect.Descriptor instead.
+func (*DiscardEbookUploadRequest) Descriptor() ([]byte, []int) {
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *DiscardEbookUploadRequest) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+type DiscardEbookUploadResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscardEbookUploadResponse) Reset() {
+	*x = DiscardEbookUploadResponse{}
+	mi := &file_quire_v1_library_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscardEbookUploadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscardEbookUploadResponse) ProtoMessage() {}
+
+func (x *DiscardEbookUploadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_library_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscardEbookUploadResponse.ProtoReflect.Descriptor instead.
+func (*DiscardEbookUploadResponse) Descriptor() ([]byte, []int) {
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{22}
+}
+
 type DownloadEbookContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EbookId       string                 `protobuf:"bytes,1,opt,name=ebook_id,json=ebookId,proto3" json:"ebook_id,omitempty"`
@@ -1072,7 +1475,7 @@ type DownloadEbookContentRequest struct {
 
 func (x *DownloadEbookContentRequest) Reset() {
 	*x = DownloadEbookContentRequest{}
-	mi := &file_quire_v1_library_proto_msgTypes[15]
+	mi := &file_quire_v1_library_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1084,7 +1487,7 @@ func (x *DownloadEbookContentRequest) String() string {
 func (*DownloadEbookContentRequest) ProtoMessage() {}
 
 func (x *DownloadEbookContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[15]
+	mi := &file_quire_v1_library_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1097,7 +1500,7 @@ func (x *DownloadEbookContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DownloadEbookContentRequest.ProtoReflect.Descriptor instead.
 func (*DownloadEbookContentRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{15}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *DownloadEbookContentRequest) GetEbookId() string {
@@ -1120,7 +1523,7 @@ type DownloadEbookContentResponse struct {
 
 func (x *DownloadEbookContentResponse) Reset() {
 	*x = DownloadEbookContentResponse{}
-	mi := &file_quire_v1_library_proto_msgTypes[16]
+	mi := &file_quire_v1_library_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1132,7 +1535,7 @@ func (x *DownloadEbookContentResponse) String() string {
 func (*DownloadEbookContentResponse) ProtoMessage() {}
 
 func (x *DownloadEbookContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[16]
+	mi := &file_quire_v1_library_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1145,7 +1548,7 @@ func (x *DownloadEbookContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DownloadEbookContentResponse.ProtoReflect.Descriptor instead.
 func (*DownloadEbookContentResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{16}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DownloadEbookContentResponse) GetPayload() isDownloadEbookContentResponse_Payload {
@@ -1198,7 +1601,7 @@ type CreateCollectionRequest struct {
 
 func (x *CreateCollectionRequest) Reset() {
 	*x = CreateCollectionRequest{}
-	mi := &file_quire_v1_library_proto_msgTypes[17]
+	mi := &file_quire_v1_library_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1210,7 +1613,7 @@ func (x *CreateCollectionRequest) String() string {
 func (*CreateCollectionRequest) ProtoMessage() {}
 
 func (x *CreateCollectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[17]
+	mi := &file_quire_v1_library_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1223,7 +1626,7 @@ func (x *CreateCollectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCollectionRequest.ProtoReflect.Descriptor instead.
 func (*CreateCollectionRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{17}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CreateCollectionRequest) GetCollection() *Collection {
@@ -1242,7 +1645,7 @@ type CreateCollectionResponse struct {
 
 func (x *CreateCollectionResponse) Reset() {
 	*x = CreateCollectionResponse{}
-	mi := &file_quire_v1_library_proto_msgTypes[18]
+	mi := &file_quire_v1_library_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1254,7 +1657,7 @@ func (x *CreateCollectionResponse) String() string {
 func (*CreateCollectionResponse) ProtoMessage() {}
 
 func (x *CreateCollectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[18]
+	mi := &file_quire_v1_library_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1267,7 +1670,7 @@ func (x *CreateCollectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCollectionResponse.ProtoReflect.Descriptor instead.
 func (*CreateCollectionResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{18}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CreateCollectionResponse) GetCollection() *Collection {
@@ -1286,7 +1689,7 @@ type GetCollectionRequest struct {
 
 func (x *GetCollectionRequest) Reset() {
 	*x = GetCollectionRequest{}
-	mi := &file_quire_v1_library_proto_msgTypes[19]
+	mi := &file_quire_v1_library_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1298,7 +1701,7 @@ func (x *GetCollectionRequest) String() string {
 func (*GetCollectionRequest) ProtoMessage() {}
 
 func (x *GetCollectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[19]
+	mi := &file_quire_v1_library_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1311,7 +1714,7 @@ func (x *GetCollectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCollectionRequest.ProtoReflect.Descriptor instead.
 func (*GetCollectionRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{19}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetCollectionRequest) GetCollectionId() string {
@@ -1330,7 +1733,7 @@ type GetCollectionResponse struct {
 
 func (x *GetCollectionResponse) Reset() {
 	*x = GetCollectionResponse{}
-	mi := &file_quire_v1_library_proto_msgTypes[20]
+	mi := &file_quire_v1_library_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1342,7 +1745,7 @@ func (x *GetCollectionResponse) String() string {
 func (*GetCollectionResponse) ProtoMessage() {}
 
 func (x *GetCollectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[20]
+	mi := &file_quire_v1_library_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1355,7 +1758,7 @@ func (x *GetCollectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCollectionResponse.ProtoReflect.Descriptor instead.
 func (*GetCollectionResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{20}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GetCollectionResponse) GetCollection() *Collection {
@@ -1376,7 +1779,7 @@ type ListCollectionsRequest struct {
 
 func (x *ListCollectionsRequest) Reset() {
 	*x = ListCollectionsRequest{}
-	mi := &file_quire_v1_library_proto_msgTypes[21]
+	mi := &file_quire_v1_library_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1388,7 +1791,7 @@ func (x *ListCollectionsRequest) String() string {
 func (*ListCollectionsRequest) ProtoMessage() {}
 
 func (x *ListCollectionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[21]
+	mi := &file_quire_v1_library_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1401,7 +1804,7 @@ func (x *ListCollectionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCollectionsRequest.ProtoReflect.Descriptor instead.
 func (*ListCollectionsRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{21}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ListCollectionsRequest) GetEbookId() string {
@@ -1422,7 +1825,7 @@ type ListCollectionsResponse struct {
 
 func (x *ListCollectionsResponse) Reset() {
 	*x = ListCollectionsResponse{}
-	mi := &file_quire_v1_library_proto_msgTypes[22]
+	mi := &file_quire_v1_library_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1434,7 +1837,7 @@ func (x *ListCollectionsResponse) String() string {
 func (*ListCollectionsResponse) ProtoMessage() {}
 
 func (x *ListCollectionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[22]
+	mi := &file_quire_v1_library_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1447,7 +1850,7 @@ func (x *ListCollectionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCollectionsResponse.ProtoReflect.Descriptor instead.
 func (*ListCollectionsResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{22}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ListCollectionsResponse) GetCollections() []*Collection {
@@ -1468,7 +1871,7 @@ type UpdateCollectionRequest struct {
 
 func (x *UpdateCollectionRequest) Reset() {
 	*x = UpdateCollectionRequest{}
-	mi := &file_quire_v1_library_proto_msgTypes[23]
+	mi := &file_quire_v1_library_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1480,7 +1883,7 @@ func (x *UpdateCollectionRequest) String() string {
 func (*UpdateCollectionRequest) ProtoMessage() {}
 
 func (x *UpdateCollectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[23]
+	mi := &file_quire_v1_library_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1493,7 +1896,7 @@ func (x *UpdateCollectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCollectionRequest.ProtoReflect.Descriptor instead.
 func (*UpdateCollectionRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{23}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *UpdateCollectionRequest) GetCollectionId() string {
@@ -1526,7 +1929,7 @@ type UpdateCollectionResponse struct {
 
 func (x *UpdateCollectionResponse) Reset() {
 	*x = UpdateCollectionResponse{}
-	mi := &file_quire_v1_library_proto_msgTypes[24]
+	mi := &file_quire_v1_library_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1538,7 +1941,7 @@ func (x *UpdateCollectionResponse) String() string {
 func (*UpdateCollectionResponse) ProtoMessage() {}
 
 func (x *UpdateCollectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[24]
+	mi := &file_quire_v1_library_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1551,7 +1954,7 @@ func (x *UpdateCollectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCollectionResponse.ProtoReflect.Descriptor instead.
 func (*UpdateCollectionResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{24}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *UpdateCollectionResponse) GetCollection() *Collection {
@@ -1570,7 +1973,7 @@ type DeleteCollectionRequest struct {
 
 func (x *DeleteCollectionRequest) Reset() {
 	*x = DeleteCollectionRequest{}
-	mi := &file_quire_v1_library_proto_msgTypes[25]
+	mi := &file_quire_v1_library_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1582,7 +1985,7 @@ func (x *DeleteCollectionRequest) String() string {
 func (*DeleteCollectionRequest) ProtoMessage() {}
 
 func (x *DeleteCollectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[25]
+	mi := &file_quire_v1_library_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1595,7 +1998,7 @@ func (x *DeleteCollectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCollectionRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCollectionRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{25}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *DeleteCollectionRequest) GetCollectionId() string {
@@ -1615,7 +2018,7 @@ type DeleteCollectionResponse struct {
 
 func (x *DeleteCollectionResponse) Reset() {
 	*x = DeleteCollectionResponse{}
-	mi := &file_quire_v1_library_proto_msgTypes[26]
+	mi := &file_quire_v1_library_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1627,7 +2030,7 @@ func (x *DeleteCollectionResponse) String() string {
 func (*DeleteCollectionResponse) ProtoMessage() {}
 
 func (x *DeleteCollectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[26]
+	mi := &file_quire_v1_library_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1640,7 +2043,7 @@ func (x *DeleteCollectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCollectionResponse.ProtoReflect.Descriptor instead.
 func (*DeleteCollectionResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{26}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{34}
 }
 
 type AddEbookToCollectionRequest struct {
@@ -1653,7 +2056,7 @@ type AddEbookToCollectionRequest struct {
 
 func (x *AddEbookToCollectionRequest) Reset() {
 	*x = AddEbookToCollectionRequest{}
-	mi := &file_quire_v1_library_proto_msgTypes[27]
+	mi := &file_quire_v1_library_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1665,7 +2068,7 @@ func (x *AddEbookToCollectionRequest) String() string {
 func (*AddEbookToCollectionRequest) ProtoMessage() {}
 
 func (x *AddEbookToCollectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[27]
+	mi := &file_quire_v1_library_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1678,7 +2081,7 @@ func (x *AddEbookToCollectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddEbookToCollectionRequest.ProtoReflect.Descriptor instead.
 func (*AddEbookToCollectionRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{27}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *AddEbookToCollectionRequest) GetEbookId() string {
@@ -1703,7 +2106,7 @@ type AddEbookToCollectionResponse struct {
 
 func (x *AddEbookToCollectionResponse) Reset() {
 	*x = AddEbookToCollectionResponse{}
-	mi := &file_quire_v1_library_proto_msgTypes[28]
+	mi := &file_quire_v1_library_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1715,7 +2118,7 @@ func (x *AddEbookToCollectionResponse) String() string {
 func (*AddEbookToCollectionResponse) ProtoMessage() {}
 
 func (x *AddEbookToCollectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[28]
+	mi := &file_quire_v1_library_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1728,7 +2131,7 @@ func (x *AddEbookToCollectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddEbookToCollectionResponse.ProtoReflect.Descriptor instead.
 func (*AddEbookToCollectionResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{28}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{36}
 }
 
 type RemoveEbookFromCollectionRequest struct {
@@ -1741,7 +2144,7 @@ type RemoveEbookFromCollectionRequest struct {
 
 func (x *RemoveEbookFromCollectionRequest) Reset() {
 	*x = RemoveEbookFromCollectionRequest{}
-	mi := &file_quire_v1_library_proto_msgTypes[29]
+	mi := &file_quire_v1_library_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1753,7 +2156,7 @@ func (x *RemoveEbookFromCollectionRequest) String() string {
 func (*RemoveEbookFromCollectionRequest) ProtoMessage() {}
 
 func (x *RemoveEbookFromCollectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[29]
+	mi := &file_quire_v1_library_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1766,7 +2169,7 @@ func (x *RemoveEbookFromCollectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveEbookFromCollectionRequest.ProtoReflect.Descriptor instead.
 func (*RemoveEbookFromCollectionRequest) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{29}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *RemoveEbookFromCollectionRequest) GetEbookId() string {
@@ -1791,7 +2194,7 @@ type RemoveEbookFromCollectionResponse struct {
 
 func (x *RemoveEbookFromCollectionResponse) Reset() {
 	*x = RemoveEbookFromCollectionResponse{}
-	mi := &file_quire_v1_library_proto_msgTypes[30]
+	mi := &file_quire_v1_library_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1803,7 +2206,7 @@ func (x *RemoveEbookFromCollectionResponse) String() string {
 func (*RemoveEbookFromCollectionResponse) ProtoMessage() {}
 
 func (x *RemoveEbookFromCollectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quire_v1_library_proto_msgTypes[30]
+	mi := &file_quire_v1_library_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1816,7 +2219,7 @@ func (x *RemoveEbookFromCollectionResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use RemoveEbookFromCollectionResponse.ProtoReflect.Descriptor instead.
 func (*RemoveEbookFromCollectionResponse) Descriptor() ([]byte, []int) {
-	return file_quire_v1_library_proto_rawDescGZIP(), []int{30}
+	return file_quire_v1_library_proto_rawDescGZIP(), []int{38}
 }
 
 var File_quire_v1_library_proto protoreflect.FileDescriptor
@@ -1893,7 +2296,27 @@ const file_quire_v1_library_proto_rawDesc = "" +
 	"\x05chunk\x18\x02 \x01(\fH\x00R\x05chunkB\t\n" +
 	"\apayload\"N\n" +
 	"\x1aUploadEbookContentResponse\x120\n" +
-	"\acontent\x18\x01 \x01(\v2\x16.quire.v1.EbookContentR\acontent\"8\n" +
+	"\acontent\x18\x01 \x01(\v2\x16.quire.v1.EbookContentR\acontent\"K\n" +
+	"\x17BeginEbookUploadRequest\x120\n" +
+	"\acontent\x18\x01 \x01(\v2\x16.quire.v1.EbookContentR\acontent\"\x8c\x01\n" +
+	"\x18BeginEbookUploadResponse\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12!\n" +
+	"\falready_held\x18\x02 \x01(\bR\valreadyHeld\x120\n" +
+	"\acontent\x18\x03 \x01(\v2\x16.quire.v1.EbookContentR\acontent\"a\n" +
+	"\x14PutEbookChunkRequest\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\x03R\x06offset\x12\x14\n" +
+	"\x05chunk\x18\x03 \x01(\fR\x05chunk\">\n" +
+	"\x15PutEbookChunkResponse\x12%\n" +
+	"\x0ereceived_bytes\x18\x01 \x01(\x03R\rreceivedBytes\"7\n" +
+	"\x18FinishEbookUploadRequest\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\"p\n" +
+	"\x19FinishEbookUploadResponse\x120\n" +
+	"\acontent\x18\x01 \x01(\v2\x16.quire.v1.EbookContentR\acontent\x12!\n" +
+	"\falready_held\x18\x02 \x01(\bR\valreadyHeld\"8\n" +
+	"\x19DiscardEbookUploadRequest\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\"\x1c\n" +
+	"\x1aDiscardEbookUploadResponse\"8\n" +
 	"\x1bDownloadEbookContentRequest\x12\x19\n" +
 	"\bebook_id\x18\x01 \x01(\tR\aebookId\"u\n" +
 	"\x1cDownloadEbookContentResponse\x122\n" +
@@ -1951,7 +2374,7 @@ const file_quire_v1_library_proto_rawDesc = "" +
 	"\x0eCollectionKind\x12\x1f\n" +
 	"\x1bCOLLECTION_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aCOLLECTION_KIND_COLLECTION\x10\x01\x12\x1c\n" +
-	"\x18COLLECTION_KIND_CATEGORY\x10\x022\xe4\t\n" +
+	"\x18COLLECTION_KIND_CATEGORY\x10\x022\xd0\f\n" +
 	"\x0eLibraryService\x12J\n" +
 	"\vCreateEbook\x12\x1c.quire.v1.CreateEbookRequest\x1a\x1d.quire.v1.CreateEbookResponse\x12A\n" +
 	"\bGetEbook\x12\x19.quire.v1.GetEbookRequest\x1a\x1a.quire.v1.GetEbookResponse\x12G\n" +
@@ -1959,7 +2382,11 @@ const file_quire_v1_library_proto_rawDesc = "" +
 	"ListEbooks\x12\x1b.quire.v1.ListEbooksRequest\x1a\x1c.quire.v1.ListEbooksResponse\x12J\n" +
 	"\vUpdateEbook\x12\x1c.quire.v1.UpdateEbookRequest\x1a\x1d.quire.v1.UpdateEbookResponse\x12J\n" +
 	"\vDeleteEbook\x12\x1c.quire.v1.DeleteEbookRequest\x1a\x1d.quire.v1.DeleteEbookResponse\x12a\n" +
-	"\x12UploadEbookContent\x12#.quire.v1.UploadEbookContentRequest\x1a$.quire.v1.UploadEbookContentResponse(\x01\x12g\n" +
+	"\x12UploadEbookContent\x12#.quire.v1.UploadEbookContentRequest\x1a$.quire.v1.UploadEbookContentResponse(\x01\x12Y\n" +
+	"\x10BeginEbookUpload\x12!.quire.v1.BeginEbookUploadRequest\x1a\".quire.v1.BeginEbookUploadResponse\x12P\n" +
+	"\rPutEbookChunk\x12\x1e.quire.v1.PutEbookChunkRequest\x1a\x1f.quire.v1.PutEbookChunkResponse\x12\\\n" +
+	"\x11FinishEbookUpload\x12\".quire.v1.FinishEbookUploadRequest\x1a#.quire.v1.FinishEbookUploadResponse\x12_\n" +
+	"\x12DiscardEbookUpload\x12#.quire.v1.DiscardEbookUploadRequest\x1a$.quire.v1.DiscardEbookUploadResponse\x12g\n" +
 	"\x14DownloadEbookContent\x12%.quire.v1.DownloadEbookContentRequest\x1a&.quire.v1.DownloadEbookContentResponse0\x01\x12Y\n" +
 	"\x10CreateCollection\x12!.quire.v1.CreateCollectionRequest\x1a\".quire.v1.CreateCollectionResponse\x12P\n" +
 	"\rGetCollection\x12\x1e.quire.v1.GetCollectionRequest\x1a\x1f.quire.v1.GetCollectionResponse\x12V\n" +
@@ -1982,7 +2409,7 @@ func file_quire_v1_library_proto_rawDescGZIP() []byte {
 }
 
 var file_quire_v1_library_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_quire_v1_library_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_quire_v1_library_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_quire_v1_library_proto_goTypes = []any{
 	(EbookFormat)(0),                          // 0: quire.v1.EbookFormat
 	(CollectionKind)(0),                       // 1: quire.v1.CollectionKind
@@ -2001,85 +2428,104 @@ var file_quire_v1_library_proto_goTypes = []any{
 	(*DeleteEbookResponse)(nil),               // 14: quire.v1.DeleteEbookResponse
 	(*UploadEbookContentRequest)(nil),         // 15: quire.v1.UploadEbookContentRequest
 	(*UploadEbookContentResponse)(nil),        // 16: quire.v1.UploadEbookContentResponse
-	(*DownloadEbookContentRequest)(nil),       // 17: quire.v1.DownloadEbookContentRequest
-	(*DownloadEbookContentResponse)(nil),      // 18: quire.v1.DownloadEbookContentResponse
-	(*CreateCollectionRequest)(nil),           // 19: quire.v1.CreateCollectionRequest
-	(*CreateCollectionResponse)(nil),          // 20: quire.v1.CreateCollectionResponse
-	(*GetCollectionRequest)(nil),              // 21: quire.v1.GetCollectionRequest
-	(*GetCollectionResponse)(nil),             // 22: quire.v1.GetCollectionResponse
-	(*ListCollectionsRequest)(nil),            // 23: quire.v1.ListCollectionsRequest
-	(*ListCollectionsResponse)(nil),           // 24: quire.v1.ListCollectionsResponse
-	(*UpdateCollectionRequest)(nil),           // 25: quire.v1.UpdateCollectionRequest
-	(*UpdateCollectionResponse)(nil),          // 26: quire.v1.UpdateCollectionResponse
-	(*DeleteCollectionRequest)(nil),           // 27: quire.v1.DeleteCollectionRequest
-	(*DeleteCollectionResponse)(nil),          // 28: quire.v1.DeleteCollectionResponse
-	(*AddEbookToCollectionRequest)(nil),       // 29: quire.v1.AddEbookToCollectionRequest
-	(*AddEbookToCollectionResponse)(nil),      // 30: quire.v1.AddEbookToCollectionResponse
-	(*RemoveEbookFromCollectionRequest)(nil),  // 31: quire.v1.RemoveEbookFromCollectionRequest
-	(*RemoveEbookFromCollectionResponse)(nil), // 32: quire.v1.RemoveEbookFromCollectionResponse
-	(*structpb.Struct)(nil),                   // 33: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),             // 34: google.protobuf.Timestamp
-	(*Revision)(nil),                          // 35: quire.v1.Revision
-	(*fieldmaskpb.FieldMask)(nil),             // 36: google.protobuf.FieldMask
+	(*BeginEbookUploadRequest)(nil),           // 17: quire.v1.BeginEbookUploadRequest
+	(*BeginEbookUploadResponse)(nil),          // 18: quire.v1.BeginEbookUploadResponse
+	(*PutEbookChunkRequest)(nil),              // 19: quire.v1.PutEbookChunkRequest
+	(*PutEbookChunkResponse)(nil),             // 20: quire.v1.PutEbookChunkResponse
+	(*FinishEbookUploadRequest)(nil),          // 21: quire.v1.FinishEbookUploadRequest
+	(*FinishEbookUploadResponse)(nil),         // 22: quire.v1.FinishEbookUploadResponse
+	(*DiscardEbookUploadRequest)(nil),         // 23: quire.v1.DiscardEbookUploadRequest
+	(*DiscardEbookUploadResponse)(nil),        // 24: quire.v1.DiscardEbookUploadResponse
+	(*DownloadEbookContentRequest)(nil),       // 25: quire.v1.DownloadEbookContentRequest
+	(*DownloadEbookContentResponse)(nil),      // 26: quire.v1.DownloadEbookContentResponse
+	(*CreateCollectionRequest)(nil),           // 27: quire.v1.CreateCollectionRequest
+	(*CreateCollectionResponse)(nil),          // 28: quire.v1.CreateCollectionResponse
+	(*GetCollectionRequest)(nil),              // 29: quire.v1.GetCollectionRequest
+	(*GetCollectionResponse)(nil),             // 30: quire.v1.GetCollectionResponse
+	(*ListCollectionsRequest)(nil),            // 31: quire.v1.ListCollectionsRequest
+	(*ListCollectionsResponse)(nil),           // 32: quire.v1.ListCollectionsResponse
+	(*UpdateCollectionRequest)(nil),           // 33: quire.v1.UpdateCollectionRequest
+	(*UpdateCollectionResponse)(nil),          // 34: quire.v1.UpdateCollectionResponse
+	(*DeleteCollectionRequest)(nil),           // 35: quire.v1.DeleteCollectionRequest
+	(*DeleteCollectionResponse)(nil),          // 36: quire.v1.DeleteCollectionResponse
+	(*AddEbookToCollectionRequest)(nil),       // 37: quire.v1.AddEbookToCollectionRequest
+	(*AddEbookToCollectionResponse)(nil),      // 38: quire.v1.AddEbookToCollectionResponse
+	(*RemoveEbookFromCollectionRequest)(nil),  // 39: quire.v1.RemoveEbookFromCollectionRequest
+	(*RemoveEbookFromCollectionResponse)(nil), // 40: quire.v1.RemoveEbookFromCollectionResponse
+	(*structpb.Struct)(nil),                   // 41: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),             // 42: google.protobuf.Timestamp
+	(*Revision)(nil),                          // 43: quire.v1.Revision
+	(*fieldmaskpb.FieldMask)(nil),             // 44: google.protobuf.FieldMask
 }
 var file_quire_v1_library_proto_depIdxs = []int32{
 	0,  // 0: quire.v1.Ebook.format:type_name -> quire.v1.EbookFormat
-	33, // 1: quire.v1.Ebook.extra_metadata:type_name -> google.protobuf.Struct
-	34, // 2: quire.v1.Ebook.imported_at:type_name -> google.protobuf.Timestamp
-	35, // 3: quire.v1.Ebook.revision:type_name -> quire.v1.Revision
+	41, // 1: quire.v1.Ebook.extra_metadata:type_name -> google.protobuf.Struct
+	42, // 2: quire.v1.Ebook.imported_at:type_name -> google.protobuf.Timestamp
+	43, // 3: quire.v1.Ebook.revision:type_name -> quire.v1.Revision
 	1,  // 4: quire.v1.Collection.kind:type_name -> quire.v1.CollectionKind
-	34, // 5: quire.v1.Collection.created_at:type_name -> google.protobuf.Timestamp
-	35, // 6: quire.v1.Collection.revision:type_name -> quire.v1.Revision
+	42, // 5: quire.v1.Collection.created_at:type_name -> google.protobuf.Timestamp
+	43, // 6: quire.v1.Collection.revision:type_name -> quire.v1.Revision
 	2,  // 7: quire.v1.CreateEbookRequest.ebook:type_name -> quire.v1.Ebook
 	2,  // 8: quire.v1.CreateEbookResponse.ebook:type_name -> quire.v1.Ebook
 	2,  // 9: quire.v1.GetEbookResponse.ebook:type_name -> quire.v1.Ebook
 	2,  // 10: quire.v1.ListEbooksResponse.ebooks:type_name -> quire.v1.Ebook
 	2,  // 11: quire.v1.UpdateEbookRequest.ebook:type_name -> quire.v1.Ebook
-	36, // 12: quire.v1.UpdateEbookRequest.update_mask:type_name -> google.protobuf.FieldMask
+	44, // 12: quire.v1.UpdateEbookRequest.update_mask:type_name -> google.protobuf.FieldMask
 	2,  // 13: quire.v1.UpdateEbookResponse.ebook:type_name -> quire.v1.Ebook
 	4,  // 14: quire.v1.UploadEbookContentRequest.content:type_name -> quire.v1.EbookContent
 	4,  // 15: quire.v1.UploadEbookContentResponse.content:type_name -> quire.v1.EbookContent
-	4,  // 16: quire.v1.DownloadEbookContentResponse.content:type_name -> quire.v1.EbookContent
-	3,  // 17: quire.v1.CreateCollectionRequest.collection:type_name -> quire.v1.Collection
-	3,  // 18: quire.v1.CreateCollectionResponse.collection:type_name -> quire.v1.Collection
-	3,  // 19: quire.v1.GetCollectionResponse.collection:type_name -> quire.v1.Collection
-	3,  // 20: quire.v1.ListCollectionsResponse.collections:type_name -> quire.v1.Collection
-	3,  // 21: quire.v1.UpdateCollectionRequest.collection:type_name -> quire.v1.Collection
-	36, // 22: quire.v1.UpdateCollectionRequest.update_mask:type_name -> google.protobuf.FieldMask
-	3,  // 23: quire.v1.UpdateCollectionResponse.collection:type_name -> quire.v1.Collection
-	5,  // 24: quire.v1.LibraryService.CreateEbook:input_type -> quire.v1.CreateEbookRequest
-	7,  // 25: quire.v1.LibraryService.GetEbook:input_type -> quire.v1.GetEbookRequest
-	9,  // 26: quire.v1.LibraryService.ListEbooks:input_type -> quire.v1.ListEbooksRequest
-	11, // 27: quire.v1.LibraryService.UpdateEbook:input_type -> quire.v1.UpdateEbookRequest
-	13, // 28: quire.v1.LibraryService.DeleteEbook:input_type -> quire.v1.DeleteEbookRequest
-	15, // 29: quire.v1.LibraryService.UploadEbookContent:input_type -> quire.v1.UploadEbookContentRequest
-	17, // 30: quire.v1.LibraryService.DownloadEbookContent:input_type -> quire.v1.DownloadEbookContentRequest
-	19, // 31: quire.v1.LibraryService.CreateCollection:input_type -> quire.v1.CreateCollectionRequest
-	21, // 32: quire.v1.LibraryService.GetCollection:input_type -> quire.v1.GetCollectionRequest
-	23, // 33: quire.v1.LibraryService.ListCollections:input_type -> quire.v1.ListCollectionsRequest
-	25, // 34: quire.v1.LibraryService.UpdateCollection:input_type -> quire.v1.UpdateCollectionRequest
-	27, // 35: quire.v1.LibraryService.DeleteCollection:input_type -> quire.v1.DeleteCollectionRequest
-	29, // 36: quire.v1.LibraryService.AddEbookToCollection:input_type -> quire.v1.AddEbookToCollectionRequest
-	31, // 37: quire.v1.LibraryService.RemoveEbookFromCollection:input_type -> quire.v1.RemoveEbookFromCollectionRequest
-	6,  // 38: quire.v1.LibraryService.CreateEbook:output_type -> quire.v1.CreateEbookResponse
-	8,  // 39: quire.v1.LibraryService.GetEbook:output_type -> quire.v1.GetEbookResponse
-	10, // 40: quire.v1.LibraryService.ListEbooks:output_type -> quire.v1.ListEbooksResponse
-	12, // 41: quire.v1.LibraryService.UpdateEbook:output_type -> quire.v1.UpdateEbookResponse
-	14, // 42: quire.v1.LibraryService.DeleteEbook:output_type -> quire.v1.DeleteEbookResponse
-	16, // 43: quire.v1.LibraryService.UploadEbookContent:output_type -> quire.v1.UploadEbookContentResponse
-	18, // 44: quire.v1.LibraryService.DownloadEbookContent:output_type -> quire.v1.DownloadEbookContentResponse
-	20, // 45: quire.v1.LibraryService.CreateCollection:output_type -> quire.v1.CreateCollectionResponse
-	22, // 46: quire.v1.LibraryService.GetCollection:output_type -> quire.v1.GetCollectionResponse
-	24, // 47: quire.v1.LibraryService.ListCollections:output_type -> quire.v1.ListCollectionsResponse
-	26, // 48: quire.v1.LibraryService.UpdateCollection:output_type -> quire.v1.UpdateCollectionResponse
-	28, // 49: quire.v1.LibraryService.DeleteCollection:output_type -> quire.v1.DeleteCollectionResponse
-	30, // 50: quire.v1.LibraryService.AddEbookToCollection:output_type -> quire.v1.AddEbookToCollectionResponse
-	32, // 51: quire.v1.LibraryService.RemoveEbookFromCollection:output_type -> quire.v1.RemoveEbookFromCollectionResponse
-	38, // [38:52] is the sub-list for method output_type
-	24, // [24:38] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	4,  // 16: quire.v1.BeginEbookUploadRequest.content:type_name -> quire.v1.EbookContent
+	4,  // 17: quire.v1.BeginEbookUploadResponse.content:type_name -> quire.v1.EbookContent
+	4,  // 18: quire.v1.FinishEbookUploadResponse.content:type_name -> quire.v1.EbookContent
+	4,  // 19: quire.v1.DownloadEbookContentResponse.content:type_name -> quire.v1.EbookContent
+	3,  // 20: quire.v1.CreateCollectionRequest.collection:type_name -> quire.v1.Collection
+	3,  // 21: quire.v1.CreateCollectionResponse.collection:type_name -> quire.v1.Collection
+	3,  // 22: quire.v1.GetCollectionResponse.collection:type_name -> quire.v1.Collection
+	3,  // 23: quire.v1.ListCollectionsResponse.collections:type_name -> quire.v1.Collection
+	3,  // 24: quire.v1.UpdateCollectionRequest.collection:type_name -> quire.v1.Collection
+	44, // 25: quire.v1.UpdateCollectionRequest.update_mask:type_name -> google.protobuf.FieldMask
+	3,  // 26: quire.v1.UpdateCollectionResponse.collection:type_name -> quire.v1.Collection
+	5,  // 27: quire.v1.LibraryService.CreateEbook:input_type -> quire.v1.CreateEbookRequest
+	7,  // 28: quire.v1.LibraryService.GetEbook:input_type -> quire.v1.GetEbookRequest
+	9,  // 29: quire.v1.LibraryService.ListEbooks:input_type -> quire.v1.ListEbooksRequest
+	11, // 30: quire.v1.LibraryService.UpdateEbook:input_type -> quire.v1.UpdateEbookRequest
+	13, // 31: quire.v1.LibraryService.DeleteEbook:input_type -> quire.v1.DeleteEbookRequest
+	15, // 32: quire.v1.LibraryService.UploadEbookContent:input_type -> quire.v1.UploadEbookContentRequest
+	17, // 33: quire.v1.LibraryService.BeginEbookUpload:input_type -> quire.v1.BeginEbookUploadRequest
+	19, // 34: quire.v1.LibraryService.PutEbookChunk:input_type -> quire.v1.PutEbookChunkRequest
+	21, // 35: quire.v1.LibraryService.FinishEbookUpload:input_type -> quire.v1.FinishEbookUploadRequest
+	23, // 36: quire.v1.LibraryService.DiscardEbookUpload:input_type -> quire.v1.DiscardEbookUploadRequest
+	25, // 37: quire.v1.LibraryService.DownloadEbookContent:input_type -> quire.v1.DownloadEbookContentRequest
+	27, // 38: quire.v1.LibraryService.CreateCollection:input_type -> quire.v1.CreateCollectionRequest
+	29, // 39: quire.v1.LibraryService.GetCollection:input_type -> quire.v1.GetCollectionRequest
+	31, // 40: quire.v1.LibraryService.ListCollections:input_type -> quire.v1.ListCollectionsRequest
+	33, // 41: quire.v1.LibraryService.UpdateCollection:input_type -> quire.v1.UpdateCollectionRequest
+	35, // 42: quire.v1.LibraryService.DeleteCollection:input_type -> quire.v1.DeleteCollectionRequest
+	37, // 43: quire.v1.LibraryService.AddEbookToCollection:input_type -> quire.v1.AddEbookToCollectionRequest
+	39, // 44: quire.v1.LibraryService.RemoveEbookFromCollection:input_type -> quire.v1.RemoveEbookFromCollectionRequest
+	6,  // 45: quire.v1.LibraryService.CreateEbook:output_type -> quire.v1.CreateEbookResponse
+	8,  // 46: quire.v1.LibraryService.GetEbook:output_type -> quire.v1.GetEbookResponse
+	10, // 47: quire.v1.LibraryService.ListEbooks:output_type -> quire.v1.ListEbooksResponse
+	12, // 48: quire.v1.LibraryService.UpdateEbook:output_type -> quire.v1.UpdateEbookResponse
+	14, // 49: quire.v1.LibraryService.DeleteEbook:output_type -> quire.v1.DeleteEbookResponse
+	16, // 50: quire.v1.LibraryService.UploadEbookContent:output_type -> quire.v1.UploadEbookContentResponse
+	18, // 51: quire.v1.LibraryService.BeginEbookUpload:output_type -> quire.v1.BeginEbookUploadResponse
+	20, // 52: quire.v1.LibraryService.PutEbookChunk:output_type -> quire.v1.PutEbookChunkResponse
+	22, // 53: quire.v1.LibraryService.FinishEbookUpload:output_type -> quire.v1.FinishEbookUploadResponse
+	24, // 54: quire.v1.LibraryService.DiscardEbookUpload:output_type -> quire.v1.DiscardEbookUploadResponse
+	26, // 55: quire.v1.LibraryService.DownloadEbookContent:output_type -> quire.v1.DownloadEbookContentResponse
+	28, // 56: quire.v1.LibraryService.CreateCollection:output_type -> quire.v1.CreateCollectionResponse
+	30, // 57: quire.v1.LibraryService.GetCollection:output_type -> quire.v1.GetCollectionResponse
+	32, // 58: quire.v1.LibraryService.ListCollections:output_type -> quire.v1.ListCollectionsResponse
+	34, // 59: quire.v1.LibraryService.UpdateCollection:output_type -> quire.v1.UpdateCollectionResponse
+	36, // 60: quire.v1.LibraryService.DeleteCollection:output_type -> quire.v1.DeleteCollectionResponse
+	38, // 61: quire.v1.LibraryService.AddEbookToCollection:output_type -> quire.v1.AddEbookToCollectionResponse
+	40, // 62: quire.v1.LibraryService.RemoveEbookFromCollection:output_type -> quire.v1.RemoveEbookFromCollectionResponse
+	45, // [45:63] is the sub-list for method output_type
+	27, // [27:45] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_quire_v1_library_proto_init() }
@@ -2095,18 +2541,18 @@ func file_quire_v1_library_proto_init() {
 		(*UploadEbookContentRequest_Content)(nil),
 		(*UploadEbookContentRequest_Chunk)(nil),
 	}
-	file_quire_v1_library_proto_msgTypes[16].OneofWrappers = []any{
+	file_quire_v1_library_proto_msgTypes[24].OneofWrappers = []any{
 		(*DownloadEbookContentResponse_Content)(nil),
 		(*DownloadEbookContentResponse_Chunk)(nil),
 	}
-	file_quire_v1_library_proto_msgTypes[21].OneofWrappers = []any{}
+	file_quire_v1_library_proto_msgTypes[29].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_quire_v1_library_proto_rawDesc), len(file_quire_v1_library_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   31,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

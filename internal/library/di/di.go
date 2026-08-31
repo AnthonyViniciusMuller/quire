@@ -27,15 +27,19 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/library/application/service"
 	"github.com/anthonyvsmuller/quire/internal/library/application/upload"
 	addtocollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/addtocollection"
+	beginuploadusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/beginupload"
 	createcollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/createcollection"
 	createebookusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/createebook"
 	deletecollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/deletecollection"
 	deleteebookusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/deleteebook"
+	discarduploadusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/discardupload"
 	downloadcontentusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/downloadcontent"
+	finishuploadusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/finishupload"
 	getcollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/getcollection"
 	getebookusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/getebook"
 	listcollectionsusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/listcollections"
 	listebooksusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/listebooks"
+	putchunkusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/putchunk"
 	removefromcollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/removefromcollection"
 	updatecollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/updatecollection"
 	updateebookusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/updateebook"
@@ -44,15 +48,19 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/library/domain/ebook"
 	"github.com/anthonyvsmuller/quire/internal/library/domain/membership"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/addebooktocollection"
+	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/beginebookupload"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/createcollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/createebook"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/deletecollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/deleteebook"
+	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/discardebookupload"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/downloadebookcontent"
+	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/finishebookupload"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/getcollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/getebook"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/listcollections"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/listebooks"
+	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/putebookchunk"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/removeebookfromcollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/updatecollection"
 	"github.com/anthonyvsmuller/quire/internal/library/infra/grpc/controller/updateebook"
@@ -165,6 +173,10 @@ func Initialize(
 			deleteebookusecase.New(works, memberships, clock, transaction)),
 		UploadEbookContent: uploadebookcontent.New(
 			uploadcontentusecase.New(rules, staging)),
+		BeginEbookUpload:   beginebookupload.New(beginuploadusecase.New(rules, uploads)),
+		PutEbookChunk:      putebookchunk.New(putchunkusecase.New(uploads)),
+		FinishEbookUpload:  finishebookupload.New(finishuploadusecase.New(rules, uploads)),
+		DiscardEbookUpload: discardebookupload.New(discarduploadusecase.New(uploads)),
 		DownloadEbookContent: downloadebookcontent.New(
 			downloadcontentusecase.New(works, contents, blobs)),
 		CreateCollection: createcollection.New(createcollectionusecase.New(collections, clock)),

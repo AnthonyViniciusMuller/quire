@@ -40,6 +40,10 @@ const (
 	LibraryService_UpdateEbook_FullMethodName               = "/quire.v1.LibraryService/UpdateEbook"
 	LibraryService_DeleteEbook_FullMethodName               = "/quire.v1.LibraryService/DeleteEbook"
 	LibraryService_UploadEbookContent_FullMethodName        = "/quire.v1.LibraryService/UploadEbookContent"
+	LibraryService_BeginEbookUpload_FullMethodName          = "/quire.v1.LibraryService/BeginEbookUpload"
+	LibraryService_PutEbookChunk_FullMethodName             = "/quire.v1.LibraryService/PutEbookChunk"
+	LibraryService_FinishEbookUpload_FullMethodName         = "/quire.v1.LibraryService/FinishEbookUpload"
+	LibraryService_DiscardEbookUpload_FullMethodName        = "/quire.v1.LibraryService/DiscardEbookUpload"
 	LibraryService_DownloadEbookContent_FullMethodName      = "/quire.v1.LibraryService/DownloadEbookContent"
 	LibraryService_CreateCollection_FullMethodName          = "/quire.v1.LibraryService/CreateCollection"
 	LibraryService_GetCollection_FullMethodName             = "/quire.v1.LibraryService/GetCollection"
@@ -71,6 +75,35 @@ type LibraryServiceClient interface {
 	// sends the description first and the content after it, so the node can
 	// refuse an oversized or unsupported file before receiving any of it.
 	UploadEbookContent(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadEbookContentRequest, UploadEbookContentResponse], error)
+	// UC02 for a caller that cannot open a client stream.
+	//
+	// A browser is the case these three exist for. gRPC-Web carries a unary call
+	// and a server stream and neither of the other two, so the stream above is
+	// unreachable from one — D10 and D11 in docs/tcc-corrections.md record what
+	// that costs and why this is the answer.
+	//
+	// They differ from the stream in how the bytes arrive and in nothing else.
+	// The description is declared to Begin and checked there, before a byte
+	// travels; the node hashes what it receives as it receives it; and what is
+	// stored is checked against what was declared. The one thing gained is that
+	// an upload addressed by an offset can be resumed, where a stream that died
+	// at nine tenths starts again from nothing.
+	BeginEbookUpload(ctx context.Context, in *BeginEbookUploadRequest, opts ...grpc.CallOption) (*BeginEbookUploadResponse, error)
+	// The bytes, one call at a time, each at the offset it continues from.
+	//
+	// A chunk arriving anywhere but at the offset the node is expecting is not
+	// written, and the reply carries the offset it does expect: a caller whose
+	// connection died continues from what arrived, and one that lost a reply and
+	// sent the same chunk again is told so rather than corrupting the file.
+	PutEbookChunk(ctx context.Context, in *PutEbookChunkRequest, opts ...grpc.CallOption) (*PutEbookChunkResponse, error)
+	// Ends the upload, checks what arrived against what was declared, and
+	// records that this node holds it.
+	FinishEbookUpload(ctx context.Context, in *FinishEbookUploadRequest, opts ...grpc.CallOption) (*FinishEbookUploadResponse, error)
+	// Abandons an upload without finishing it, releasing what the node was
+	// holding. A caller that never sends it is not a leak — the node ends an
+	// upload nobody has sent to for long enough — but a client that has given up
+	// should say so rather than leave a file on the node until it expires.
+	DiscardEbookUpload(ctx context.Context, in *DiscardEbookUploadRequest, opts ...grpc.CallOption) (*DiscardEbookUploadResponse, error)
 	// Streams the bytes back. A node that replicates this reader without their
 	// files answers that it does not hold them — holding the metadata and not
 	// the file is a state the authorization makes legitimate, not an error.
@@ -163,6 +196,46 @@ func (c *libraryServiceClient) UploadEbookContent(ctx context.Context, opts ...g
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type LibraryService_UploadEbookContentClient = grpc.ClientStreamingClient[UploadEbookContentRequest, UploadEbookContentResponse]
+
+func (c *libraryServiceClient) BeginEbookUpload(ctx context.Context, in *BeginEbookUploadRequest, opts ...grpc.CallOption) (*BeginEbookUploadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BeginEbookUploadResponse)
+	err := c.cc.Invoke(ctx, LibraryService_BeginEbookUpload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *libraryServiceClient) PutEbookChunk(ctx context.Context, in *PutEbookChunkRequest, opts ...grpc.CallOption) (*PutEbookChunkResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PutEbookChunkResponse)
+	err := c.cc.Invoke(ctx, LibraryService_PutEbookChunk_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *libraryServiceClient) FinishEbookUpload(ctx context.Context, in *FinishEbookUploadRequest, opts ...grpc.CallOption) (*FinishEbookUploadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FinishEbookUploadResponse)
+	err := c.cc.Invoke(ctx, LibraryService_FinishEbookUpload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *libraryServiceClient) DiscardEbookUpload(ctx context.Context, in *DiscardEbookUploadRequest, opts ...grpc.CallOption) (*DiscardEbookUploadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DiscardEbookUploadResponse)
+	err := c.cc.Invoke(ctx, LibraryService_DiscardEbookUpload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
 
 func (c *libraryServiceClient) DownloadEbookContent(ctx context.Context, in *DownloadEbookContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadEbookContentResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -274,6 +347,35 @@ type LibraryServiceServer interface {
 	// sends the description first and the content after it, so the node can
 	// refuse an oversized or unsupported file before receiving any of it.
 	UploadEbookContent(grpc.ClientStreamingServer[UploadEbookContentRequest, UploadEbookContentResponse]) error
+	// UC02 for a caller that cannot open a client stream.
+	//
+	// A browser is the case these three exist for. gRPC-Web carries a unary call
+	// and a server stream and neither of the other two, so the stream above is
+	// unreachable from one — D10 and D11 in docs/tcc-corrections.md record what
+	// that costs and why this is the answer.
+	//
+	// They differ from the stream in how the bytes arrive and in nothing else.
+	// The description is declared to Begin and checked there, before a byte
+	// travels; the node hashes what it receives as it receives it; and what is
+	// stored is checked against what was declared. The one thing gained is that
+	// an upload addressed by an offset can be resumed, where a stream that died
+	// at nine tenths starts again from nothing.
+	BeginEbookUpload(context.Context, *BeginEbookUploadRequest) (*BeginEbookUploadResponse, error)
+	// The bytes, one call at a time, each at the offset it continues from.
+	//
+	// A chunk arriving anywhere but at the offset the node is expecting is not
+	// written, and the reply carries the offset it does expect: a caller whose
+	// connection died continues from what arrived, and one that lost a reply and
+	// sent the same chunk again is told so rather than corrupting the file.
+	PutEbookChunk(context.Context, *PutEbookChunkRequest) (*PutEbookChunkResponse, error)
+	// Ends the upload, checks what arrived against what was declared, and
+	// records that this node holds it.
+	FinishEbookUpload(context.Context, *FinishEbookUploadRequest) (*FinishEbookUploadResponse, error)
+	// Abandons an upload without finishing it, releasing what the node was
+	// holding. A caller that never sends it is not a leak — the node ends an
+	// upload nobody has sent to for long enough — but a client that has given up
+	// should say so rather than leave a file on the node until it expires.
+	DiscardEbookUpload(context.Context, *DiscardEbookUploadRequest) (*DiscardEbookUploadResponse, error)
 	// Streams the bytes back. A node that replicates this reader without their
 	// files answers that it does not hold them — holding the metadata and not
 	// the file is a state the authorization makes legitimate, not an error.
@@ -321,6 +423,18 @@ func (UnimplementedLibraryServiceServer) DeleteEbook(context.Context, *DeleteEbo
 }
 func (UnimplementedLibraryServiceServer) UploadEbookContent(grpc.ClientStreamingServer[UploadEbookContentRequest, UploadEbookContentResponse]) error {
 	return status.Error(codes.Unimplemented, "method UploadEbookContent not implemented")
+}
+func (UnimplementedLibraryServiceServer) BeginEbookUpload(context.Context, *BeginEbookUploadRequest) (*BeginEbookUploadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BeginEbookUpload not implemented")
+}
+func (UnimplementedLibraryServiceServer) PutEbookChunk(context.Context, *PutEbookChunkRequest) (*PutEbookChunkResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PutEbookChunk not implemented")
+}
+func (UnimplementedLibraryServiceServer) FinishEbookUpload(context.Context, *FinishEbookUploadRequest) (*FinishEbookUploadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FinishEbookUpload not implemented")
+}
+func (UnimplementedLibraryServiceServer) DiscardEbookUpload(context.Context, *DiscardEbookUploadRequest) (*DiscardEbookUploadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DiscardEbookUpload not implemented")
 }
 func (UnimplementedLibraryServiceServer) DownloadEbookContent(*DownloadEbookContentRequest, grpc.ServerStreamingServer[DownloadEbookContentResponse]) error {
 	return status.Error(codes.Unimplemented, "method DownloadEbookContent not implemented")
@@ -463,6 +577,78 @@ func _LibraryService_UploadEbookContent_Handler(srv interface{}, stream grpc.Ser
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type LibraryService_UploadEbookContentServer = grpc.ClientStreamingServer[UploadEbookContentRequest, UploadEbookContentResponse]
+
+func _LibraryService_BeginEbookUpload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BeginEbookUploadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LibraryServiceServer).BeginEbookUpload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LibraryService_BeginEbookUpload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LibraryServiceServer).BeginEbookUpload(ctx, req.(*BeginEbookUploadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LibraryService_PutEbookChunk_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PutEbookChunkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LibraryServiceServer).PutEbookChunk(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LibraryService_PutEbookChunk_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LibraryServiceServer).PutEbookChunk(ctx, req.(*PutEbookChunkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LibraryService_FinishEbookUpload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FinishEbookUploadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LibraryServiceServer).FinishEbookUpload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LibraryService_FinishEbookUpload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LibraryServiceServer).FinishEbookUpload(ctx, req.(*FinishEbookUploadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LibraryService_DiscardEbookUpload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DiscardEbookUploadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LibraryServiceServer).DiscardEbookUpload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LibraryService_DiscardEbookUpload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LibraryServiceServer).DiscardEbookUpload(ctx, req.(*DiscardEbookUploadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
 
 func _LibraryService_DownloadEbookContent_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(DownloadEbookContentRequest)
@@ -627,6 +813,22 @@ var LibraryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteEbook",
 			Handler:    _LibraryService_DeleteEbook_Handler,
+		},
+		{
+			MethodName: "BeginEbookUpload",
+			Handler:    _LibraryService_BeginEbookUpload_Handler,
+		},
+		{
+			MethodName: "PutEbookChunk",
+			Handler:    _LibraryService_PutEbookChunk_Handler,
+		},
+		{
+			MethodName: "FinishEbookUpload",
+			Handler:    _LibraryService_FinishEbookUpload_Handler,
+		},
+		{
+			MethodName: "DiscardEbookUpload",
+			Handler:    _LibraryService_DiscardEbookUpload_Handler,
 		},
 		{
 			MethodName: "CreateCollection",
