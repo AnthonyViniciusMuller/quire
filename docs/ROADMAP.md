@@ -643,9 +643,19 @@ belongs to the gateway RNF12 already requires — so this phase adds manifests a
       own `grpc-status: 3`. The three lanes were then checked against each other: the discovery
       documents still answer, `/metrics` still 404s, `:9443` still serves the federation key
       and not the gateway's, and `make test-kind` still passes in 117 s
-- [ ] `test: cover the grpc web route` — a browser-shaped call in the kind suite. It is the
-      only way to know the route works, since what is being asserted is a translation nothing
-      in this repository performs
+- [x] `test: cover the grpc web route` — a browser-shaped call in the kind suite, and it is
+      the only way to know the route works, since what is asserted is a translation nothing in
+      this repository performs. Two tests, and the second is the one that matters: the same
+      `Login` the suite's own `reachable()` makes over native gRPC, made instead as an
+      HTTP/1.1 `POST` of a framed message, asserting the *same* `Unauthenticated`. One call,
+      two transports, one answer — which is what says the lane translated a framing rather than
+      inventing, swallowing or rewriting an outcome. The first covers the preflight, because a
+      response that failed to name `grpc-status` in `Access-Control-Expose-Headers` leaves a
+      browser unable to tell a refusal from a success, and that reads as the application
+      misbehaving rather than the deployment being wrong. The file is `e2e && kind` and not
+      `e2e`: the translation is the gateway's, and the compose federation has none. It was
+      checked against its own absence — with the `EnvoyFilter` deleted the call comes back
+      `415`, and the test says so and names the route
 - [ ] `feat: add watch operations server stream` — UC10's *as it happens*, for a client that
       cannot hold the bidirectional stream open. A server stream is the half gRPC-Web does
       carry, and the cheapest shape is a notification and not a delivery: it says there is
