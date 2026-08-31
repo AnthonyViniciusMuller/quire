@@ -38,6 +38,40 @@ type Staged interface {
 	Close() error
 }
 
+// Incoming is a file arriving in pieces rather than in one stream.
+//
+// It is what a chunked upload fills between calls (D11). The bytes are held
+// exactly where [Staging.Stage] holds them and are hashed the same way as they
+// arrive, so the two shapes of UC02 differ in how the bytes reach the node and
+// in nothing else.
+type Incoming interface {
+	// Append writes the next bytes and reports how many have arrived in all.
+	//
+	// It refuses a chunk that would take the file past the limit the holder
+	// was opened with, with errs.KindResourceExhausted and
+	// [CodeUploadTooLarge] — the same refusal Stage makes, for the same
+	// reason: a client that declared one length cannot fill the node by
+	// sending another.
+	Append(chunk []byte) (int64, error)
+
+	// Received is how many bytes have arrived so far, which is the offset the
+	// next chunk continues from.
+	Received() int64
+
+	// Done stops accepting bytes and returns what arrived, for the caller to
+	// check and store as it would any staged file.
+	//
+	// The result owns the bytes from then on, and closing it is what releases
+	// them; closing the holder as well is harmless and is what an abandoned
+	// upload does instead.
+	Done() (Staged, error)
+
+	// Close releases the bytes of an upload that was never finished. The
+	// caller always calls it, including on the path where the upload was
+	// refused.
+	Close() error
+}
+
 // Staging holds an incoming file while the node checks what it is.
 //
 // It exists because of an ordering that cannot be avoided: the object is
@@ -60,4 +94,13 @@ type Staging interface {
 	// CodeUploadTooLarge, so that a client which declared one length and sent
 	// another cannot fill the node by lying about it.
 	Stage(ctx context.Context, body io.Reader, limit int64) (Staged, error)
+
+	// Open returns a holder the caller fills a chunk at a time, bounded by the
+	// same limit.
+	//
+	// It is the same staging with the reading turned inside out: Stage pulls
+	// the bytes from a stream it is given, and this is pushed them by a caller
+	// that has them one call at a time. What holds them, and what hashes them,
+	// is identical.
+	Open(ctx context.Context, limit int64) (Incoming, error)
 }

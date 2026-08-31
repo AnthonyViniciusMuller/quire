@@ -68,7 +68,7 @@ func serveReading(t *testing.T) reading {
 		t.Fatalf("building the identity slice: %v", err)
 	}
 
-	libraryContainer, err := librarydi.Initialize(t.Context(), cfg, pool, hlc.New())
+	libraryContainer, err := librarydi.Initialize(t.Context(), cfg, pool, hlc.New(), logging.Discard())
 	if err != nil {
 		t.Fatalf("building the library slice: %v", err)
 	}

@@ -166,6 +166,19 @@ type Storage struct {
 	// smaller than a disk.
 	MaxUploadBytes int64 `env:"QUIRE_STORAGE_MAX_UPLOAD_BYTES" envDefault:"536870912"`
 
+	// UploadExpiry is how long a chunked upload may go without a chunk before
+	// the node ends it and releases the bytes it was holding.
+	//
+	// It is configuration and not a constant because it is the same kind of
+	// decision MaxUploadBytes is: it bounds the disk a node lends to transfers
+	// nobody has finished, and a deployment that raised the ceiling above has
+	// larger files arriving over the same networks. The two are read together.
+	//
+	// The default is an hour, which is long enough for half a gigabyte over a
+	// connection worth resuming and short enough that an abandoned import does
+	// not outlive the reader's session.
+	UploadExpiry time.Duration `env:"QUIRE_STORAGE_UPLOAD_EXPIRY" envDefault:"1h"`
+
 	// S3 is Amazon S3, through the AWS SDK.
 	S3 StorageS3
 	// MinIO is a self-hosted MinIO, through the MinIO SDK.

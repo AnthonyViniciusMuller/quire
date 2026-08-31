@@ -109,7 +109,7 @@ func run(ctx context.Context) error {
 	// or a service account key the node cannot read is a deployment fault. A
 	// node that cannot store a file cannot serve UC02 at all, and should say
 	// so before it starts answering.
-	library, err := librarydi.Initialize(ctx, cfg, pool, clock)
+	library, err := librarydi.Initialize(ctx, cfg, pool, clock, logger)
 	if err != nil {
 		return err
 	}
@@ -219,6 +219,13 @@ func run(ctx context.Context) error {
 	// docs/tcc-corrections.md, and the whole of why the delivery is not simply
 	// awaited where it is requested.
 	group.Go(func() error { return identity.Deliveries.Run(serving) })
+	// Nor is the fifth. A chunked upload leaves the node holding a
+	// half-received file between calls — D11 in docs/tcc-corrections.md, and
+	// the second reason this deployment runs a single replica — and a client
+	// that stopped sending is one nobody will ever hear from again. This ends
+	// the sessions nobody is sending to, and releases every one still open when
+	// the node stops.
+	group.Go(func() error { return library.Uploads.Run(serving) })
 
 	if err := group.Wait(); err != nil {
 		return err

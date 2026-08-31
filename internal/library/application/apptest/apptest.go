@@ -671,6 +671,70 @@ func (s *Staging) Stage(_ context.Context, body io.Reader, limit int64) (service
 	return &stagedBytes{bytes: received, digest: hex.EncodeToString(digest[:])}, nil
 }
 
+// Open returns a holder a test fills a chunk at a time.
+func (s *Staging) Open(_ context.Context, limit int64) (service.Incoming, error) {
+	s.mu.Lock()
+	err := s.Err
+	s.mu.Unlock()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &incomingBytes{limit: limit}, nil
+}
+
+// incomingBytes is one chunked upload held in memory.
+type incomingBytes struct {
+	bytes []byte
+	limit int64
+	done  bool
+}
+
+// incomingBytes satisfies the port's view of a file arriving in pieces.
+var _ service.Incoming = (*incomingBytes)(nil)
+
+// Append writes the next bytes and reports how many have arrived in all.
+func (i *incomingBytes) Append(chunk []byte) (int64, error) {
+	if i.done {
+		return int64(len(i.bytes)), errs.New(errs.KindFailedPrecondition,
+			"the upload has already been finished").
+			WithCode(service.CodeStagingFailed)
+	}
+
+	if int64(len(i.bytes)+len(chunk)) > i.limit {
+		return int64(len(i.bytes)), errs.New(errs.KindResourceExhausted,
+			"the file is larger than this node accepts").
+			WithCode(service.CodeUploadTooLarge)
+	}
+
+	i.bytes = append(i.bytes, chunk...)
+
+	return int64(len(i.bytes)), nil
+}
+
+// Received is how many bytes have arrived so far.
+func (i *incomingBytes) Received() int64 { return int64(len(i.bytes)) }
+
+// Done stops accepting bytes and hands over what arrived, hashed as the
+// adapter hashes it.
+func (i *incomingBytes) Done() (service.Staged, error) {
+	i.done = true
+	digest := sha256.Sum256(i.bytes)
+
+	return &stagedBytes{bytes: i.bytes, digest: hex.EncodeToString(digest[:])}, nil
+}
+
+// Close releases an upload that was never finished, which for bytes in memory
+// is letting go of them.
+func (i *incomingBytes) Close() error {
+	if !i.done {
+		i.bytes = nil
+	}
+
+	return nil
+}
+
 // stagedBytes is one staged upload held in memory.
 type stagedBytes struct {
 	bytes  []byte

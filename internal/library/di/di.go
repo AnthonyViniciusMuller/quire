@@ -20,6 +20,7 @@ package di
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -65,6 +66,7 @@ import (
 	minioservice "github.com/anthonyvsmuller/quire/internal/library/infra/service/minio"
 	s3service "github.com/anthonyvsmuller/quire/internal/library/infra/service/s3"
 	stagingservice "github.com/anthonyvsmuller/quire/internal/library/infra/service/staging"
+	uploadsservice "github.com/anthonyvsmuller/quire/internal/library/infra/service/uploads"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/errs"
 	"github.com/anthonyvsmuller/quire/internal/shared/hlc"
@@ -94,6 +96,12 @@ type Container struct {
 	Collections collection.Repository
 	Memberships membership.Repository
 
+	// Uploads ends the chunked uploads nobody is sending to any more. It is not
+	// a server and nobody calls it, so the node runs it beside the two
+	// listeners — a half-received file that outlived the reader who abandoned
+	// it is disk this node never gets back on its own.
+	Uploads *uploadsservice.Service
+
 	// closer releases what the object store client holds, when it holds
 	// anything. Only one of the three adapters does.
 	closer func() error
@@ -122,7 +130,7 @@ func (c *Container) Close() error {
 // that refuses to start: this slice also serves metadata for readers whose
 // files it does not hold, and it should keep serving it.
 func Initialize(
-	ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, stamps *hlc.Clock,
+	ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, stamps *hlc.Clock, logger *slog.Logger,
 ) (*Container, error) {
 	manager := persist.NewManager(pool)
 
@@ -137,6 +145,7 @@ func Initialize(
 	}
 
 	staging := stagingservice.New()
+	uploads := uploadsservice.New(staging, cfg.Storage.UploadExpiry, cfg.Storage.MaxUploadBytes, logger)
 	clock := clockservice.New(stamps)
 
 	// The manager itself is the unit of work: its Within is the port, so no
@@ -171,6 +180,7 @@ func Initialize(
 		Ebooks:      works,
 		Collections: collections,
 		Memberships: memberships,
+		Uploads:     uploads,
 		closer:      closer,
 	}, nil
 }

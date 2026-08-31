@@ -78,7 +78,7 @@ func serveSync(t *testing.T) synchronization {
 
 	federationContainer := federationdi.Initialize(cfg, pool, identityContainer.Migration)
 
-	libraryContainer, err := librarydi.Initialize(t.Context(), cfg, pool, clock)
+	libraryContainer, err := librarydi.Initialize(t.Context(), cfg, pool, clock, logging.Discard())
 	if err != nil {
 		t.Fatalf("building the library slice: %v", err)
 	}

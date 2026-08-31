@@ -683,9 +683,23 @@ belongs to the gateway RNF12 already requires — so this phase adds manifests a
       would survive replicas the node cannot currently have, and costs a session table and
       multipart, server-side copy and abort across all three adapters of D08 — refused as
       disproportionate rather than wrong
-- [ ] `feat: accept a chunked upload` — the largest item here by a distance: three calls in
-      the contract, the use cases and handlers behind them, the session the node now holds,
-      and the sweeper that ends the ones nobody finished
+- [x] `feat: hold a chunked upload between calls` — the state D11 costs, on its own and before
+      anything calls it. `Staging` grows a second shape — the same unlinked file, hashed the
+      same way, pushed a chunk at a time instead of read from a stream — and a registry holds
+      one per session between the calls that fill it. Two things bound it, and both are about a
+      caller that stops rather than one that attacks: a sweeper ends a session nobody has sent
+      to for `QUIRE_STORAGE_UPLOAD_EXPIRY`, which is configuration for the reason
+      `QUIRE_STORAGE_MAX_UPLOAD_BYTES` is — it bounds the disk lent to transfers nobody
+      finished — and a reader may hold only four at once, since each is a descriptor and a
+      file. A chunk at an offset the node is not expecting is not written and the answer
+      carries the offset it holds, which is the resumability the stream does not have. A
+      session of somebody else's is answered as not found rather than as forbidden, because
+      the difference tells a stranger when they have guessed an identifier. The sweeper joins
+      the node's group beside the two listeners and the two workers, so a node that stops
+      releases what it was holding rather than leaving it to the process's death
+- [ ] `feat: accept a chunked upload` — the three calls on top: begin, put a chunk, finish,
+      with the ceiling and the C16 precondition checked at the first and the digest and the
+      length at the last, against the same staged file a streamed upload produces
 
 ## Design decisions settled
 
