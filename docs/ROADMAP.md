@@ -525,7 +525,9 @@ the thesis — corrections to the specification and deliberate divergences from 
       `.golangci.yml` has held for it since phase 0: the only thing it changes is how long a
       test waits, because the manifests declare the production replication interval of thirty
       seconds and the compose file overrides it to five. Everything else is the same suite,
-      seen through a mesh instead of through a bridge network
+      seen through a mesh instead of through a bridge network. The job was later removed from
+      CI — see phase 12 — and the suite it runs was not: `make test-kind` is still how the
+      manifests are verified
 - [x] `test: add grpc latency benchmark script` — [`scripts/bench.sh`](../scripts/bench.sh),
       which measures the call a device actually waits on, with a real session, against a
       running node: `PullOperations` from the beginning, which is the largest answer that
@@ -601,6 +603,15 @@ the entry in [`tcc-corrections.md`](tcc-corrections.md) the answer produced.
       raced a database that was still starting. And the mail relay could not write the file it
       keeps messages in. With those, `make test-kind` passes: the whole suite, against two
       nodes under `QUIRE_ENV=production`, in 116 s
+- [x] `ci: drop the end to end job` — the kind job leaves the workflow, and nothing else does:
+      `make kind-up` and `make test-kind` are unchanged, and the suite under `test/e2e` with
+      the `kind` tag is untouched. What CI no longer answers is the question that job was
+      added for — whether a node starts under `QUIRE_ENV=production` and whether two of them
+      find each other through the mesh — so that answer now comes from whoever runs the suite
+      against a cluster rather than from a pull request. The job was the slowest by a distance:
+      it built two images, installed a mesh and a certificate authority, and waited on the
+      production replication interval, under a forty-five minute timeout. `lint`, `unit tests`
+      and `integration tests` are what remains
 
 ## Phase 13 — the browser as a client
 
