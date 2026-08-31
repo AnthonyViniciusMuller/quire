@@ -25,6 +25,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/anthonyvsmuller/quire/internal/library/application/service"
+	"github.com/anthonyvsmuller/quire/internal/library/application/upload"
 	addtocollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/addtocollection"
 	createcollectionusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/createcollection"
 	createebookusecase "github.com/anthonyvsmuller/quire/internal/library/application/usecase/createebook"
@@ -147,6 +148,9 @@ func Initialize(
 	staging := stagingservice.New()
 	uploads := uploadsservice.New(staging, cfg.Storage.UploadExpiry, cfg.Storage.MaxUploadBytes, logger)
 	clock := clockservice.New(stamps)
+	// The rules of UC02, built once and shared by both shapes that serve it:
+	// what may be received, what the bytes have to be, and where they go.
+	rules := upload.New(works, contents, blobs, clock, cfg.Storage.MaxUploadBytes)
 
 	// The manager itself is the unit of work: its Within is the port, so no
 	// adapter stands between them.
@@ -160,7 +164,7 @@ func Initialize(
 		DeleteEbook: deleteebook.New(
 			deleteebookusecase.New(works, memberships, clock, transaction)),
 		UploadEbookContent: uploadebookcontent.New(
-			uploadcontentusecase.New(works, contents, blobs, staging, clock, cfg.Storage.MaxUploadBytes)),
+			uploadcontentusecase.New(rules, staging)),
 		DownloadEbookContent: downloadebookcontent.New(
 			downloadcontentusecase.New(works, contents, blobs)),
 		CreateCollection: createcollection.New(createcollectionusecase.New(collections, clock)),

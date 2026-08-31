@@ -12,6 +12,7 @@ import (
 
 	"github.com/anthonyvsmuller/quire/internal/library/application/apptest"
 	"github.com/anthonyvsmuller/quire/internal/library/application/service"
+	"github.com/anthonyvsmuller/quire/internal/library/application/upload"
 	"github.com/anthonyvsmuller/quire/internal/library/application/usecase/uploadcontent"
 	"github.com/anthonyvsmuller/quire/internal/library/domain/ebook"
 	"github.com/anthonyvsmuller/quire/internal/shared/errs"
@@ -55,8 +56,8 @@ func newFixture(t *testing.T) *fixture {
 	reader, phone := uuid.New(), uuid.New()
 
 	f := &fixture{
-		usecase: uploadcontent.New(works, contents, blobs, staging,
-			apptest.NewClock(stored), limit),
+		usecase: uploadcontent.New(
+			upload.New(works, contents, blobs, apptest.NewClock(stored), limit), staging),
 		works: works, contents: contents, blobs: blobs, staging: staging,
 		reader: reader, phone: phone,
 	}

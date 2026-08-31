@@ -697,6 +697,14 @@ belongs to the gateway RNF12 already requires — so this phase adds manifests a
       the difference tells a stranger when they have guessed an identifier. The sweeper joins
       the node's group beside the two listeners and the two workers, so a node that stops
       releases what it was holding rather than leaving it to the process's death
+- [x] `refactor: give upload content one home for its rules` — before the second shape of UC02
+      exists, so that it cannot be written by copying the first. What may be received, what the
+      bytes have to be, and where they go were three private methods of the streaming use case;
+      they are now `internal/library/application/upload`, and the streaming use case is what is
+      left over once they leave — staging, and the ordering only a stream has. Nothing changes
+      behaviour and its tests are the proof: they were untouched apart from how the fixture is
+      built. C16 is the reason this is a commit of its own rather than a paragraph in the next
+      one. It is a security precondition, and a copy of it is a copy that gets fixed once
 - [ ] `feat: accept a chunked upload` — the three calls on top: begin, put a chunk, finish,
       with the ceiling and the C16 precondition checked at the first and the digest and the
       length at the last, against the same staged file a streamed upload produces
