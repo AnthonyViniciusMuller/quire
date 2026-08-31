@@ -4,6 +4,7 @@ package e2e_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -12,10 +13,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+	"uuid"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/anthonyvsmuller/quire/internal/client"
 	quirev1 "github.com/anthonyvsmuller/quire/internal/gen/quire/v1"
 )
 
@@ -53,7 +57,22 @@ const (
 	// dial. A browser is the second, so this is the path whose readability
 	// decides whether a web client can find a node at all.
 	discoveryPath = "/.well-known/quire/client"
+
+	grpcWebWatchPath = "/quire.v1.SyncService/WatchOperations"
 )
+
+// browserIdleFor is how long the watch stream is left with nothing to say
+// before the test writes something.
+//
+// It is the whole point of that test and the reason it is not quick. Envoy's
+// own default route timeout is fifteen seconds, and Istio overrides it to zero
+// on a gateway — so the deployment is correct today by inheriting a default
+// this repository never wrote down. A window shorter than fifteen seconds would
+// pass just as happily against a route that had acquired the Envoy default
+// back, which is the regression worth catching: a browser whose stream is cut
+// every fifteen seconds still works, because a reconnect costs a poll, and the
+// symptom is a node that looks busy for reasons nobody can find.
+const browserIdleFor = 20 * time.Second
 
 // TestGRPCWebPreflightAnswersWhatABrowserAsks covers the request no gRPC client
 // ever makes and every browser does.
@@ -319,4 +338,210 @@ func TestDiscoveryIsReadableByABrowser(t *testing.T) {
 	if document.Client.GRPC == "" {
 		t.Error("the document carries no grpc authority, which is what a client dials")
 	}
+}
+
+// TestGRPCWebCarriesAServerStreamThatStaysOpen is the other half of D10: the
+// call a browser makes instead of Sync, over the transport that made Sync
+// unreachable.
+//
+// gRPC-Web carries a unary call and a server stream. The rest of this file
+// covers the unary half; WatchOperations is the only server stream a device
+// calls, and until this test nothing exercised one through the gateway at all —
+// the browser lane was proven able to carry a request and an answer, and not
+// able to hold a response open.
+//
+// Two properties, and the first is the one that is easy to lose. A watch stream
+// is silent for a reader nobody is writing for, which is the common case:
+// report() sends nothing when the head has not moved. So the stream has to
+// survive being idle, and an intermediary that closed an idle response would
+// break it in a way that looks like nothing at all — the client reconnects, the
+// notification still arrives through the poll behind it, and the only trace is
+// a node being reconnected to every fifteen seconds forever.
+//
+// The second is that it delivers: a change made by another of the reader's
+// devices reaches this stream as a position, and never as an operation.
+//
+// # Why the reader has a work before the stream opens
+//
+// gRPC does not send response headers until the handler sends its first message
+// or asks for them to be flushed, and this handler does neither while the log is
+// empty. A browser opening a watch on an empty log therefore has a fetch that
+// has not resolved rather than a stream that is idle — the two are the same
+// thing on the wire and not in any client API. The test writes first so that the
+// first report flushes the headers, which is what gives it a stream to then
+// leave idle; a web client wanting a readable stream sooner asks for a position
+// it knows is behind, exactly as this does with zero.
+func TestGRPCWebCarriesAServerStreamThatStaysOpen(t *testing.T) {
+	who := newReader(t, nodeA)
+	// The device whose session the browser lane borrows. A real web client binds
+	// itself, which is a unary call and covered above; what is under test here
+	// is the stream and not how a browser came by a token.
+	browser := newDevice(t, nodeA, who, "browser")
+	tablet := newDevice(t, nodeA, who, "tablet")
+
+	first := writeAWork(t, tablet, "Grande Sertão: Veredas", "grande-sertao")
+
+	asked, err := proto.Marshal(&quirev1.WatchOperationsRequest{AfterPosition: 0})
+	if err != nil {
+		t.Fatalf("marshalling the watch: %v", err)
+	}
+
+	// Cancelled by the deferred call, which is what ends the stream: the node
+	// holds it open until the caller hangs up, so a test that returned without
+	// this would leave the request running until the suite exits.
+	ctx, hangUp := context.WithCancel(t.Context())
+	defer hangUp()
+
+	request, err := http.NewRequestWithContext(ctx,
+		http.MethodPost, nodeA.baseURL+grpcWebWatchPath, bytes.NewReader(frame(messageFrameFlag, asked)))
+	if err != nil {
+		t.Fatalf("building the watch: %v", err)
+	}
+
+	request.Header.Set("Content-Type", grpcWebContent)
+	request.Header.Set("X-Grpc-Web", "1")
+	request.Header.Set("Origin", browserOriginHead)
+	request.Header.Set("Authorization", "Bearer "+browser.State().Session.AccessToken)
+
+	response, err := nodeA.httpClient(t).Do(request)
+	if err != nil {
+		t.Fatalf("the watch did not reach the gateway: %v", err)
+	}
+
+	defer func() { _ = response.Body.Close() }()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("the watch was answered %d, want %d", response.StatusCode, http.StatusOK)
+	}
+
+	arriving := readFrames(response.Body)
+
+	// The backlog, which is what a caller asking from zero is owed and what
+	// flushed the headers this test is now reading behind.
+	backlog := notification(t, arriving, "the backlog")
+	if backlog <= 0 {
+		t.Fatalf("the stream announced position %d for a reader who has written %s", backlog, first)
+	}
+
+	// Nothing is written for this reader now, so the stream has nothing to say.
+	// What is asserted is not silence — a repeated report would be correct —
+	// but that the stream is still there at the end of it.
+	select {
+	case arrived := <-arriving:
+		if arrived.err != nil {
+			t.Fatalf("the stream was cut after less than %s: %v", browserIdleFor, arrived.err)
+		}
+
+		if arrived.flag == trailerFrameFlag {
+			t.Fatalf("the stream ended after less than %s, with trailers %s",
+				browserIdleFor, arrived.payload)
+		}
+	case <-time.After(browserIdleFor):
+	}
+
+	// The change the stream exists to announce, made the way UC11 makes one.
+	second := writeAWork(t, tablet, "Memórias Póstumas de Brás Cubas", "bras-cubas")
+
+	if announced := notification(t, arriving, "the change"); announced <= backlog {
+		t.Errorf("the stream announced position %d after %s was written, and it had already said %d",
+			announced, second, backlog)
+	}
+}
+
+// writeAWork has a device author one offline and hand it over, which is how
+// UC11 makes a change and the only path that grows the log (C21).
+func writeAWork(t *testing.T, appliance *device, name, contents string) uuid.UUID {
+	t.Helper()
+
+	appliance.disconnect(t)
+
+	written, err := appliance.CreateEbook(t.Context(), &client.EbookInput{
+		Title:       name,
+		Author:      "Machado de Assis",
+		Format:      "epub",
+		ContentHash: digestOf(t, contents),
+		Size:        8192,
+	})
+	if err != nil {
+		t.Fatalf("%s writing offline: %v", appliance.name, err)
+	}
+
+	appliance.reconnect(t)
+	push(t, appliance)
+
+	return written.Target
+}
+
+// notification waits for one report from the watch stream and returns the
+// position it carried.
+func notification(t *testing.T, arriving <-chan watchFrame, what string) int64 {
+	t.Helper()
+
+	select {
+	case arrived := <-arriving:
+		if arrived.err != nil {
+			t.Fatalf("the stream was cut before it announced %s: %v", what, arrived.err)
+		}
+
+		if arrived.flag == trailerFrameFlag {
+			t.Fatalf("the stream ended instead of announcing %s, with trailers %s", what, arrived.payload)
+		}
+
+		var notice quirev1.WatchOperationsResponse
+		if err := proto.Unmarshal(arrived.payload, &notice); err != nil {
+			t.Fatalf("%s is not a WatchOperationsResponse: %v", what, err)
+		}
+
+		return notice.GetLastPosition()
+	case <-time.After(browserIdleFor):
+		t.Fatalf("the stream did not announce %s within %s", what, browserIdleFor)
+	}
+
+	return 0
+}
+
+// watchFrame is one frame of a response that is still open, or the reason there
+// will not be another.
+type watchFrame struct {
+	flag    byte
+	payload []byte
+	err     error
+}
+
+// readFrames reads the frames of a gRPC-Web response as they arrive, rather
+// than after it ends.
+//
+// io.ReadAll is what the unary tests above use and it cannot serve here: a watch
+// stream ends when the caller hangs up, so reading it to completion is waiting
+// for something the test itself has to cause. The channel is buffered because
+// the goroutine outlives the test by however long it takes the closed body to
+// surface as an error, and a send onto an unbuffered channel nobody is reading
+// any more would leak it.
+func readFrames(body io.Reader) <-chan watchFrame {
+	arriving := make(chan watchFrame, 8)
+
+	go func() {
+		defer close(arriving)
+
+		header := make([]byte, frameHeaderSize)
+
+		for {
+			if _, err := io.ReadFull(body, header); err != nil {
+				arriving <- watchFrame{err: err}
+
+				return
+			}
+
+			payload := make([]byte, binary.BigEndian.Uint32(header[1:frameHeaderSize]))
+			if _, err := io.ReadFull(body, payload); err != nil {
+				arriving <- watchFrame{err: err}
+
+				return
+			}
+
+			arriving <- watchFrame{flag: header[0], payload: payload}
+		}
+	}()
+
+	return arriving
 }
