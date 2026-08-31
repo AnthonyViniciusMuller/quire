@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
@@ -42,6 +43,16 @@ const (
 	grpcWebContent    = "application/grpc-web+proto"
 	grpcWebLoginPath  = "/quire.v1.AuthService/Login"
 	browserOriginHead = "https://reader.example"
+
+	// The document RFC 8615 puts at a well-known path, and the one a client
+	// with no node yet has to be able to read.
+	//
+	// It is the *client* document and not the server one. They are two, and the
+	// difference is who is asking: a peer reads quire/server and learns the key
+	// to pin for mTLS, and a reader's application reads this and learns where to
+	// dial. A browser is the second, so this is the path whose readability
+	// decides whether a web client can find a node at all.
+	discoveryPath = "/.well-known/quire/client"
 )
 
 // TestGRPCWebPreflightAnswersWhatABrowserAsks covers the request no gRPC client
@@ -228,4 +239,84 @@ func trailersOf(t *testing.T, response *http.Response, payload []byte) map[strin
 	}
 
 	return trailers
+}
+
+// TestDiscoveryIsReadableByABrowser covers the document a first-run client
+// fetches before it knows any node at all.
+//
+// The browser lane above lets a page call every method in the contract. This is
+// the step before that: a reader types a domain into an empty client, and what
+// tells it where to send anything is this document. DiscoverServer answers the
+// same question over gRPC and cannot be used here, because an RPC has to be
+// addressed to a node already known — so a discovery route without a CORS
+// policy leaves a web client able to talk only to a node compiled into it.
+//
+// The failure it guards against is quiet in the worst way: the fetch succeeds,
+// the node answers 200, and the browser refuses to hand the body to the page
+// that asked. Nothing in a server log says so.
+func TestDiscoveryIsReadableByABrowser(t *testing.T) {
+	t.Parallel()
+
+	request, err := http.NewRequestWithContext(t.Context(),
+		http.MethodGet, nodeA.baseURL+discoveryPath, http.NoBody)
+	if err != nil {
+		t.Fatalf("building the lookup: %v", err)
+	}
+
+	request.Header.Set("Origin", browserOriginHead)
+
+	response, err := nodeA.httpClient(t).Do(request)
+	if err != nil {
+		t.Fatalf("the lookup did not reach the gateway: %v", err)
+	}
+
+	defer func() { _ = response.Body.Close() }()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("the lookup was answered %d, want %d", response.StatusCode, http.StatusOK)
+	}
+
+	// The header the whole document's reachability rests on. Without it the
+	// body below arrived and no page may look at it.
+	//
+	// A wildcard is what the node sends and what is wanted here. The document
+	// is public and uncredentialed — the same bytes for everybody, which is the
+	// point of putting it at a well-known path — so there is no cookie and no
+	// bearer token for a wildcard to expose. Echoing the origin instead would
+	// also be correct, and the assertion accepts either rather than pinning
+	// which layer answered.
+	origin := response.Header.Get("Access-Control-Allow-Origin")
+	if origin != "*" && origin != browserOriginHead {
+		t.Errorf("the lookup allowed origin %q, want %q or %q — a browser cannot read this document",
+			origin, "*", browserOriginHead)
+	}
+
+	// That it is the real document and not an error page the gateway allowed
+	// the reading of.
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("reading the document: %v", err)
+	}
+
+	var document struct {
+		Client struct {
+			BaseURL string `json:"base_url"`
+			GRPC    string `json:"grpc"`
+		} `json:"quire.client"`
+	}
+
+	if err := json.Unmarshal(body, &document); err != nil {
+		t.Fatalf("the document is not JSON: %v\n%s", err, body)
+	}
+
+	// The two fields the document exists to carry. A client that read it and
+	// found neither would have learned nothing it can dial, which is the same
+	// outcome as not being allowed to read it — reached differently.
+	if document.Client.BaseURL == "" {
+		t.Error("the document carries no base_url")
+	}
+
+	if document.Client.GRPC == "" {
+		t.Error("the document carries no grpc authority, which is what a client dials")
+	}
 }

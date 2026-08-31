@@ -34,6 +34,24 @@ spec:
               - cluster.local/ns/NAMESPACE/sa/quire-gateway
       to:
         - operation:
+            # GET and not OPTIONS, which is a constraint on the caller rather
+            # than an oversight. The node answers these documents with
+            # Access-Control-Allow-Origin: * itself — wellknown.go says why, and
+            # a browser is exactly the caller it says it for — so a web client
+            # reads them cross-origin with no help from this gateway.
+            #
+            # What that requires is that the lookup stays a *simple* request: a
+            # GET carrying no header a browser would preflight. One that does is
+            # refused here with 403, which looks like an authorization failure
+            # and is really a request shape this route does not serve. Allowing
+            # OPTIONS alone would not fix it — the preflight would be answered
+            # by a handler that names no allowed method or header, so the
+            # browser would refuse the call anyway — and answering it properly
+            # means a corsPolicy at the gateway setting a header the node
+            # already sets, which is one header from two places.
+            #
+            # A discovery lookup has no reason to send a custom header, so the
+            # constraint costs nothing and is written down instead of removed.
             methods: [GET]
             paths: ["/.well-known/*"]
 
