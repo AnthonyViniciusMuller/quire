@@ -1059,3 +1059,53 @@ password use case of phase 5, which consumes every session credential of the rea
 same unit of work as the password write, so a change that was rolled back leaves the sessions
 alone. The reference client drops the session it was holding rather than discovering at the
 next call that it is spent.
+
+### D10 — the browser is a fourth client, and it cannot speak gRPC
+
+RNF04 requires compatibility with mobile and desktop devices, and RNF09 names the same two in
+parentheses when it asks for the application state to be rebuilt periodically against the
+server. The client layer of 4.3 is Flutter, which section 2.6 introduces as a framework
+targeting iOS, Android, Web and desktop — the web is mentioned there as a property of the
+framework and is claimed nowhere as a target of this system. RNF02 makes the communication
+gRPC.
+
+The implementation accepts a browser as a client, which none of those requirements provides
+for, and 4.2.4 has to record what that costs.
+
+A browser cannot speak gRPC. It has no control over HTTP/2 frames and cannot read trailers,
+which is where gRPC puts the status of a call — the limitation is the browser's fetch and
+XHR interfaces, not the protocol's. gRPC-Web is the framing that answers it: the same
+messages, with the trailers moved into the body where a browser can reach them, translated
+back into gRPC by a proxy in front of the server.
+
+The translation is done by the gateway RNF12 already requires, not by the node. Nothing in
+`internal/` changes, no dependency is added, the listeners and the interceptor chain are
+untouched, and the contract in `proto/` is not extended. This is therefore not a second API
+beside the gRPC one — which `architecture.md` refuses on principle — but the same methods in
+a framing a browser is able to send.
+
+What it costs is that gRPC-Web carries unary and server-streaming calls and cannot carry a
+client-streaming or a bidirectional one. Two RPCs are unreachable from a browser for that
+reason, and they are unequal in what their absence means.
+
+`Sync` is the smaller loss, because the contract already carries its two halves separately.
+`sync.proto` documents the stream as "UC09, inbound and outbound, kept open", and
+`PushOperations` and `PullOperations` are the same push and the same pull as unary calls. A
+browser using them is a complete client: it serves UC09 and UC11 in full, and loses only
+UC10's *as it happens* — a change made on another device arrives at its next poll. RNF09 asks
+for exactly a periodic reconstruction of state, and it is the requirement that names mobile
+and desktop, so the one requirement that would have demanded the open stream is also the one
+that excludes the browser from it.
+
+`UploadEbookContent` is the real gap: UC02 has no browser-reachable path at all. The stream
+exists so that the node can refuse an oversized or unsupported file before any of the bytes
+travel, and so that it can hash them as they arrive — the guarantee that a truncated or
+altered transfer cannot be stored under a name that promises otherwise. Both properties are
+preservable without a client stream, but not without changing the contract, and the shape is
+an open question under [Design decisions settled](ROADMAP.md#design-decisions-settled) rather
+than an answer recorded here.
+
+**Record** in 4.2.4 that the browser is a client the implementation accepts and the
+specification does not describe; that its transport is gRPC-Web, translated by the gateway of
+RNF12 rather than by the node; that UC10 degrades to a poll for it, within what RNF09 already
+asks of mobile and desktop; and that UC02 is not reachable from it at the time of writing.

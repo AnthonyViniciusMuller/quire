@@ -602,6 +602,53 @@ the entry in [`tcc-corrections.md`](tcc-corrections.md) the answer produced.
       keeps messages in. With those, `make test-kind` passes: the whole suite, against two
       nodes under `QUIRE_ENV=production`, in 116 s
 
+## Phase 13 — the browser as a client
+
+Not a slice either, and not a requirement: RNF04 asks for mobile and desktop, and a browser is
+neither. What it is is a client the node can serve without changing, because the translation
+belongs to the gateway RNF12 already requires — so this phase adds manifests and a test, and
+`internal/` is untouched until the last item.
+
+- [x] `docs: settle how a browser reaches the node` — D10, recorded rather than settled: a
+      browser cannot speak gRPC, because it cannot read the trailers a status arrives in, and
+      gRPC-Web is the framing that moves them into the body. The translation is the gateway's
+      and not the node's, so no dependency is added and the contract is not extended — this is
+      the same methods in a framing a browser can send, and not the second API
+      `architecture.md` refuses. It costs the two RPCs gRPC-Web cannot carry. `Sync` is the
+      cheap one, since `PushOperations` and `PullOperations` are already the same push and pull
+      as unary calls and RNF09 asks for a poll in the first place; `UploadEbookContent` is the
+      expensive one, and its shape is the question this phase leaves open
+- [ ] `feat: route grpc web through the gateway` — the browser lane. Port 8443 already
+      terminates for the discovery documents, so what it gains is a second route and the
+      `corsPolicy` that lets a browser read `grpc-status` off the response. Two things had to
+      be checked against a running gateway rather than assumed, and one of them came back the
+      wrong way: Istio 1.30.3 does **not** put `envoy.filters.http.grpc_web` in a gateway's
+      HTTP filter chain. It is compiled into the proxy — it is listed among the available
+      extensions in the bootstrap — but no listener references it, 8443 included, so an
+      `EnvoyFilter` has to insert it. That is Istio's break-glass API and it is version-coupled
+      by construction, which is a cost this phase accepts rather than hides: the alternative is
+      a whole Envoy workload per node whose only job is to run the same filter. The obvious
+      version of this does not work either: `service.yaml` names the API port
+      `tls-grpc` so the sidecar forwards a ClientHello untouched, that name is what Istio reads
+      a port's protocol from, and an HTTP route to a TCP port is never programmed. A
+      `ServiceEntry` is what resolves it — a second declaration of the same endpoint, HTTP/2,
+      for the gateway's outbound view only, with a `DestinationRule` originating TLS to it and
+      verifying the node against the `ca.crt` cert-manager writes beside every certificate it
+      signs. The node's inbound view still comes from the `Service` and does not change, and
+      both descriptions are true of the same wire: a TLS stream carrying HTTP/2 frames
+- [ ] `test: cover the grpc web route` — a browser-shaped call in the kind suite. It is the
+      only way to know the route works, since what is being asserted is a translation nothing
+      in this repository performs
+- [ ] `feat: add watch operations server stream` — UC10's *as it happens*, for a client that
+      cannot hold the bidirectional stream open. A server stream is the half gRPC-Web does
+      carry, and the cheapest shape is a notification and not a delivery: it says there is
+      something after position N and the caller answers with `PullOperations`, so the durable
+      path stays the one that already exists and the cursor stays where the unary pair already
+      keeps it — with the caller, which is a stronger place for it than the stream's `SyncAck`
+- [ ] `feat: accept a chunked upload` — blocked on the open question below, and the largest
+      item here by a distance: it changes the contract, the library slice's use cases and
+      handlers, and the reference client
+
 ## Design decisions settled
 
 Questions found while implementing, whose answer belongs in the thesis and had to be settled
@@ -609,9 +656,24 @@ before the commit that depended on them. A question stayed here only while it wa
 answered it became an entry in [`tcc-corrections.md`](tcc-corrections.md), so that the answer
 travels with the correction it produced rather than with the doubt it started as.
 
-**None is open.** The list below is what was asked and what was decided, kept because the
-questions are part of the record: an answer with no question in front of it reads as an
-assumption.
+**One is open.** How UC02 should accept a file from a caller that cannot open a client
+stream, asked on 2026-08-31. `UploadEbookContent` is a client stream, gRPC-Web cannot carry
+one (D10), and a browser therefore has no way to put an e-book on the node at all. The stream
+buys two things and both have to survive whatever replaces it: the description arrives first,
+so a file larger than `QUIRE_STORAGE_MAX_UPLOAD_BYTES` is refused before any of its bytes
+travel; and the node hashes the bytes as it receives them, so a transfer that was truncated or
+altered cannot be stored under a digest that promises otherwise (C16). The candidate is an
+upload session addressed by offset — begin, put a chunk, finish — which keeps both and is
+resumable, where the stream is not: a transfer that dies at nine tenths starts again from
+nothing today. It is not free. It puts partial-upload state somewhere, and the three object
+stores of D08 all offer multipart uploads addressed by part number, so the state can live
+where the bytes are rather than in PostgreSQL. The alternative considered and not chosen is a
+pre-signed `PUT` straight to the object store, which is how a browser normally uploads a large
+file and which cannot hash on arrival — it moves C16's guarantee to a pass that reads the
+object back afterwards, and that is a weaker statement than the one the contract makes today.
+
+The list below is what was asked and what was decided, kept because the questions are part of
+the record: an answer with no question in front of it reads as an assumption.
 
 Six have been settled. Whether `updated_at` could break ties as a wall clock, on
 2026-08-26: it cannot, and it becomes a hybrid logical clock — the counterexample and the
