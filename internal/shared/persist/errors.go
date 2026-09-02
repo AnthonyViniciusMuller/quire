@@ -99,7 +99,7 @@ func classifyCode(code string) (kind errs.Kind, message string) {
 
 	// Both mean the transaction lost a race it can win by running again, which
 	// is why KindConflict is retryable. Manager.Within retries them for the
-	// caller.
+	// caller — on these two codes, not on the kind, which other things share.
 	case pgerrcode.SerializationFailure, pgerrcode.DeadlockDetected:
 		return errs.KindConflict, msgConcurrent
 

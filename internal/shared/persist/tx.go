@@ -5,10 +5,11 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/anthonyvsmuller/quire/internal/shared/errs"
 	"github.com/anthonyvsmuller/quire/internal/shared/logging"
 )
 
@@ -110,7 +111,7 @@ func (m *Manager) WithinOptions(
 
 	for attempt := 1; attempt <= defaultMaxAttempts; attempt++ {
 		err = m.runOnce(ctx, &options, fn)
-		if !errors.Is(err, errs.KindConflict) {
+		if !lostRace(err) {
 			return err
 		}
 
@@ -166,6 +167,29 @@ func (m *Manager) runOnce(
 	default:
 		return nil
 	}
+}
+
+// lostRace reports whether the database itself said the transaction lost a
+// race it can win by running again: a serialization failure or a deadlock.
+//
+// It asks the driver's error and not the node's kind on purpose. Classify
+// answers both codes with KindConflict, but so does a use case that finds a
+// record already taken — a refresh credential that was spent, a lock held
+// with NOWAIT — and that is a fact about the data, which running the same
+// work again will only confirm. Retrying on the kind replayed every one of
+// those three times, logged two warnings about a concurrent write that never
+// happened, and still returned the same answer. The SQLSTATE is the one
+// signal that means what the retry assumes.
+//
+// The cause is reached through the chain, so a repository that wrapped the
+// driver's error with its own message does not hide it.
+func lostRace(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+
+	return pgErr.Code == pgerrcode.SerializationFailure || pgErr.Code == pgerrcode.DeadlockDetected
 }
 
 // txInto returns a context running inside tx.

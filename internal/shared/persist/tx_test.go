@@ -12,8 +12,12 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/anthonyvsmuller/quire/internal/shared/errs"
 )
 
 // stubTx stands in for a transaction. Only its identity matters here, so the
@@ -117,5 +121,36 @@ func TestTxFromIgnoresAnUnrelatedContext(t *testing.T) {
 
 	if _, ok := txFrom(t.Context()); ok {
 		t.Error("txFrom found a transaction in a context that carries none")
+	}
+}
+
+// Only the database can say a transaction lost a race. A use case that found
+// a record already taken answers with the same kind, and replaying it three
+// times would only find the record taken three times.
+func TestLostRaceListensToTheDatabaseAndNotToTheKind(t *testing.T) {
+	t.Parallel()
+
+	serialization := &pgconn.PgError{Code: pgerrcode.SerializationFailure}
+	deadlock := &pgconn.PgError{Code: pgerrcode.DeadlockDetected}
+	unique := &pgconn.PgError{Code: pgerrcode.UniqueViolation}
+
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"a serialization failure", Classify(serialization, "test"), true},
+		{"a deadlock", Classify(deadlock, "test"), true},
+		{"a deadlock a repository wrapped again", errs.Wrap(Classify(deadlock, "test"), errs.KindUnavailable, "wrapped"), true},
+		{"a unique violation", Classify(unique, "test"), false},
+		{"a conflict the use case raised", errs.New(errs.KindConflict, "that credential has already been used"), false},
+		{"a context that was canceled", context.Canceled, false},
+		{"no error", nil, false},
+	}
+
+	for _, tc := range cases {
+		if got := lostRace(tc.err); got != tc.want {
+			t.Errorf("lostRace(%s) = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }
