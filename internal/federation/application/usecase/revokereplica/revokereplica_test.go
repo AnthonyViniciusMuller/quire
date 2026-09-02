@@ -43,7 +43,7 @@ func TestExecuteKeepsTheRow(t *testing.T) {
 	reader, node := uuid.New(), uuid.New()
 	replicas := granted(t, reader, node)
 
-	if _, err := revokereplica.New(replicas).Execute(t.Context(),
+	if _, err := revokereplica.New(replicas, apptest.NewPeers()).Execute(t.Context(),
 		revokereplica.Input{UserID: reader, ServerID: node}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestExecuteTwiceSucceeds(t *testing.T) {
 	t.Parallel()
 
 	reader, node := uuid.New(), uuid.New()
-	usecase := revokereplica.New(granted(t, reader, node))
+	usecase := revokereplica.New(granted(t, reader, node), apptest.NewPeers())
 
 	for attempt := range 2 {
 		if _, err := usecase.Execute(t.Context(),
@@ -89,7 +89,7 @@ func TestExecuteForAnotherReadersPermission(t *testing.T) {
 	node := uuid.New()
 	replicas := granted(t, uuid.New(), node)
 
-	_, err := revokereplica.New(replicas).Execute(t.Context(),
+	_, err := revokereplica.New(replicas, apptest.NewPeers()).Execute(t.Context(),
 		revokereplica.Input{UserID: uuid.New(), ServerID: node})
 	if err == nil {
 		t.Fatal("Execute for another reader's permission = nil, want an error")
@@ -97,5 +97,38 @@ func TestExecuteForAnotherReadersPermission(t *testing.T) {
 
 	if !errors.Is(err, errs.KindNotFound) || errs.CodeOf(err) != replica.CodeNotFound {
 		t.Errorf("error = %v, want a not-found coded %q", err, replica.CodeNotFound)
+	}
+}
+
+// The node is told, and a node that could not be told does not keep the
+// reader from withdrawing what is theirs: the revocation here is what
+// protects them, and it stands either way.
+func TestExecuteTellsTheNodeAndStandsWhenItCannot(t *testing.T) {
+	t.Parallel()
+
+	reader, node := uuid.New(), uuid.New()
+	peers := apptest.NewPeers()
+
+	if _, err := revokereplica.New(granted(t, reader, node), peers).Execute(t.Context(),
+		revokereplica.Input{UserID: reader, ServerID: node}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if told := peers.Withdrawn(node); len(told) != 1 || told[0] != reader {
+		t.Errorf("the node was told %v withdrew, want the reader", told)
+	}
+
+	silent := apptest.NewPeers()
+	silent.Err = errs.New(errs.KindUnavailable, "no route to host")
+	replicas := granted(t, reader, node)
+
+	if _, err := revokereplica.New(replicas, silent).Execute(t.Context(),
+		revokereplica.Input{UserID: reader, ServerID: node}); err != nil {
+		t.Fatalf("Execute against a node that cannot be told: %v", err)
+	}
+
+	withdrawn, err := replicas.GetByPair(t.Context(), reader, node)
+	if err != nil || withdrawn.Active {
+		t.Errorf("the permission still stands because another operator's node was down: %v", err)
 	}
 }

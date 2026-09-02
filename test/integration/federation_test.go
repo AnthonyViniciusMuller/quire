@@ -111,8 +111,15 @@ func serveFederation(t *testing.T) federation {
 		t.Fatalf("building the identity slice: %v", err)
 	}
 
+	dialer, err := grpcx.NewPeerDialer(&cfg.Federation)
+	if err != nil {
+		t.Fatalf("building the peer dialer: %v", err)
+	}
+
+	t.Cleanup(func() { _ = dialer.Close() })
+
 	federationContainer := federationdi.Initialize(cfg, pool, identityContainer.Migration,
-		identityContainer.Users, identityContainer.Devices)
+		identityContainer.Users, identityContainer.Devices, dialer)
 
 	grpcServer, err := grpcx.New(t.Context(), &cfg.Server,
 		grpcx.WithChain(grpcx.NewChain(logging.Discard())),

@@ -33,6 +33,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/shared/hlc"
 	"github.com/anthonyvsmuller/quire/internal/shared/logging"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
+	syncapptest "github.com/anthonyvsmuller/quire/internal/sync/application/apptest"
 	"github.com/anthonyvsmuller/quire/internal/sync/application/usecase/replicate"
 	syncdi "github.com/anthonyvsmuller/quire/internal/sync/di"
 	"github.com/anthonyvsmuller/quire/internal/sync/domain/operation"
@@ -76,8 +77,15 @@ func serveSync(t *testing.T) synchronization {
 		t.Fatalf("building the identity slice: %v", err)
 	}
 
+	dialer, err := grpcx.NewPeerDialer(&cfg.Federation)
+	if err != nil {
+		t.Fatalf("building the peer dialer: %v", err)
+	}
+
+	t.Cleanup(func() { _ = dialer.Close() })
+
 	federationContainer := federationdi.Initialize(cfg, pool, identityContainer.Migration,
-		identityContainer.Users, identityContainer.Devices)
+		identityContainer.Users, identityContainer.Devices, dialer)
 
 	libraryContainer, err := librarydi.Initialize(t.Context(), cfg, pool, clock, logging.Discard())
 	if err != nil {
@@ -88,15 +96,9 @@ func serveSync(t *testing.T) synchronization {
 
 	readingContainer := readingdi.Initialize(pool, libraryContainer.Ebooks, clock)
 
-	dialer, err := grpcx.NewPeerDialer(&cfg.Federation)
-	if err != nil {
-		t.Fatalf("building the peer dialer: %v", err)
-	}
-
-	t.Cleanup(func() { _ = dialer.Close() })
-
 	syncContainer := syncdi.Initialize(cfg, pool, clock, dialer,
-		federationContainer.Servers, federationContainer.Authorizations, &syncdi.Records{
+		federationContainer.Servers, federationContainer.Authorizations,
+		federationContainer.Peers, federationContainer.Readers, &syncdi.Records{
 			Works:     libraryContainer.Ebooks,
 			Groupings: libraryContainer.Collections,
 			Filings:   libraryContainer.Memberships,
@@ -997,6 +999,7 @@ func (s *synchronization) authorizeReplica(t *testing.T, domain string) replicat
 			deliveryrepository.New(manager),
 			operationrepository.New(manager),
 			federation,
+			syncapptest.NewAdmissions(),
 			syncclock.New(hlc.New()),
 			30*time.Second,
 			100,

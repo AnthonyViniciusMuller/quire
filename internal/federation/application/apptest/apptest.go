@@ -511,6 +511,8 @@ type Readers struct {
 	mu       sync.Mutex
 	origins  map[uuid.UUID]uuid.UUID
 	devices  map[uuid.UUID]uuid.UUID
+	known    map[uuid.UUID]service.Reader
+	bound    map[uuid.UUID][]service.Device
 	admitted int
 	// Err, when set, is what Admit reports, standing for an identity slice
 	// that could not be written.
@@ -522,7 +524,35 @@ var _ service.Readers = (*Readers)(nil)
 
 // NewReaders returns a slice holding nobody.
 func NewReaders() *Readers {
-	return &Readers{origins: map[uuid.UUID]uuid.UUID{}, devices: map[uuid.UUID]uuid.UUID{}}
+	return &Readers{
+		origins: map[uuid.UUID]uuid.UUID{},
+		devices: map[uuid.UUID]uuid.UUID{},
+		known:   map[uuid.UUID]service.Reader{},
+		bound:   map[uuid.UUID][]service.Device{},
+	}
+}
+
+// Bind records a reader this node hosts and the devices they have bound, for
+// Describe to answer with.
+func (r *Readers) Bind(reader service.Reader, devices ...service.Device) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.known[reader.ID] = reader
+	r.bound[reader.ID] = slices.Clone(devices)
+}
+
+// Describe returns the reader and their devices, or errs.KindNotFound.
+func (r *Readers) Describe(_ context.Context, userID uuid.UUID) (*service.Reader, []service.Device, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	reader, held := r.known[userID]
+	if !held {
+		return nil, nil, errs.New(errs.KindNotFound, "no such reader here")
+	}
+
+	return &reader, slices.Clone(r.bound[userID]), nil
 }
 
 // Host records a reader this node holds already, under the origin given —
@@ -593,4 +623,69 @@ func (r *Readers) Admitted() int {
 	defer r.mu.Unlock()
 
 	return r.admitted
+}
+
+// Peers is the federation as this node calls it: the admissions and the
+// withdrawals it has sent, per node.
+type Peers struct {
+	mu        sync.Mutex
+	admitted  map[uuid.UUID][]service.Admission
+	withdrawn map[uuid.UUID][]uuid.UUID
+	// Err, when set, is what every call reports, standing for a peer that
+	// cannot be reached or refuses.
+	Err error
+}
+
+// Peers satisfies the port the use cases hold.
+var _ service.Peers = (*Peers)(nil)
+
+// NewPeers returns a federation that accepts everything it is told.
+func NewPeers() *Peers {
+	return &Peers{admitted: map[uuid.UUID][]service.Admission{}, withdrawn: map[uuid.UUID][]uuid.UUID{}}
+}
+
+// Admit records what the node was told.
+func (p *Peers) Admit(_ context.Context, serverID uuid.UUID, admission *service.Admission) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.Err != nil {
+		return p.Err
+	}
+
+	copied := *admission
+	copied.Devices = slices.Clone(admission.Devices)
+	p.admitted[serverID] = append(p.admitted[serverID], copied)
+
+	return nil
+}
+
+// Withdraw records what the node was told.
+func (p *Peers) Withdraw(_ context.Context, serverID, userID uuid.UUID) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.Err != nil {
+		return p.Err
+	}
+
+	p.withdrawn[serverID] = append(p.withdrawn[serverID], userID)
+
+	return nil
+}
+
+// Admissions is everything one node was told, in order.
+func (p *Peers) Admissions(serverID uuid.UUID) []service.Admission {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return slices.Clone(p.admitted[serverID])
+}
+
+// Withdrawn is every reader one node was told has withdrawn, in order.
+func (p *Peers) Withdrawn(serverID uuid.UUID) []uuid.UUID {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return slices.Clone(p.withdrawn[serverID])
 }

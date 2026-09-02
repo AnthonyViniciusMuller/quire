@@ -27,6 +27,7 @@ type fixture struct {
 	deliveries *apptest.DeliveryRepository
 	log        *apptest.OperationRepository
 	peers      *apptest.Peers
+	admissions *apptest.Admissions
 	clock      *apptest.Clock
 
 	peer   uuid.UUID
@@ -38,13 +39,15 @@ func newFixture() *fixture {
 	deliveries := apptest.NewDeliveryRepository()
 	log := apptest.NewOperationRepository()
 	peers := apptest.NewPeers()
+	admissions := apptest.NewAdmissions()
 	clock := apptest.NewClock(authored)
 
 	return &fixture{
-		usecase:    replicate.New(deliveries, log, peers, clock, backoff, 100),
+		usecase:    replicate.New(deliveries, log, peers, admissions, clock, backoff, 100),
 		deliveries: deliveries,
 		log:        log,
 		peers:      peers,
+		admissions: admissions,
 		clock:      clock,
 		peer:       uuid.New(),
 		reader:     uuid.New(),
@@ -220,7 +223,8 @@ func TestExecuteLeavesOwedAChangeThePeerRefused(t *testing.T) {
 	// And it is offered again once the backoff lifts, to a peer that by then
 	// holds what the change depends on.
 	f.peers.Refuse = nil
-	later := replicate.New(f.deliveries, f.log, f.peers, apptest.NewClock(authored.Add(3*backoff)), backoff, 100)
+	later := replicate.New(f.deliveries, f.log, f.peers, f.admissions,
+		apptest.NewClock(authored.Add(3*backoff)), backoff, 100)
 
 	if _, err = later.Execute(t.Context(), replicate.Input{}); err != nil {
 		t.Fatalf("the second pass: %v", err)
@@ -295,5 +299,42 @@ func TestExecutePassesOnAFailureOfTheNode(t *testing.T) {
 
 	if _, err := f.usecase.Execute(t.Context(), replicate.Input{}); err == nil {
 		t.Error("Execute reported a pass over a queue it could not read")
+	}
+}
+
+// A peer is told who the reader is before it is offered anything of theirs
+// (C22), and a peer that could not be told is not offered the batch: it
+// would refuse what it cannot hold, and the batch is counted as a failed try
+// instead so that the backoff applies.
+func TestExecuteAdmitsTheReaderBeforeOfferingTheirChanges(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture()
+	f.owe(t, f.reader, 2)
+
+	if _, err := f.usecase.Execute(t.Context(), replicate.Input{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	admitted := f.admissions.Admitted()
+	if len(admitted) != 1 || admitted[0] != [2]uuid.UUID{f.peer, f.reader} {
+		t.Errorf("the pass admitted %v, want the reader to the peer once, before the batch", admitted)
+	}
+
+	f = newFixture()
+	f.owe(t, f.reader, 2)
+	f.admissions.Err = errs.New(errs.KindUnavailable, "no route to host")
+
+	output, err := f.usecase.Execute(t.Context(), replicate.Input{})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if output.Failed != 2 || output.Confirmed != 0 {
+		t.Errorf("the pass reported %+v, want both changes left owed", output)
+	}
+
+	if offered := f.peers.Offered(); len(offered) != 0 {
+		t.Errorf("the peer was offered %v before it had been told who the reader is", offered)
 	}
 }

@@ -27,6 +27,7 @@ package di
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/anthonyvsmuller/quire/internal/federation/application/service"
 	addserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/addserver"
 	admitreplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/admitreplica"
 	authorizereplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/authorizereplica"
@@ -59,10 +60,12 @@ import (
 	serverrepository "github.com/anthonyvsmuller/quire/internal/federation/infra/repository/server"
 	clockservice "github.com/anthonyvsmuller/quire/internal/federation/infra/service/clock"
 	discoveryservice "github.com/anthonyvsmuller/quire/internal/federation/infra/service/discovery"
+	peersservice "github.com/anthonyvsmuller/quire/internal/federation/infra/service/peers"
 	readersservice "github.com/anthonyvsmuller/quire/internal/federation/infra/service/readers"
 	identitydevice "github.com/anthonyvsmuller/quire/internal/identity/domain/device"
 	identityuser "github.com/anthonyvsmuller/quire/internal/identity/domain/user"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
+	"github.com/anthonyvsmuller/quire/internal/shared/grpcx"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 )
 
@@ -79,6 +82,12 @@ type Container struct {
 	Authorizations replica.Repository
 	// Service is the gRPC surface of the slice, ready to be registered.
 	Service *federationservice.Service
+	// Peers and Readers are this slice's ports, exposed for the sync slice:
+	// the delivery pass tells a node who a reader is before it offers their
+	// changes (C22), and it does so through these rather than through a
+	// second client of the federation.
+	Peers   service.Peers
+	Readers service.Readers
 }
 
 // Catalogue is the node catalogue over the pool, and the one piece of this
@@ -114,6 +123,7 @@ func Initialize(
 	migration *migratehomeserver.MigrateHomeServer,
 	users identityuser.Repository,
 	devices identitydevice.Repository,
+	dialer *grpcx.PeerDialer,
 ) *Container {
 	manager := persist.NewManager(pool)
 
@@ -123,6 +133,7 @@ func Initialize(
 	discovery := discoveryservice.New(&cfg.Federation)
 	clock := clockservice.New()
 	readers := readersservice.New(users, devices, clock)
+	peers := peersservice.New(dialer, servers, cfg.Federation.DiscoveryTimeout)
 
 	// The manager itself is the unit of work: its Within is the port, so no
 	// adapter stands between them.
@@ -138,7 +149,7 @@ func Initialize(
 		RemoveKnownServer:  removeknownserver.New(removeserverusecase.New(servers, replicas, transaction)),
 		AuthorizeReplica: authorizereplica.New(
 			authorizereplicausecase.New(servers, replicas, clock, transaction)),
-		RevokeReplica: revokereplica.New(revokereplicausecase.New(replicas)),
+		RevokeReplica: revokereplica.New(revokereplicausecase.New(replicas, peers)),
 		ListReplicaAuthorizations: listreplicaauthorizations.New(
 			listauthorizationsusecase.New(servers, replicas)),
 		MigrateHomeServer: migration,
@@ -151,5 +162,7 @@ func Initialize(
 		Servers:        servers,
 		Authorizations: replicas,
 		Service:        federationservice.New(&controllers),
+		Peers:          peers,
+		Readers:        readers,
 	}
 }

@@ -44,4 +44,10 @@ type Readers interface {
 	// claims, and a claim over a row that already has an owner is not one a
 	// peer gets to make. A name it cannot parse is errs.KindInvalidArgument.
 	Admit(ctx context.Context, originServerID uuid.UUID, reader *Reader, devices []Device) error
+
+	// Describe returns a reader this node holds and every device they have
+	// bound, active or not — an operation authored by a device since unbound
+	// is still one a replica has to be able to attribute. It is what the
+	// origin's side of an admission is built from.
+	Describe(ctx context.Context, userID uuid.UUID) (*Reader, []Device, error)
 }

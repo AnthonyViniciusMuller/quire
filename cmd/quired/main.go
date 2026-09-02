@@ -114,7 +114,7 @@ func run(ctx context.Context) error {
 
 	defer func() { _ = dialer.Close() }()
 
-	federation := federationdi.Initialize(cfg, pool, identity.Migration, identity.Users, identity.Devices)
+	federation := federationdi.Initialize(cfg, pool, identity.Migration, identity.Users, identity.Devices, dialer)
 
 	// For the same reason, and one of its own: which object store holds the
 	// readers' files is decided here, and an endpoint the SDK cannot address
@@ -141,7 +141,7 @@ func run(ctx context.Context) error {
 	// that is this file's job — the sync slice imports no container but its
 	// own.
 	synchronization := syncdi.Initialize(cfg, pool, clock, dialer,
-		federation.Servers, federation.Authorizations, &syncdi.Records{
+		federation.Servers, federation.Authorizations, federation.Peers, federation.Readers, &syncdi.Records{
 			Works:     library.Ebooks,
 			Groupings: library.Collections,
 			Filings:   library.Memberships,

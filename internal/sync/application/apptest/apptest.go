@@ -706,3 +706,41 @@ func (r *Replicas) Authorized(_ context.Context, serverID, userID uuid.UUID) err
 
 	return errs.New(errs.KindPermissionDenied, "the reader has not authorized this node")
 }
+
+// Admissions is the origin's half of C22 as a fake: it remembers which pairs
+// the pass asked it to admit.
+type Admissions struct {
+	mu       sync.Mutex
+	admitted [][2]uuid.UUID
+	// Err, when set, is what Admit reports, standing for a node that could
+	// not be told.
+	Err error
+}
+
+// Admissions satisfies the port the use cases hold.
+var _ service.Admissions = (*Admissions)(nil)
+
+// NewAdmissions returns a fake that admits everybody.
+func NewAdmissions() *Admissions { return &Admissions{} }
+
+// Admit records the pair.
+func (a *Admissions) Admit(_ context.Context, serverID, userID uuid.UUID) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.Err != nil {
+		return a.Err
+	}
+
+	a.admitted = append(a.admitted, [2]uuid.UUID{serverID, userID})
+
+	return nil
+}
+
+// Admitted is every pair admitted, in order: the node first, then the reader.
+func (a *Admissions) Admitted() [][2]uuid.UUID {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	return slices.Clone(a.admitted)
+}

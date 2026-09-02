@@ -13,34 +13,39 @@ package revokereplica
 
 import (
 	"context"
+	"log/slog"
 
+	"github.com/anthonyvsmuller/quire/internal/federation/application/service"
 	command "github.com/anthonyvsmuller/quire/internal/federation/application/usecase"
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/replica"
+	"github.com/anthonyvsmuller/quire/internal/shared/logging"
 )
 
-// RevokeReplica withdraws permissions.
+// RevokeReplica withdraws a permission a reader granted.
 type RevokeReplica struct {
 	replicas replica.Repository
+	peers    service.Peers
 }
 
 // RevokeReplica satisfies the shape every use case of the slice has.
 var _ command.Usecase[Input, Output] = (*RevokeReplica)(nil)
 
 // New returns the use case over its dependencies.
-func New(replicas replica.Repository) *RevokeReplica {
-	return &RevokeReplica{replicas: replicas}
+func New(replicas replica.Repository, peers service.Peers) *RevokeReplica {
+	return &RevokeReplica{replicas: replicas, peers: peers}
 }
 
-// Execute withdraws the permission.
+// Execute deactivates the permission, and tells the node.
 //
-// Revoking one that is already revoked succeeds and writes the same row again.
-// The reader asked for a state and it is the state they get, and a call that
-// failed the second time would have a client showing an error for a node it
-// has already stopped.
+// The revocation is this node's and is what protects the reader: nothing is
+// offered to a node the permission no longer names. Telling the node is the
+// mirror of C22, so that a revoked replica stops accepting rather than
+// merely stops being sent things, and it is attempted once and not insisted
+// on — a node that could not be told holds a permission that nothing here
+// will ever act on, and a revocation that failed because another operator's
+// node was down would be a reader unable to withdraw what is theirs.
 //
-// It takes no lock and opens no unit of work: one row is read and written, and
-// the calls a lock would serialize it against are the ones that grant, not the
-// ones that withdraw.
+//nolint:gocritic // hugeParam: the Usecase interface fixes this signature by value.
 func (r *RevokeReplica) Execute(ctx context.Context, input Input) (Output, error) {
 	authorization, err := r.replicas.GetByPair(ctx, input.UserID, input.ServerID)
 	if err != nil {
@@ -49,5 +54,15 @@ func (r *RevokeReplica) Execute(ctx context.Context, input Input) (Output, error
 
 	authorization.Revoke()
 
-	return Output{}, r.replicas.Update(ctx, authorization)
+	if err = r.replicas.Update(ctx, authorization); err != nil {
+		return Output{}, err
+	}
+
+	if err = r.peers.Withdraw(ctx, input.ServerID, input.UserID); err != nil {
+		logging.From(ctx).WarnContext(ctx, "a node could not be told the reader withdrew its permission",
+			slog.String("server_id", input.ServerID.String()),
+			slog.String("user_id", input.UserID.String()), logging.Err(err))
+	}
+
+	return Output{}, nil
 }

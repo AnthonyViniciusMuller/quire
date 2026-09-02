@@ -19,6 +19,13 @@
 // the far end, because the reconciler there creates records only from an
 // insert — and a refusal is not final, which is the third decision.
 //
+// It tells the peer who the reader is before it offers anything of theirs.
+// A replica holds nothing until its own tables name the reader and their
+// devices (C22), and devices are bound after the authorization as often as
+// before it, so the moment a reader's changes are about to reach a node is
+// the moment to make sure the node can hold them. The adapter remembers what
+// a node was told and calls it only when that changed.
+//
 // It records the outcome of every try, and the count is what the backoff is
 // computed from. A peer belonging to another operator is unreachable often
 // enough that retrying it at full rate would be this node's largest source of
@@ -46,6 +53,7 @@ type Replicate struct {
 	deliveries delivery.Repository
 	log        operation.Repository
 	peers      service.Peers
+	admissions service.Admissions
 	clock      service.Clock
 	backoff    time.Duration
 	batchSize  int
@@ -60,6 +68,7 @@ func New(
 	deliveries delivery.Repository,
 	log operation.Repository,
 	peers service.Peers,
+	admissions service.Admissions,
 	clock service.Clock,
 	backoff time.Duration,
 	batchSize int,
@@ -68,6 +77,7 @@ func New(
 		deliveries: deliveries,
 		log:        log,
 		peers:      peers,
+		admissions: admissions,
 		clock:      clock,
 		backoff:    backoff,
 		batchSize:  batchSize,
@@ -185,21 +195,36 @@ type pass struct {
 func (r *Replicate) offer(ctx context.Context, serverID uuid.UUID, batch *readerBatch) (pass, error) {
 	attempted := r.clock.Now()
 
-	results, err := r.peers.Replicate(ctx, serverID, batch.userID, batch.operations)
-	if err != nil {
-		logging.From(ctx).WarnContext(ctx, "a peer could not be offered what it is owed",
-			slog.String("server_id", serverID.String()),
-			slog.Int("owed", len(batch.operations)), logging.Err(err))
+	// The peer is told who the reader is first, and a peer that could not be
+	// told is a peer that would refuse the batch: the batch is counted as a
+	// failed try rather than offered to a node that cannot hold it.
+	err := r.admissions.Admit(ctx, serverID, batch.userID)
+	if err == nil {
+		var results []operation.Result
 
-		failed, recordErr := r.deliveries.Record(ctx, serverID, batch.identifiers(),
-			&delivery.Attempt{At: attempted, Err: err})
-		if recordErr != nil {
-			return pass{}, recordErr
+		results, err = r.peers.Replicate(ctx, serverID, batch.userID, batch.operations)
+		if err == nil {
+			return r.settle(ctx, serverID, batch, results, attempted)
 		}
-
-		return pass{Failed: failed, unreachable: true}, nil
 	}
 
+	logging.From(ctx).WarnContext(ctx, "a peer could not be offered what it is owed",
+		slog.String("server_id", serverID.String()),
+		slog.Int("owed", len(batch.operations)), logging.Err(err))
+
+	failed, recordErr := r.deliveries.Record(ctx, serverID, batch.identifiers(),
+		&delivery.Attempt{At: attempted, Err: err})
+	if recordErr != nil {
+		return pass{}, recordErr
+	}
+
+	return pass{Failed: failed, unreachable: true}, nil
+}
+
+// settle records what the peer answered about one reader's batch.
+func (r *Replicate) settle(
+	ctx context.Context, serverID uuid.UUID, batch *readerBatch, results []operation.Result, attempted time.Time,
+) (pass, error) {
 	answered := make([]uuid.UUID, 0, len(results))
 	settled := make([]uuid.UUID, 0, len(results))
 	refused := make([]operation.Result, 0)

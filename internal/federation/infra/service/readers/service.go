@@ -26,6 +26,9 @@ import (
 // expects.
 const opAdmit = "federation/readers: admit"
 
+// opDescribe is the operation reported by Describe.
+const opDescribe = "federation/readers: describe"
+
 // The stable machine-readable codes this adapter raises.
 const (
 	// CodeReaderHeld is a reader this node holds under another node — one it
@@ -146,4 +149,34 @@ func (s *Service) admitDevice(ctx context.Context, readerID uuid.UUID, appliance
 	default:
 		return nil
 	}
+}
+
+// Describe returns the reader and every device of theirs, as an admission
+// carries them.
+func (s *Service) Describe(ctx context.Context, userID uuid.UUID) (*service.Reader, []service.Device, error) {
+	held, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, nil, errs.Wrap(err, errs.KindOf(err), "the reader could not be described").WithOp(opDescribe)
+	}
+
+	bound, err := s.devices.ListByUser(ctx, userID, true)
+	if err != nil {
+		return nil, nil, errs.Wrap(err, errs.KindOf(err), "the reader's devices could not be listed").WithOp(opDescribe)
+	}
+
+	devices := make([]service.Device, 0, len(bound))
+
+	for _, appliance := range bound {
+		devices = append(devices, service.Device{
+			ID:       appliance.ID,
+			Name:     appliance.Name.String(),
+			Platform: appliance.Platform.String(),
+		})
+	}
+
+	return &service.Reader{
+		ID:          held.ID,
+		LocalName:   held.LocalName.String(),
+		DisplayName: held.DisplayName.String(),
+	}, devices, nil
 }

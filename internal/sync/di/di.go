@@ -29,6 +29,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	federationservice "github.com/anthonyvsmuller/quire/internal/federation/application/service"
 	federationreplica "github.com/anthonyvsmuller/quire/internal/federation/domain/replica"
 	federationserver "github.com/anthonyvsmuller/quire/internal/federation/domain/server"
 
@@ -54,6 +55,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/syncservice"
 	deliveryrepository "github.com/anthonyvsmuller/quire/internal/sync/infra/repository/delivery"
 	operationrepository "github.com/anthonyvsmuller/quire/internal/sync/infra/repository/operation"
+	admissionsservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/admissions"
 	changesservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/changes"
 	clockservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/clock"
 	peersservice "github.com/anthonyvsmuller/quire/internal/sync/infra/service/peers"
@@ -112,6 +114,8 @@ func Initialize(
 	dialer *grpcx.PeerDialer,
 	catalogue federationserver.Repository,
 	authorizations federationreplica.Repository,
+	peers federationservice.Peers,
+	readers federationservice.Readers,
 	records *Records,
 	logger *slog.Logger,
 ) *Container {
@@ -135,8 +139,9 @@ func Initialize(
 	watch := watchoperationsusecase.New(log)
 
 	outbound := peersservice.New(dialer, catalogue)
+	admissions := admissionsservice.New(readers, peers, authorizations)
 
-	pass := replicateusecase.New(deliveries, log, outbound, clock,
+	pass := replicateusecase.New(deliveries, log, outbound, admissions, clock,
 		cfg.Federation.ReplicationInterval, cfg.Federation.ReplicationBatchSize)
 
 	inbound := replicateoperationsusecase.New(
