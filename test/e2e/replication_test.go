@@ -4,9 +4,7 @@ package e2e_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"net/http"
 	"testing"
 	"time"
 	"uuid"
@@ -15,16 +13,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/anthonyvsmuller/quire/internal/client"
-
-	federationreplica "github.com/anthonyvsmuller/quire/internal/federation/domain/replica"
 	federationserver "github.com/anthonyvsmuller/quire/internal/federation/domain/server"
-	replicarepository "github.com/anthonyvsmuller/quire/internal/federation/infra/repository/replica"
 	serverrepository "github.com/anthonyvsmuller/quire/internal/federation/infra/repository/server"
-	identitydevice "github.com/anthonyvsmuller/quire/internal/identity/domain/device"
-	identityuser "github.com/anthonyvsmuller/quire/internal/identity/domain/user"
-	devicerepository "github.com/anthonyvsmuller/quire/internal/identity/infra/repository/device"
-	userrepository "github.com/anthonyvsmuller/quire/internal/identity/infra/repository/user"
 	ebookrepository "github.com/anthonyvsmuller/quire/internal/library/infra/repository/ebook"
 	"github.com/anthonyvsmuller/quire/internal/shared/errs"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
@@ -37,16 +27,16 @@ import (
 //
 // Everything between the two nodes is what the federation actually does. The
 // origin discovers the peer over RFC 8615 and pins the public key it published
-// (C12); the delivery queue is filled from the log rather than by the call that
-// wrote the change, which is what makes a peer authorized today and a peer that
-// missed a week the same case; and the connection is mTLS, checked against that
-// pin on both ends rather than against an authority neither of them shares.
+// (C12); before it offers anything of the reader's it tells the peer who they
+// are, through the call C22 adds, and the peer records them only if the origin
+// is in its own catalogue; the delivery queue is filled from the log rather
+// than by the call that wrote the change, which is what makes a peer
+// authorized today and a peer that missed a week the same case; and the
+// connection is mTLS, checked against that pin on both ends rather than
+// against an authority neither of them shares.
 //
-// One thing in the middle is not the federation, and it is the point of C22:
-// the peer has to already hold the reader's row and the reader's permission
-// before it may be replicated to, and nothing in the contract can tell it
-// either. What [admit] does is what the missing call would do, out of the
-// document the origin already publishes, and no more.
+// Nothing here writes into either node's database to make the federation
+// work. The one write that remains, [repin], breaks it on purpose.
 func TestAnAuthorizedNodeIsSentTheReadersChanges(t *testing.T) {
 	who := newReader(t, nodeA)
 	tablet := newDevice(t, nodeA, who, "tablet")
@@ -57,7 +47,7 @@ func TestAnAuthorizedNodeIsSentTheReadersChanges(t *testing.T) {
 		t.Fatalf("authorizing %s to replicate: %v", nodeB.domain, err)
 	}
 
-	admit(t, nodeB, nodeA, tablet)
+	federate(t, nodeB, nodeA)
 
 	// Authored offline, because a change made through the connected path
 	// reaches the log through nothing at all (C21) and the queue is filled
@@ -83,46 +73,49 @@ func TestAnAuthorizedNodeIsSentTheReadersChanges(t *testing.T) {
 	})
 }
 
-// RN03, from the other side: a node the reader never allowed is a node that
-// gets nothing, and it does not learn whether the reader it was told about
-// exists.
-//
-// The refusal is the same words for a reader who is not here and a reader who
-// never authorized this node, which is what stops an authorization for one
-// reader from being an oracle for the rest.
-func TestAnUnauthorizedNodeIsRefused(t *testing.T) {
+// RN03, withdrawn: a node the reader stops allowing is not sent what they
+// write afterwards. The origin stops offering, and it tells the node — the
+// mirror of C22 — so that the node stops accepting as well.
+func TestARevokedNodeIsNotSentTheReadersChanges(t *testing.T) {
 	who := newReader(t, nodeA)
 	tablet := newDevice(t, nodeA, who, "tablet")
 
 	peer := addKnownServer(t, tablet, nodeB.domain)
+	federate(t, nodeB, nodeA)
 
 	if _, err := tablet.AuthorizeReplica(t.Context(), peer, false); err != nil {
 		t.Fatalf("authorizing %s to replicate: %v", nodeB.domain, err)
 	}
 
-	// Node B is told about node A and about nobody: the reader's row and the
-	// permission are exactly what is left out.
-	admitPeer(t, nodeB, nodeA)
+	works := ebookrepository.New(persist.NewManager(connect(t, nodeB)))
 
 	tablet.disconnect(t)
-	work := createWork(t, tablet, "Sagarana")
+	first := createWork(t, tablet, "Sagarana")
 	tablet.reconnect(t)
 	push(t, tablet)
 
-	works := ebookrepository.New(persist.NewManager(connect(t, nodeB)))
+	eventually(t, "the first work to reach "+nodeB.domain, func() bool {
+		_, err := works.GetByID(t.Context(), first)
 
-	// Long enough for several passes of the replication worker, which is what
-	// makes this an observation rather than a race won by the assertion.
+		return err == nil
+	})
+
+	if err := tablet.RevokeReplica(t.Context(), peer); err != nil {
+		t.Fatalf("revoking %s: %v", nodeB.domain, err)
+	}
+
+	tablet.disconnect(t)
+	second := createWork(t, tablet, "Corpo de Baile")
+	tablet.reconnect(t)
+	push(t, tablet)
+
 	time.Sleep(settleFor / 3)
 
-	if _, err := works.GetByID(t.Context(), work); !errors.Is(err, errs.KindNotFound) {
-		t.Errorf("%s holds a work for a reader who never authorized it: %v", nodeB.domain, err)
+	if _, err := works.GetByID(t.Context(), second); !errors.Is(err, errs.KindNotFound) {
+		t.Errorf("%s holds a work written after the reader withdrew its permission: %v", nodeB.domain, err)
 	}
 }
 
-// The pin is the whole of the trust between two nodes (RNF08, C12), so a node
-// whose key is not the one the catalogue recorded is a node this one will not
-// talk to — and that has to hold against a peer that answers perfectly well.
 func TestAPeerIsRefusedWhenItsKeyIsNotTheOnePinned(t *testing.T) {
 	who := newReader(t, nodeA)
 	tablet := newDevice(t, nodeA, who, "tablet")
@@ -133,7 +126,7 @@ func TestAPeerIsRefusedWhenItsKeyIsNotTheOnePinned(t *testing.T) {
 		t.Fatalf("authorizing %s to replicate: %v", nodeB.domain, err)
 	}
 
-	admit(t, nodeB, nodeA, tablet)
+	federate(t, nodeB, nodeA)
 	repin(t, nodeA, peer, wellknown.PinPrefix+"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 
 	tablet.disconnect(t)
@@ -202,145 +195,22 @@ func knownServer(t *testing.T, appliance *device, domain string) uuid.UUID {
 	return uuid.UUID{}
 }
 
-// admit puts on `to` everything it has to hold before `from` may replicate a
-// reader to it: the peer's row with the peer's pin, the reader's own row, and
-// the permission.
+// federate makes `to` know `from`, the way a node comes to know another
+// through the contract: somebody with a session on `to` adds it.
 //
-// This is C22 in docs/tcc-corrections.md, and it is worth being precise about
-// what it stands in for. UC15 is served entirely by the origin — the reader
-// authorizes a node, the origin records it and starts offering — and the
-// destination refuses everything until its own catalogue names the origin and
-// its own tables name the reader (RN03, checked there as well). Nothing in the
-// contract lets one node tell another any of that, so a federation assembled
-// only through the API cannot replicate at all.
-//
-// What is written here is exactly what the missing call would carry, and it is
-// read out of the discovery document the origin already publishes rather than
-// assembled by hand: the fields exist, they are already public, and what is
-// absent is a call that hands them over with the reader's permission attached.
-func admit(t *testing.T, to, from *node, appliance *device) {
+// It is the half of UC15 the specification leaves to the destination's own
+// readers, and C22 is why it is required: a node records a reader only for
+// an origin its own catalogue names, so that a node anybody could tell about
+// readers is not a node anybody could fill with them. The federation is
+// long-lived, so a node already known from an earlier run is read rather
+// than added again — which is also what a reader would find.
+func federate(t *testing.T, to, from *node) {
 	t.Helper()
 
-	origin := admitPeer(t, to, from)
-	manager := persist.NewManager(connect(t, to))
+	host := newReader(t, to)
+	appliance := newDevice(t, to, host, "the operator's laptop")
 
-	state := appliance.State()
-	userID := state.User.ID
-
-	localName, err := identityuser.ParseLocalName(state.User.LocalName)
-	if err != nil {
-		t.Fatalf("the reader's name: %v", err)
-	}
-
-	displayName, err := identityuser.ParseDisplayName("A reader replicated from " + from.domain)
-	if err != nil {
-		t.Fatalf("the reader's display name: %v", err)
-	}
-
-	now := time.Now().UTC()
-
-	// No address and no password digest, which is what makes this a
-	// replicated reader rather than one this node authenticates (C03): the
-	// row exists so that what they wrote has somewhere to hang, and RN08
-	// leaves authenticating them to the node that hosts them.
-	replicated := identityuser.Restore(userID, &identityuser.Props{
-		OriginServerID: origin,
-		LocalName:      localName,
-		DisplayName:    displayName,
-		CreatedAt:      now,
-		UpdatedAt:      now,
-	})
-
-	if err = userrepository.New(manager).Create(t.Context(), replicated); err != nil &&
-		!errors.Is(err, errs.KindAlreadyExists) {
-		t.Fatalf("recording the reader on %s: %v", to.domain, err)
-	}
-
-	permission, err := federationreplica.New(userID, origin, true, now)
-	if err != nil {
-		t.Fatalf("granting %s the permission to send: %v", from.domain, err)
-	}
-
-	if err = replicarepository.New(manager).Create(t.Context(), permission); err != nil &&
-		!errors.Is(err, errs.KindAlreadyExists) {
-		t.Fatalf("recording the permission on %s: %v", to.domain, err)
-	}
-
-	admitDevice(t, manager, userID, state.Device)
-}
-
-// admitDevice records one of the reader's appliances on the peer.
-//
-// It is the half of C22 that only the database will tell you about: every
-// operation names the device that authored it and sync.operations references
-// identity.devices, so a peer that holds the reader and not their devices
-// refuses the whole batch on a foreign key. The obligation is also a standing
-// one rather than a handshake — a device bound tomorrow has to reach every
-// replica before anything it writes can — which is the strongest argument that
-// what is missing is a call and not a manual step.
-func admitDevice(t *testing.T, manager *persist.Manager, userID uuid.UUID, appliance client.Device) {
-	t.Helper()
-
-	name, err := identitydevice.ParseName(appliance.Name)
-	if err != nil {
-		t.Fatalf("the device's name: %v", err)
-	}
-
-	platform, err := identitydevice.ParsePlatform(appliance.Platform)
-	if err != nil {
-		t.Fatalf("the device's platform: %v", err)
-	}
-
-	recorded := identitydevice.Restore(appliance.ID, &identitydevice.Props{
-		UserID:   userID,
-		Name:     name,
-		Platform: platform,
-		Active:   true,
-	})
-
-	if err = devicerepository.New(manager).Create(t.Context(), recorded); err != nil &&
-		!errors.Is(err, errs.KindAlreadyExists) {
-		t.Fatalf("recording the device: %v", err)
-	}
-}
-
-// admitPeer records `from` in the catalogue of `to`, out of the document
-// `from` publishes about itself, and returns the row's identifier.
-//
-// The federation is long-lived, so a node already recorded by an earlier run is
-// read rather than written again — which is also what the real call would have
-// to do.
-func admitPeer(t *testing.T, to, from *node) uuid.UUID {
-	t.Helper()
-
-	catalogue := serverrepository.New(persist.NewManager(connect(t, to)))
-	domain := federationserver.ParseDomain(from.domain)
-
-	switch known, err := catalogue.GetByDomain(t.Context(), domain); {
-	case err == nil:
-		return known.ID
-	case !errors.Is(err, errs.KindNotFound):
-		t.Fatalf("reading the catalogue of %s: %v", to.domain, err)
-	}
-
-	published := describes(t, from)
-
-	recorded, err := federationserver.New(&federationserver.Descriptor{
-		Domain:                 domain,
-		BaseURL:                federationserver.BaseURL(published.Server.BaseURL),
-		JWKSURI:                federationserver.JWKSURI(published.Server.JWKSURI),
-		CertificateFingerprint: federationserver.Fingerprint(published.Server.CertificateFingerprint),
-		GRPCAuthority:          federationserver.GRPCAuthority(published.Server.GRPC),
-	}, time.Now().UTC())
-	if err != nil {
-		t.Fatalf("describing %s: %v", from.domain, err)
-	}
-
-	if err = catalogue.Create(t.Context(), recorded); err != nil {
-		t.Fatalf("recording %s on %s: %v", from.domain, to.domain, err)
-	}
-
-	return recorded.ID
+	addKnownServer(t, appliance, from.domain)
 }
 
 // repin replaces the pin a node recorded for a peer, and puts the recorded one
@@ -397,46 +267,6 @@ func setPin(
 	return previous
 }
 
-// describes reads what a node publishes about itself, the way the other node's
-// discovery client reads it.
-//
-// It verifies the document server against the same certificate file the gRPC
-// half of this suite uses, rather than against the machine's trust store. Both
-// federations this suite runs on need that for different reasons: compose serves
-// the documents over plain HTTP, where it costs nothing, and the cluster serves
-// them over HTTPS with a certificate from an authority that exists only in that
-// cluster. A suite that leaned on the ambient trust store would pass on one and
-// fail on the other for a reason that is not about Quire.
-func describes(t *testing.T, published *node) wellknown.ServerDocument {
-	t.Helper()
-
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-		published.baseURL+wellknown.ServerPath, http.NoBody)
-	if err != nil {
-		t.Fatalf("addressing %s: %v", published.domain, err)
-	}
-
-	response, err := published.httpClient(t).Do(request)
-	if err != nil {
-		t.Fatalf("reading what %s publishes: %v", published.domain, err)
-	}
-
-	defer func() { _ = response.Body.Close() }()
-
-	var document wellknown.ServerDocument
-	if err = json.NewDecoder(response.Body).Decode(&document); err != nil {
-		t.Fatalf("decoding what %s publishes: %v", published.domain, err)
-	}
-
-	return document
-}
-
-// connect opens a pool on a node's own database.
-//
-// It is the one thing in this suite that is not a client of the contract, and
-// every use of it is either an assertion about what a node stored or the
-// standing-in of C22. A pool per test is more than the federation needs and
-// less than a cache nobody closes.
 func connect(t *testing.T, on *node) *pgxpool.Pool {
 	t.Helper()
 
