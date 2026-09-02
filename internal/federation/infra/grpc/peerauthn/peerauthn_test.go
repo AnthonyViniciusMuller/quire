@@ -16,10 +16,10 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/peerauthn"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/errs"
 	"github.com/anthonyvsmuller/quire/internal/shared/wellknown"
-	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/peerauthn"
 )
 
 // The pin a peer presents is the value its own discovery document publishes,

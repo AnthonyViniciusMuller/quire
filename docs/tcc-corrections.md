@@ -859,7 +859,7 @@ and the peer compares the digest against that published value (C12) — a gatewa
 the connection presents the gateway's certificate, and the pin does not match. The node also
 reads the *caller's* certificate and pins it the same way, which is the only thing that tells
 `ReplicateOperations` which node is speaking (RNF08, and
-`internal/sync/infra/grpc/peerauthn`) — a gateway terminating the connection has consumed it,
+`internal/federation/infra/grpc/peerauthn`) — a gateway terminating the connection has consumed it,
 and the node sees a caller with no certificate at all, which is what every device looks like.
 
 Neither is recoverable by forwarding a header. A header is a claim made by whatever added it;

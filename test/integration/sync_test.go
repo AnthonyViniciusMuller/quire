@@ -87,7 +87,14 @@ func serveSync(t *testing.T) synchronization {
 
 	readingContainer := readingdi.Initialize(pool, libraryContainer.Ebooks, clock)
 
-	syncContainer, err := syncdi.Initialize(cfg, pool, clock,
+	dialer, err := grpcx.NewPeerDialer(&cfg.Federation)
+	if err != nil {
+		t.Fatalf("building the peer dialer: %v", err)
+	}
+
+	t.Cleanup(func() { _ = dialer.Close() })
+
+	syncContainer := syncdi.Initialize(cfg, pool, clock, dialer,
 		federationContainer.Servers, federationContainer.Authorizations, &syncdi.Records{
 			Works:     libraryContainer.Ebooks,
 			Groupings: libraryContainer.Collections,
@@ -95,11 +102,6 @@ func serveSync(t *testing.T) synchronization {
 			Marks:     readingContainer.Annotations,
 			Positions: readingContainer.Progress,
 		}, slog.New(slog.DiscardHandler))
-	if err != nil {
-		t.Fatalf("building the sync slice: %v", err)
-	}
-
-	t.Cleanup(func() { _ = syncContainer.Close() })
 
 	grpcServer, err := grpcx.New(t.Context(), &cfg.Server,
 		grpcx.WithChain(grpcx.NewChain(logging.Discard())),

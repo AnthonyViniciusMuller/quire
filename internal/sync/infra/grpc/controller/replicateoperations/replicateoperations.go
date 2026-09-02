@@ -5,12 +5,12 @@ package replicateoperations
 import (
 	"context"
 
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/peerauthn"
 	quirev1 "github.com/anthonyvsmuller/quire/internal/gen/quire/v1"
 	command "github.com/anthonyvsmuller/quire/internal/sync/application/usecase"
 	usecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/replicateoperations"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/convert"
 	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/identifier"
-	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/peerauthn"
 )
 
 // ReplicateOperations serves the call.

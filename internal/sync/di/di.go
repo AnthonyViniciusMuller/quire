@@ -16,11 +16,11 @@
 // arrives the same way, and for a reason of its own: a second hybrid logical
 // clock in this process would be a second answer to what "after" means here.
 //
-// It can fail, and only for one reason: this node's own certificate. The
-// outbound half of replication presents it to every peer, so a key pair the
-// process cannot read is a deployment fault — and a node that discovered it at
-// the first tick would have started, answered every device, and quietly
-// replicated to nobody.
+// The dialer arrives the same way. The outbound half of replication reaches
+// peers over the node's one [grpcx.PeerDialer], which the federation slice
+// shares, so that a node admitting a reader and a node being offered that
+// reader's changes are one connection; what this slice adds is the
+// translation of a batch onto the wire.
 package di
 
 import (
@@ -38,6 +38,7 @@ import (
 	readingannotation "github.com/anthonyvsmuller/quire/internal/reading/domain/annotation"
 	readingprogress "github.com/anthonyvsmuller/quire/internal/reading/domain/progress"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
+	"github.com/anthonyvsmuller/quire/internal/shared/grpcx"
 	"github.com/anthonyvsmuller/quire/internal/shared/hlc"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 	pulloperationsusecase "github.com/anthonyvsmuller/quire/internal/sync/application/usecase/pulloperations"
@@ -99,18 +100,6 @@ type Container struct {
 	// node has to run rather than register: replication is driven from the
 	// side that owes the data, and that side has nobody to be prompted by.
 	Worker *worker.Replication
-
-	// closer releases the channels the outbound half holds open to its peers.
-	closer func() error
-}
-
-// Close releases what the slice holds. The node defers it.
-func (c *Container) Close() error {
-	if c.closer == nil {
-		return nil
-	}
-
-	return c.closer()
 }
 
 // Initialize builds the slice over the node's connection pool, its clock, the
@@ -120,11 +109,12 @@ func Initialize(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	stamps *hlc.Clock,
+	dialer *grpcx.PeerDialer,
 	catalogue federationserver.Repository,
 	authorizations federationreplica.Repository,
 	records *Records,
 	logger *slog.Logger,
-) (*Container, error) {
+) *Container {
 	manager := persist.NewManager(pool)
 
 	log := operationrepository.New(manager)
@@ -144,10 +134,7 @@ func Initialize(
 	pull := pulloperationsusecase.New(log)
 	watch := watchoperationsusecase.New(log)
 
-	outbound, err := peersservice.New(&cfg.Federation, catalogue)
-	if err != nil {
-		return nil, err
-	}
+	outbound := peersservice.New(dialer, catalogue)
 
 	pass := replicateusecase.New(deliveries, log, outbound, clock,
 		cfg.Federation.ReplicationInterval, cfg.Federation.ReplicationBatchSize)
@@ -166,6 +153,5 @@ func Initialize(
 	return &Container{
 		Service: syncservice.New(&controllers),
 		Worker:  worker.New(pass, cfg.Federation.ReplicationInterval, logger),
-		closer:  outbound.Close,
-	}, nil
+	}
 }

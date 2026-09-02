@@ -3,12 +3,14 @@
 // of its own.
 //
 // It is the peer-facing counterpart of internal/identity/infra/grpc/authn, and
-// it lives here for the same reason that one lives in the identity slice. The
-// sync slice is the only part of the node with a call whose caller is a peer,
-// and the certificate is the only credential that call carries — RNF08 rather
-// than RNF11, because a certificate identifies a node and a JWT identifies a
-// reader, and ReplicateOperations is addressed to a node about a reader it
-// replicates.
+// it lives here for the same reason that one lives in the identity slice: the
+// federation slice is the part of the node that knows what a node is, as the
+// identity slice is the part that knows what a reader is. The certificate is
+// the only credential a peer-facing call carries — RNF08 rather than RNF11,
+// because a certificate identifies a node and a JWT identifies a reader — and
+// the pin read here is what the catalogue this slice owns is checked against.
+// The sync slice's ReplicateOperations reads the caller from this package the
+// way every controller reads a reader from authn.
 //
 // # Why the client certificate is requested and not required
 //
@@ -42,7 +44,7 @@ import (
 
 // opAuthenticate is the operation reported by this file, in the form the errs
 // package expects.
-const opAuthenticate = "sync/peerauthn: authenticate"
+const opAuthenticate = "federation/peerauthn: authenticate"
 
 // The stable machine-readable codes this package raises.
 const (

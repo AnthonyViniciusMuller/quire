@@ -418,8 +418,8 @@ type Federation struct {
 	// by the public key it published in its own discovery document (C12), and
 	// both ends of a federated connection therefore turn the library's chain
 	// verification off and check that pin instead — the outbound half in
-	// internal/sync/infra/service/peers, the inbound half in
-	// internal/sync/infra/grpc/peerauthn. A bundle would have nowhere to be
+	// internal/shared/grpcx's peer dialer, the inbound half in
+	// internal/federation/infra/grpc/peerauthn. A bundle would have nowhere to be
 	// consulted, and one that existed would read as a second way of trusting a
 	// peer that this node does not have.
 	TLSKeyFile string `env:"QUIRE_FEDERATION_TLS_KEY_FILE"`

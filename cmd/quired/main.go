@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc"
 
 	federationdi "github.com/anthonyvsmuller/quire/internal/federation/di"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/peerauthn"
 	"github.com/anthonyvsmuller/quire/internal/identity/application/service"
 	identitydi "github.com/anthonyvsmuller/quire/internal/identity/di"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/jwks"
@@ -35,7 +36,6 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 	"github.com/anthonyvsmuller/quire/internal/shared/wellknown"
 	syncdi "github.com/anthonyvsmuller/quire/internal/sync/di"
-	"github.com/anthonyvsmuller/quire/internal/sync/infra/grpc/peerauthn"
 )
 
 func main() {
@@ -102,6 +102,18 @@ func run(ctx context.Context) error {
 		return err
 	}
 
+	// The one client this node is of other nodes, shared by the slices that
+	// call them. It can fail for one reason, this node's own certificate: a
+	// key pair the process cannot read is a deployment fault, and a node that
+	// discovered it at the first replication tick would have started,
+	// answered every device, and quietly replicated to nobody.
+	dialer, err := grpcx.NewPeerDialer(&cfg.Federation)
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = dialer.Close() }()
+
 	federation := federationdi.Initialize(cfg, pool, identity.Migration)
 
 	// For the same reason, and one of its own: which object store holds the
@@ -128,7 +140,7 @@ func run(ctx context.Context) error {
 	// every one of them through the repository its own slice declares. Wiring
 	// that is this file's job — the sync slice imports no container but its
 	// own.
-	synchronization, err := syncdi.Initialize(cfg, pool, clock,
+	synchronization := syncdi.Initialize(cfg, pool, clock, dialer,
 		federation.Servers, federation.Authorizations, &syncdi.Records{
 			Works:     library.Ebooks,
 			Groupings: library.Collections,
@@ -136,11 +148,6 @@ func run(ctx context.Context) error {
 			Marks:     reading.Annotations,
 			Positions: reading.Progress,
 		}, logger)
-	if err != nil {
-		return err
-	}
-
-	defer func() { _ = synchronization.Close() }()
 
 	// What the listener presents, and nil in a deployment with no certificate
 	// of its own. It serves devices and peers alike: a device authenticates
