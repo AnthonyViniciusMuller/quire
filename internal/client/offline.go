@@ -63,7 +63,8 @@ const (
 // because the two paths differ in when the change reaches the node and in
 // nothing else: a queued change is stamped with this device's clock and is
 // handed over by the next push, and the node applies it by the same rule it
-// applies one that arrived over the connected path.
+// applies one that arrived over the connected path. It is set by a client
+// opened offline and by one that found the node out of reach alike.
 type Written struct {
 	// Target is the record the change addressed, whether it was minted here or
 	// named by the caller.

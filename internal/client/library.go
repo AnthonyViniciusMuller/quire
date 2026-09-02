@@ -91,13 +91,15 @@ type CollectionChanges struct {
 // than a reader expects — the same file imported on a second device, or by a
 // second reader on this node, is already there.
 func (c *Client) CreateEbook(ctx context.Context, in *EbookInput) (Written, error) {
+	queue := func() (Written, error) { return c.createEbookOffline(in) }
+
 	if c.options.Offline {
-		return c.createEbookOffline(in)
+		return queue()
 	}
 
 	authorized, err := c.authorized(ctx)
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	response, err := c.library.CreateEbook(authorized, &quirev1.CreateEbookRequest{
@@ -113,7 +115,7 @@ func (c *Client) CreateEbook(ctx context.Context, in *EbookInput) (Written, erro
 		},
 	})
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	work := response.GetEbook()
@@ -241,13 +243,17 @@ func (c *Client) UpdateEbook(ctx context.Context, work uuid.UUID, changes EbookC
 			WithField("update_mask", "an update must say which fields it writes")
 	}
 
-	if c.options.Offline {
+	queue := func() (Written, error) {
 		return c.author(entityEbook, recordKey(entityEbook, work), work, kindUpdate, claimed)
+	}
+
+	if c.options.Offline {
+		return queue()
 	}
 
 	authorized, err := c.authorized(ctx)
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	response, err := c.library.UpdateEbook(authorized, &quirev1.UpdateEbookRequest{
@@ -256,7 +262,7 @@ func (c *Client) UpdateEbook(ctx context.Context, work uuid.UUID, changes EbookC
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: mask},
 	})
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	c.rememberEbook(response.GetEbook())
@@ -328,18 +334,22 @@ func ebookOf(changes EbookChanges) *quirev1.Ebook {
 // DeleteEbook tombstones a work. It is never a removal: a row deleted outright
 // is resurrected by the next node that had not yet heard about the deletion.
 func (c *Client) DeleteEbook(ctx context.Context, work uuid.UUID) (Written, error) {
-	if c.options.Offline {
+	queue := func() (Written, error) {
 		return c.author(entityEbook, recordKey(entityEbook, work), work, kindDelete, delta{})
+	}
+
+	if c.options.Offline {
+		return queue()
 	}
 
 	authorized, err := c.authorized(ctx)
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	if _, err = c.library.DeleteEbook(authorized,
 		&quirev1.DeleteEbookRequest{EbookId: work.String()}); err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	return Written{Target: work}, nil
@@ -554,13 +564,15 @@ func (c *Client) DownloadContent(
 
 // CreateCollection creates a grouping over the collection (UC03).
 func (c *Client) CreateCollection(ctx context.Context, in *CollectionInput) (Written, error) {
+	queue := func() (Written, error) { return c.createCollectionOffline(in) }
+
 	if c.options.Offline {
-		return c.createCollectionOffline(in)
+		return queue()
 	}
 
 	authorized, err := c.authorized(ctx)
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	response, err := c.library.CreateCollection(authorized, &quirev1.CreateCollectionRequest{
@@ -571,7 +583,7 @@ func (c *Client) CreateCollection(ctx context.Context, in *CollectionInput) (Wri
 		},
 	})
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	grouping := response.GetCollection()
@@ -703,13 +715,17 @@ func (c *Client) UpdateCollection(
 			WithField("update_mask", "an update must say which fields it writes")
 	}
 
-	if c.options.Offline {
+	queue := func() (Written, error) {
 		return c.author(entityCollection, recordKey(entityCollection, grouping), grouping, kindUpdate, claimed)
+	}
+
+	if c.options.Offline {
+		return queue()
 	}
 
 	authorized, err := c.authorized(ctx)
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	response, err := c.library.UpdateCollection(authorized, &quirev1.UpdateCollectionRequest{
@@ -718,7 +734,7 @@ func (c *Client) UpdateCollection(
 		UpdateMask:   &fieldmaskpb.FieldMask{Paths: paths},
 	})
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	c.rememberCollection(response.GetCollection())
@@ -733,18 +749,22 @@ func (c *Client) UpdateCollection(
 // DeleteCollection tombstones a grouping. The works survive it: deleting a
 // shelf is not deleting what was on it, and the filings are tombstoned with it.
 func (c *Client) DeleteCollection(ctx context.Context, grouping uuid.UUID) (Written, error) {
-	if c.options.Offline {
+	queue := func() (Written, error) {
 		return c.author(entityCollection, recordKey(entityCollection, grouping), grouping, kindDelete, delta{})
+	}
+
+	if c.options.Offline {
+		return queue()
 	}
 
 	authorized, err := c.authorized(ctx)
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	if _, err = c.library.DeleteCollection(authorized,
 		&quirev1.DeleteCollectionRequest{CollectionId: grouping.String()}); err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	return Written{Target: grouping}, nil
@@ -770,7 +790,7 @@ func (c *Client) RemoveFromCollection(ctx context.Context, work, grouping uuid.U
 // mints for itself, so the identifier the operation names is only what this
 // device calls it (C18).
 func (c *Client) file(ctx context.Context, work, grouping uuid.UUID, kind string) (Written, error) {
-	if c.options.Offline {
+	queue := func() (Written, error) {
 		key := recordKey(entityFiling, work, grouping)
 
 		changed := delta{}
@@ -785,9 +805,13 @@ func (c *Client) file(ctx context.Context, work, grouping uuid.UUID, kind string
 		return c.author(entityFiling, key, c.target(key), kind, changed)
 	}
 
+	if c.options.Offline {
+		return queue()
+	}
+
 	authorized, err := c.authorized(ctx)
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	if kind == kindDelete {
@@ -803,7 +827,7 @@ func (c *Client) file(ctx context.Context, work, grouping uuid.UUID, kind string
 	}
 
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	return Written{Target: work}, nil

@@ -38,13 +38,15 @@ type AnnotationChanges struct {
 
 // CreateAnnotation writes a mark.
 func (c *Client) CreateAnnotation(ctx context.Context, in *AnnotationInput) (Written, error) {
+	queue := func() (Written, error) { return c.createAnnotationOffline(in) }
+
 	if c.options.Offline {
-		return c.createAnnotationOffline(in)
+		return queue()
 	}
 
 	authorized, err := c.authorized(ctx)
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	response, err := c.reading.CreateAnnotation(authorized, &quirev1.CreateAnnotationRequest{
@@ -56,7 +58,7 @@ func (c *Client) CreateAnnotation(ctx context.Context, in *AnnotationInput) (Wri
 		},
 	})
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	mark := response.GetAnnotation()
@@ -198,13 +200,17 @@ func (c *Client) UpdateAnnotation(
 			WithField("update_mask", "an update must say which fields it writes")
 	}
 
-	if c.options.Offline {
+	queue := func() (Written, error) {
 		return c.author(entityAnnotation, recordKey(entityAnnotation, mark), mark, kindUpdate, claimed)
+	}
+
+	if c.options.Offline {
+		return queue()
 	}
 
 	authorized, err := c.authorized(ctx)
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	response, err := c.reading.UpdateAnnotation(authorized, &quirev1.UpdateAnnotationRequest{
@@ -213,7 +219,7 @@ func (c *Client) UpdateAnnotation(
 		UpdateMask:   &fieldmaskpb.FieldMask{Paths: paths},
 	})
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	c.rememberAnnotation(response.GetAnnotation())
@@ -228,18 +234,22 @@ func (c *Client) UpdateAnnotation(
 // DeleteAnnotation tombstones a mark, so that a node which had not yet heard
 // about the deletion cannot resurrect it by replying with its own copy.
 func (c *Client) DeleteAnnotation(ctx context.Context, mark uuid.UUID) (Written, error) {
-	if c.options.Offline {
+	queue := func() (Written, error) {
 		return c.author(entityAnnotation, recordKey(entityAnnotation, mark), mark, kindDelete, delta{})
+	}
+
+	if c.options.Offline {
+		return queue()
 	}
 
 	authorized, err := c.authorized(ctx)
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	if _, err = c.reading.DeleteAnnotation(authorized,
 		&quirev1.DeleteAnnotationRequest{AnnotationId: mark.String()}); err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	return Written{Target: mark}, nil
@@ -254,13 +264,15 @@ func (c *Client) DeleteAnnotation(ctx context.Context, mark uuid.UUID) (Written,
 func (c *Client) UpdateProgress(
 	ctx context.Context, work uuid.UUID, locator string, percent *float64,
 ) (Written, error) {
+	queue := func() (Written, error) { return c.updateProgressOffline(work, locator, percent) }
+
 	if c.options.Offline {
-		return c.updateProgressOffline(work, locator, percent)
+		return queue()
 	}
 
 	authorized, err := c.authorized(ctx)
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	response, err := c.reading.UpdateReadingProgress(authorized, &quirev1.UpdateReadingProgressRequest{
@@ -269,7 +281,7 @@ func (c *Client) UpdateProgress(
 		Percent: percent,
 	})
 	if err != nil {
-		return Written{}, err
+		return c.orQueued(err, queue)
 	}
 
 	c.rememberProgress(response.GetProgress())

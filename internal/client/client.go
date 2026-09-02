@@ -20,11 +20,17 @@
 // LibraryService and ReadingService are the connected path to a change and
 // SyncService.PushOperations is the disconnected one, and the contract is
 // emphatic that a change made either way has to be indistinguishable once
-// applied. So a write is one method here, and which path it takes is a property
-// of the client and not of the call: a client opened with [Options.Offline]
-// stamps the change on this device's clock and appends it to the local log,
-// and one opened without it calls the RPC and lets the node stamp it. The
-// caller gets a [Written] either way and does not branch.
+// applied. So a write is one method here, and the caller does not choose the
+// path: a client opened with [Options.Offline] stamps the change on this
+// device's clock and appends it to the local log, and one opened without it
+// calls the RPC and lets the node stamp it — unless the node cannot be
+// reached, in which case the change goes into the log as it would have
+// offline, and the next push hands it over. Offline-first means the reader
+// keeps writing when the network goes, not when they remembered to say so.
+// The caller gets a [Written] either way and does not branch.
+//
+// Only a write falls back. A read that the node cannot answer is refused with
+// the node's own error, because there is no local copy to answer it from.
 //
 // # What it does not do
 //
@@ -44,13 +50,16 @@ package client
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"time"
 	"uuid"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	quirev1 "github.com/anthonyvsmuller/quire/internal/gen/quire/v1"
 	"github.com/anthonyvsmuller/quire/internal/shared/crdt"
@@ -108,6 +117,10 @@ type Options struct {
 	// stamped on this device's clock and appended to the local log, to be
 	// handed over by the next push. Every call that only the node can answer
 	// is refused while it is set.
+	//
+	// A client opened without it takes the same path for a write the node
+	// could not be reached for; what this flag adds is not dialing at all,
+	// and refusing the reads rather than letting them time out.
 	Offline bool
 
 	// Plaintext dials without TLS, which is what the local federation of
@@ -264,8 +277,39 @@ func (c *Client) Address() string {
 // claims.
 func (c *Client) State() *State { return c.state }
 
-// IsOffline reports which path a write will take.
+// IsOffline reports whether the client was opened without a node. A write
+// made by a client opened with one may still be queued, when the node could
+// not be reached; [Written.Queued] is what says which path a write took.
 func (c *Client) IsOffline() bool { return c.options.Offline }
+
+// orQueued is what a write does when the connected path failed: it is
+// authored into the local log when the failure was the node being out of
+// reach, and it is refused with the failure otherwise.
+//
+// The change is stamped on this device's clock either way it is queued, and
+// the node applies it by the same rule whichever path carried it — which is
+// what makes falling back safe. A node that answered with anything else has
+// been reached and has spoken, and its answer is the caller's to act on: a
+// refused field is not a change to try again later.
+func (c *Client) orQueued(err error, queue func() (Written, error)) (Written, error) {
+	if !unreachable(err) {
+		return Written{}, err
+	}
+
+	return queue()
+}
+
+// unreachable reports whether an error is the node being out of reach rather
+// than anything the node said.
+//
+// The transport answers Unavailable for a connection it could not open or
+// lost, and the node answers it for a database it could not reach; both are a
+// change that has nowhere to go right now and somewhere to go later. A
+// session that could not be refreshed for the same reason arrives here as
+// the same code, which is why a write does not need a session to be queued.
+func unreachable(err error) bool {
+	return status.Code(err) == codes.Unavailable || errors.Is(err, errs.KindUnavailable)
+}
 
 // save writes the state, and is called by every method that changed it.
 func (c *Client) save() error {

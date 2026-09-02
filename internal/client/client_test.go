@@ -9,12 +9,17 @@
 package client_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 	"uuid"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/anthonyvsmuller/quire/internal/client"
 	"github.com/anthonyvsmuller/quire/internal/shared/crdt"
@@ -358,5 +363,53 @@ func TestAStateFileThatIsNotOneIsRefused(t *testing.T) {
 
 	if _, err := client.Open(client.Options{StatePath: path, Offline: true}); err == nil {
 		t.Fatal("the client read a state file that is not one")
+	}
+}
+
+// A write made by a client that was opened with a node, against a node that
+// cannot be reached, goes into the log as it would have offline: the reader
+// keeps writing when the network goes, not when they remembered to say so. A
+// read has no log to be answered from and is refused with what the transport
+// said.
+func TestAWriteIsQueuedWhenTheNodeCannotBeReached(t *testing.T) {
+	path := bound(t, &client.State{
+		Device:  thisDevice(),
+		Session: client.Session{AccessToken: "a token", AccessTokenExpiresAt: time.Now().Add(time.Hour)},
+	})
+
+	// Port 1 is reserved and nothing on a loopback interface answers on it, so
+	// the dial is refused rather than left to time out.
+	connection, err := client.Open(client.Options{StatePath: path, Address: "127.0.0.1:1", Plaintext: true})
+	if err != nil {
+		t.Fatalf("opening the client: %v", err)
+	}
+
+	t.Cleanup(func() { _ = connection.Close() })
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	written, err := connection.CreateEbook(ctx, &client.EbookInput{
+		Title: "Dom Casmurro", Format: "epub", ContentHash: "a1b2", Size: 4096,
+	})
+	if err != nil {
+		t.Fatalf("CreateEbook: %v", err)
+	}
+
+	if !written.Queued {
+		t.Error("the change reported that it reached a node nothing is listening on")
+	}
+
+	if pending := connection.Pending(); len(pending) != 1 || pending[0].TargetID != written.Target {
+		t.Errorf("the log holds %v, want the one change that could not be delivered", pending)
+	}
+
+	if connection.IsOffline() {
+		t.Error("the client reports it was opened offline, and it was not")
+	}
+
+	_, err = connection.GetEbook(ctx, written.Target)
+	if !errors.Is(err, errs.KindUnavailable) && status.Code(err) != codes.Unavailable {
+		t.Errorf("GetEbook = %v, want the node being out of reach", err)
 	}
 }
