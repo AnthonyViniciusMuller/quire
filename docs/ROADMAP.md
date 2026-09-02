@@ -823,6 +823,14 @@ not a secret the node keeps, and a reader on an institution's node who has it co
 asked. It is accepted for a node that admits an institution's readers and would have to be
 revisited for one that admitted the public.
 
+Where the origin should carry a reader's authorization to the authorized node, on
+2026-09-02: from the delivery pass, immediately before the reader's changes are offered, and
+not from `AuthorizeReplica` as C22 first proposed. A replica has to hold every device that
+authors anything of the reader's, devices are bound after the authorization as often as before
+it, and a call made at the authorization would leave every later device unknown; a call made at
+every binding would put another operator's outage inside a reader's login. C22 records the
+mechanism and is settled.
+
 ## Divergences from the thesis specification
 
 Moved to [`tcc-corrections.md`](tcc-corrections.md), which now holds both the corrections the

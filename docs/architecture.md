@@ -152,6 +152,22 @@ pin off its certificate, because the federation slice is the one that knows what
 and the sync slice's `ReplicateOperations` controller imports it the way every controller
 imports `authn`. Those two are the only imports any slice makes of another's `infra`.
 
+### A slice reaches another through a port, wired in `cmd/quired`
+
+Three slices need something another slice owns: the reading slice asks the library whether a
+reader may see a work, the sync slice asks the federation which node a certificate belongs to
+and whether a reader authorized it, and the federation slice writes the reader a peer admits
+into the identity slice's tables (C22). None of them imports the other's container. Each
+declares a port in its own `application/service`, in its own vocabulary — `Works`, `Replicas`,
+`Readers`, `Peers` — and the adapter that satisfies it, in the slice's own `infra/service`,
+is built over the *other* slice's domain repository or application port. `cmd/quired` is where
+the two containers meet and the adapter is handed across.
+
+What that buys is that a table stays behind the port of the slice that owns it: the library's
+tombstone rule is applied once, in the library, and a replicated reader is built the way the
+identity slice defines one. The one thing that is not a port is the pair of interceptors
+above, because they are read by every controller rather than by one use case.
+
 ### Repositories take a `context.Context`
 
 The reference's repository methods take none and call `context.Background()` internally. Quire

@@ -831,17 +831,39 @@ catalogue. RN03 is the reader's promise that their data goes where they said, an
 created a reader because somebody sent it operations would be a node anybody in its catalogue
 could fill with readers who never asked for it.
 
-**Why it is not implemented here** A new RPC in the contract, a use case and a repository
-write on both sides, and the origin calling it at the moment of `AuthorizeReplica` and again
-at every binding after it. That is a slice-sized change, and it changes the `.proto`, which is
-the specification this document exists to correct rather than to quietly extend.
+**How it is implemented** `FederationService` gains `AdmitReplica` and `WithdrawReplica`,
+both peer-facing and authenticated as `ReplicateOperations` is. The destination identifies
+the caller by its pin in its own catalogue and refuses one it does not name, so an origin has
+to have been added on the destination — by one of the destination's own readers, through
+`AddKnownServer` — before it can admit anybody; that is the requirement the paragraph above
+argues for, expressed as a rule rather than as a manual step. It then records the reader,
+without address or password, every device the call carries, and the permission, in one unit
+of work, and leaves what it already held as it was.
 
-**Status** open. Found in phase 10, by the end-to-end suite, which stands in for the missing
-call rather than working around it: `admit` in `test/e2e/replication_test.go` writes exactly
-what that call would carry, read out of the discovery document the origin already publishes,
-and nothing else. Everything past that point in the suite is the real mechanism — the queue
-filled from the log, the mTLS handshake, the pin checked at both ends, the ingest and the
-reconciliation — and it works.
+Where the origin makes the call departs from the correction as first written, and the reason
+belongs in the text. Admission is a standing obligation: a replica has to hold every device
+that authors anything of the reader's, and devices are bound after the authorization as
+often as before it — through `Login` as much as through `RegisterDevice`. A call made at
+`AuthorizeReplica` would leave every later device unknown to the replica and every change it
+authors refused; a call made at every binding would put another operator's outage inside a
+reader's login. The origin therefore admits the reader from the delivery pass, immediately
+before it offers their changes to a node: that is the one place that knows, every time, that a
+reader's changes are about to reach a peer. The pass remembers what each node was last told
+and calls it again only when that changed, or when the last call did not land, so the cost is
+one call per node and reader and one more per device bound. `RevokeReplica` withdraws once
+and does not insist, because the revocation on the origin is what protects the reader and a
+reader unable to withdraw a permission because somebody else's node was down would be the
+wrong trade.
+
+**Record** in 4.2.2, as the destination's half of UC15, and in 4.3 as two more methods whose
+caller is a node: that a reader's authorization is carried to the authorized node by the
+origin, that the node records it only for an origin its own catalogue names, and that the
+origin carries it at delivery rather than at authorization, for the reason above.
+
+**Status** settled 2026-09-02. Found in phase 10 by the end-to-end suite, which stood in for
+the missing call by writing the rows by hand; the suite now assembles the federation through
+the contract alone, and the one write into a node's database it still makes is the one that
+breaks a pin on purpose.
 
 ### C23 — the gateway of 4.3 cannot terminate the federation connection
 
