@@ -41,6 +41,8 @@ const (
 	FederationService_RevokeReplica_FullMethodName             = "/quire.v1.FederationService/RevokeReplica"
 	FederationService_ListReplicaAuthorizations_FullMethodName = "/quire.v1.FederationService/ListReplicaAuthorizations"
 	FederationService_MigrateHomeServer_FullMethodName         = "/quire.v1.FederationService/MigrateHomeServer"
+	FederationService_AdmitReplica_FullMethodName              = "/quire.v1.FederationService/AdmitReplica"
+	FederationService_WithdrawReplica_FullMethodName           = "/quire.v1.FederationService/WithdrawReplica"
 )
 
 // FederationServiceClient is the client API for FederationService service.
@@ -104,6 +106,38 @@ type FederationServiceClient interface {
 	// previous server has nothing to check the claim with, so the identifier
 	// changes and the replicas are authorized again. Also C11.
 	MigrateHomeServer(ctx context.Context, in *MigrateHomeServerRequest, opts ...grpc.CallOption) (*MigrateHomeServerResponse, error)
+	// C22 in docs/tcc-corrections.md. Addressed to the node a reader has just
+	// authorized, by the reader's origin, and it is what makes UC15 reach the
+	// other side: the permission is recorded on the origin, and the destination
+	// checks one of its own before it accepts a single operation (RN03). Nothing
+	// else in the contract could carry it — every other call here is addressed
+	// by a reader's device to its own node, and a reader has no account on a
+	// replica by construction (RN08, C03).
+	//
+	// Its caller is a peer node and not a device, so it is authenticated as
+	// SyncService.ReplicateOperations is: by the certificate the catalogue
+	// pinned rather than by a token. The destination records the origin as the
+	// node its catalogue names for that certificate, never as anything the call
+	// claims, and it therefore serves only an origin somebody on the destination
+	// already added — a node anybody could fill with readers would be a node
+	// whose readers' promises protected nothing.
+	//
+	// It carries what the destination has to store before it can hold anything
+	// of the reader's: the reader without their address or password, which stay
+	// with the node that authenticates them (C03), and the reader's devices,
+	// because every operation names the device that authored it and a peer
+	// that holds the reader and not their devices refuses the whole batch.
+	//
+	// It is a standing obligation and not a handshake. Calling it again for a
+	// reader already admitted changes nothing but what it adds — a device bound
+	// since — and is how a replica that missed one is caught up.
+	AdmitReplica(ctx context.Context, in *AdmitReplicaRequest, opts ...grpc.CallOption) (*AdmitReplicaResponse, error)
+	// C22, the mirror. The origin tells the destination that the reader has
+	// withdrawn the permission, so that a revoked replica stops accepting rather
+	// than merely stops being sent things. The authorization is deactivated and
+	// kept there as it is here, and what the destination already holds stays:
+	// revoking reaches into nobody's database (RevokeReplica).
+	WithdrawReplica(ctx context.Context, in *WithdrawReplicaRequest, opts ...grpc.CallOption) (*WithdrawReplicaResponse, error)
 }
 
 type federationServiceClient struct {
@@ -224,6 +258,26 @@ func (c *federationServiceClient) MigrateHomeServer(ctx context.Context, in *Mig
 	return out, nil
 }
 
+func (c *federationServiceClient) AdmitReplica(ctx context.Context, in *AdmitReplicaRequest, opts ...grpc.CallOption) (*AdmitReplicaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdmitReplicaResponse)
+	err := c.cc.Invoke(ctx, FederationService_AdmitReplica_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *federationServiceClient) WithdrawReplica(ctx context.Context, in *WithdrawReplicaRequest, opts ...grpc.CallOption) (*WithdrawReplicaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WithdrawReplicaResponse)
+	err := c.cc.Invoke(ctx, FederationService_WithdrawReplica_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FederationServiceServer is the server API for FederationService service.
 // All implementations must embed UnimplementedFederationServiceServer
 // for forward compatibility.
@@ -285,6 +339,38 @@ type FederationServiceServer interface {
 	// previous server has nothing to check the claim with, so the identifier
 	// changes and the replicas are authorized again. Also C11.
 	MigrateHomeServer(context.Context, *MigrateHomeServerRequest) (*MigrateHomeServerResponse, error)
+	// C22 in docs/tcc-corrections.md. Addressed to the node a reader has just
+	// authorized, by the reader's origin, and it is what makes UC15 reach the
+	// other side: the permission is recorded on the origin, and the destination
+	// checks one of its own before it accepts a single operation (RN03). Nothing
+	// else in the contract could carry it — every other call here is addressed
+	// by a reader's device to its own node, and a reader has no account on a
+	// replica by construction (RN08, C03).
+	//
+	// Its caller is a peer node and not a device, so it is authenticated as
+	// SyncService.ReplicateOperations is: by the certificate the catalogue
+	// pinned rather than by a token. The destination records the origin as the
+	// node its catalogue names for that certificate, never as anything the call
+	// claims, and it therefore serves only an origin somebody on the destination
+	// already added — a node anybody could fill with readers would be a node
+	// whose readers' promises protected nothing.
+	//
+	// It carries what the destination has to store before it can hold anything
+	// of the reader's: the reader without their address or password, which stay
+	// with the node that authenticates them (C03), and the reader's devices,
+	// because every operation names the device that authored it and a peer
+	// that holds the reader and not their devices refuses the whole batch.
+	//
+	// It is a standing obligation and not a handshake. Calling it again for a
+	// reader already admitted changes nothing but what it adds — a device bound
+	// since — and is how a replica that missed one is caught up.
+	AdmitReplica(context.Context, *AdmitReplicaRequest) (*AdmitReplicaResponse, error)
+	// C22, the mirror. The origin tells the destination that the reader has
+	// withdrawn the permission, so that a revoked replica stops accepting rather
+	// than merely stops being sent things. The authorization is deactivated and
+	// kept there as it is here, and what the destination already holds stays:
+	// revoking reaches into nobody's database (RevokeReplica).
+	WithdrawReplica(context.Context, *WithdrawReplicaRequest) (*WithdrawReplicaResponse, error)
 	mustEmbedUnimplementedFederationServiceServer()
 }
 
@@ -327,6 +413,12 @@ func (UnimplementedFederationServiceServer) ListReplicaAuthorizations(context.Co
 }
 func (UnimplementedFederationServiceServer) MigrateHomeServer(context.Context, *MigrateHomeServerRequest) (*MigrateHomeServerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MigrateHomeServer not implemented")
+}
+func (UnimplementedFederationServiceServer) AdmitReplica(context.Context, *AdmitReplicaRequest) (*AdmitReplicaResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdmitReplica not implemented")
+}
+func (UnimplementedFederationServiceServer) WithdrawReplica(context.Context, *WithdrawReplicaRequest) (*WithdrawReplicaResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WithdrawReplica not implemented")
 }
 func (UnimplementedFederationServiceServer) mustEmbedUnimplementedFederationServiceServer() {}
 func (UnimplementedFederationServiceServer) testEmbeddedByValue()                           {}
@@ -547,6 +639,42 @@ func _FederationService_MigrateHomeServer_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FederationService_AdmitReplica_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdmitReplicaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FederationServiceServer).AdmitReplica(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FederationService_AdmitReplica_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FederationServiceServer).AdmitReplica(ctx, req.(*AdmitReplicaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FederationService_WithdrawReplica_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WithdrawReplicaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FederationServiceServer).WithdrawReplica(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FederationService_WithdrawReplica_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FederationServiceServer).WithdrawReplica(ctx, req.(*WithdrawReplicaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FederationService_ServiceDesc is the grpc.ServiceDesc for FederationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -597,6 +725,14 @@ var FederationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MigrateHomeServer",
 			Handler:    _FederationService_MigrateHomeServer_Handler,
+		},
+		{
+			MethodName: "AdmitReplica",
+			Handler:    _FederationService_AdmitReplica_Handler,
+		},
+		{
+			MethodName: "WithdrawReplica",
+			Handler:    _FederationService_WithdrawReplica_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

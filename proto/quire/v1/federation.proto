@@ -86,6 +86,40 @@ service FederationService {
   // previous server has nothing to check the claim with, so the identifier
   // changes and the replicas are authorized again. Also C11.
   rpc MigrateHomeServer(MigrateHomeServerRequest) returns (MigrateHomeServerResponse);
+
+  // C22 in docs/tcc-corrections.md. Addressed to the node a reader has just
+  // authorized, by the reader's origin, and it is what makes UC15 reach the
+  // other side: the permission is recorded on the origin, and the destination
+  // checks one of its own before it accepts a single operation (RN03). Nothing
+  // else in the contract could carry it — every other call here is addressed
+  // by a reader's device to its own node, and a reader has no account on a
+  // replica by construction (RN08, C03).
+  //
+  // Its caller is a peer node and not a device, so it is authenticated as
+  // SyncService.ReplicateOperations is: by the certificate the catalogue
+  // pinned rather than by a token. The destination records the origin as the
+  // node its catalogue names for that certificate, never as anything the call
+  // claims, and it therefore serves only an origin somebody on the destination
+  // already added — a node anybody could fill with readers would be a node
+  // whose readers' promises protected nothing.
+  //
+  // It carries what the destination has to store before it can hold anything
+  // of the reader's: the reader without their address or password, which stay
+  // with the node that authenticates them (C03), and the reader's devices,
+  // because every operation names the device that authored it and a peer
+  // that holds the reader and not their devices refuses the whole batch.
+  //
+  // It is a standing obligation and not a handshake. Calling it again for a
+  // reader already admitted changes nothing but what it adds — a device bound
+  // since — and is how a replica that missed one is caught up.
+  rpc AdmitReplica(AdmitReplicaRequest) returns (AdmitReplicaResponse);
+
+  // C22, the mirror. The origin tells the destination that the reader has
+  // withdrawn the permission, so that a revoked replica stops accepting rather
+  // than merely stops being sent things. The authorization is deactivated and
+  // kept there as it is here, and what the destination already holds stays:
+  // revoking reaches into nobody's database (RevokeReplica).
+  rpc WithdrawReplica(WithdrawReplicaRequest) returns (WithdrawReplicaResponse);
 }
 
 // What a node publishes about itself, as discovery returns it.
@@ -282,3 +316,49 @@ message MigrateHomeServerResponse {
   // immediately. The other devices log in as they normally would.
   Session session = 3;
 }
+
+// A reader as a replica holds them: the identifier every table of theirs
+// hangs off, and the two names. No address and no password, which is what
+// makes a replicated reader one this node does not authenticate (C03, RN08).
+message ReplicatedReader {
+  // The reader's identifier on the origin, kept as it is. Every operation
+  // and every row of the reader's names it, so a replica that minted another
+  // would hold a history about somebody it cannot find.
+  string id = 1;
+
+  // The first half of @local_name:domain. The domain is the origin's, which
+  // the destination knows from its own catalogue.
+  string local_name = 2;
+
+  string display_name = 3;
+}
+
+// A device as a replica holds it: the identifier every vector clock entry is
+// keyed by, and what the reader called it. C11 is why the identifier travels
+// rather than being minted afresh.
+message ReplicatedDevice {
+  string id = 1;
+  string name = 2;
+  string platform = 3;
+}
+
+message AdmitReplicaRequest {
+  ReplicatedReader reader = 1;
+
+  // Every device the reader has bound, active or not: an operation authored
+  // by a device since unbound is still an operation the replica has to be
+  // able to attribute.
+  repeated ReplicatedDevice devices = 2;
+
+  // Whether the permission covers the e-book files as well as the metadata,
+  // as the reader granted it.
+  bool replicates_files = 3;
+}
+
+message AdmitReplicaResponse {}
+
+message WithdrawReplicaRequest {
+  string user_id = 1;
+}
+
+message WithdrawReplicaResponse {}

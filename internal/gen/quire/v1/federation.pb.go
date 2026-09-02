@@ -1368,6 +1368,318 @@ func (x *MigrateHomeServerResponse) GetSession() *Session {
 	return nil
 }
 
+// A reader as a replica holds them: the identifier every table of theirs
+// hangs off, and the two names. No address and no password, which is what
+// makes a replicated reader one this node does not authenticate (C03, RN08).
+type ReplicatedReader struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The reader's identifier on the origin, kept as it is. Every operation
+	// and every row of the reader's names it, so a replica that minted another
+	// would hold a history about somebody it cannot find.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The first half of @local_name:domain. The domain is the origin's, which
+	// the destination knows from its own catalogue.
+	LocalName     string `protobuf:"bytes,2,opt,name=local_name,json=localName,proto3" json:"local_name,omitempty"`
+	DisplayName   string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReplicatedReader) Reset() {
+	*x = ReplicatedReader{}
+	mi := &file_quire_v1_federation_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReplicatedReader) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplicatedReader) ProtoMessage() {}
+
+func (x *ReplicatedReader) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_federation_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplicatedReader.ProtoReflect.Descriptor instead.
+func (*ReplicatedReader) Descriptor() ([]byte, []int) {
+	return file_quire_v1_federation_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ReplicatedReader) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ReplicatedReader) GetLocalName() string {
+	if x != nil {
+		return x.LocalName
+	}
+	return ""
+}
+
+func (x *ReplicatedReader) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+// A device as a replica holds it: the identifier every vector clock entry is
+// keyed by, and what the reader called it. C11 is why the identifier travels
+// rather than being minted afresh.
+type ReplicatedDevice struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Platform      string                 `protobuf:"bytes,3,opt,name=platform,proto3" json:"platform,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReplicatedDevice) Reset() {
+	*x = ReplicatedDevice{}
+	mi := &file_quire_v1_federation_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReplicatedDevice) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplicatedDevice) ProtoMessage() {}
+
+func (x *ReplicatedDevice) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_federation_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplicatedDevice.ProtoReflect.Descriptor instead.
+func (*ReplicatedDevice) Descriptor() ([]byte, []int) {
+	return file_quire_v1_federation_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ReplicatedDevice) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ReplicatedDevice) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ReplicatedDevice) GetPlatform() string {
+	if x != nil {
+		return x.Platform
+	}
+	return ""
+}
+
+type AdmitReplicaRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Reader *ReplicatedReader      `protobuf:"bytes,1,opt,name=reader,proto3" json:"reader,omitempty"`
+	// Every device the reader has bound, active or not: an operation authored
+	// by a device since unbound is still an operation the replica has to be
+	// able to attribute.
+	Devices []*ReplicatedDevice `protobuf:"bytes,2,rep,name=devices,proto3" json:"devices,omitempty"`
+	// Whether the permission covers the e-book files as well as the metadata,
+	// as the reader granted it.
+	ReplicatesFiles bool `protobuf:"varint,3,opt,name=replicates_files,json=replicatesFiles,proto3" json:"replicates_files,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *AdmitReplicaRequest) Reset() {
+	*x = AdmitReplicaRequest{}
+	mi := &file_quire_v1_federation_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdmitReplicaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdmitReplicaRequest) ProtoMessage() {}
+
+func (x *AdmitReplicaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_federation_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdmitReplicaRequest.ProtoReflect.Descriptor instead.
+func (*AdmitReplicaRequest) Descriptor() ([]byte, []int) {
+	return file_quire_v1_federation_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *AdmitReplicaRequest) GetReader() *ReplicatedReader {
+	if x != nil {
+		return x.Reader
+	}
+	return nil
+}
+
+func (x *AdmitReplicaRequest) GetDevices() []*ReplicatedDevice {
+	if x != nil {
+		return x.Devices
+	}
+	return nil
+}
+
+func (x *AdmitReplicaRequest) GetReplicatesFiles() bool {
+	if x != nil {
+		return x.ReplicatesFiles
+	}
+	return false
+}
+
+type AdmitReplicaResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdmitReplicaResponse) Reset() {
+	*x = AdmitReplicaResponse{}
+	mi := &file_quire_v1_federation_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdmitReplicaResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdmitReplicaResponse) ProtoMessage() {}
+
+func (x *AdmitReplicaResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_federation_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdmitReplicaResponse.ProtoReflect.Descriptor instead.
+func (*AdmitReplicaResponse) Descriptor() ([]byte, []int) {
+	return file_quire_v1_federation_proto_rawDescGZIP(), []int{28}
+}
+
+type WithdrawReplicaRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WithdrawReplicaRequest) Reset() {
+	*x = WithdrawReplicaRequest{}
+	mi := &file_quire_v1_federation_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WithdrawReplicaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WithdrawReplicaRequest) ProtoMessage() {}
+
+func (x *WithdrawReplicaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_federation_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WithdrawReplicaRequest.ProtoReflect.Descriptor instead.
+func (*WithdrawReplicaRequest) Descriptor() ([]byte, []int) {
+	return file_quire_v1_federation_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *WithdrawReplicaRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type WithdrawReplicaResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WithdrawReplicaResponse) Reset() {
+	*x = WithdrawReplicaResponse{}
+	mi := &file_quire_v1_federation_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WithdrawReplicaResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WithdrawReplicaResponse) ProtoMessage() {}
+
+func (x *WithdrawReplicaResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_quire_v1_federation_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WithdrawReplicaResponse.ProtoReflect.Descriptor instead.
+func (*WithdrawReplicaResponse) Descriptor() ([]byte, []int) {
+	return file_quire_v1_federation_proto_rawDescGZIP(), []int{30}
+}
+
 var File_quire_v1_federation_proto protoreflect.FileDescriptor
 
 const file_quire_v1_federation_proto_rawDesc = "" +
@@ -1454,7 +1766,24 @@ const file_quire_v1_federation_proto_rawDesc = "" +
 	"\x19MigrateHomeServerResponse\x12\"\n" +
 	"\x04user\x18\x01 \x01(\v2\x0e.quire.v1.UserR\x04user\x12*\n" +
 	"\adevices\x18\x02 \x03(\v2\x10.quire.v1.DeviceR\adevices\x12+\n" +
-	"\asession\x18\x03 \x01(\v2\x11.quire.v1.SessionR\asession2\x8b\b\n" +
+	"\asession\x18\x03 \x01(\v2\x11.quire.v1.SessionR\asession\"d\n" +
+	"\x10ReplicatedReader\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
+	"\n" +
+	"local_name\x18\x02 \x01(\tR\tlocalName\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\"R\n" +
+	"\x10ReplicatedDevice\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
+	"\bplatform\x18\x03 \x01(\tR\bplatform\"\xaa\x01\n" +
+	"\x13AdmitReplicaRequest\x122\n" +
+	"\x06reader\x18\x01 \x01(\v2\x1a.quire.v1.ReplicatedReaderR\x06reader\x124\n" +
+	"\adevices\x18\x02 \x03(\v2\x1a.quire.v1.ReplicatedDeviceR\adevices\x12)\n" +
+	"\x10replicates_files\x18\x03 \x01(\bR\x0freplicatesFiles\"\x16\n" +
+	"\x14AdmitReplicaResponse\"1\n" +
+	"\x16WithdrawReplicaRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"\x19\n" +
+	"\x17WithdrawReplicaResponse2\xb2\t\n" +
 	"\x11FederationService\x12S\n" +
 	"\x0eDiscoverServer\x12\x1f.quire.v1.DiscoverServerRequest\x1a .quire.v1.DiscoverServerResponse\x12S\n" +
 	"\x0eAddKnownServer\x12\x1f.quire.v1.AddKnownServerRequest\x1a .quire.v1.AddKnownServerResponse\x12S\n" +
@@ -1466,7 +1795,9 @@ const file_quire_v1_federation_proto_rawDesc = "" +
 	"\x10AuthorizeReplica\x12!.quire.v1.AuthorizeReplicaRequest\x1a\".quire.v1.AuthorizeReplicaResponse\x12P\n" +
 	"\rRevokeReplica\x12\x1e.quire.v1.RevokeReplicaRequest\x1a\x1f.quire.v1.RevokeReplicaResponse\x12t\n" +
 	"\x19ListReplicaAuthorizations\x12*.quire.v1.ListReplicaAuthorizationsRequest\x1a+.quire.v1.ListReplicaAuthorizationsResponse\x12\\\n" +
-	"\x11MigrateHomeServer\x12\".quire.v1.MigrateHomeServerRequest\x1a#.quire.v1.MigrateHomeServerResponseB@Z>github.com/anthonyvsmuller/quire/internal/gen/quire/v1;quirev1b\x06proto3"
+	"\x11MigrateHomeServer\x12\".quire.v1.MigrateHomeServerRequest\x1a#.quire.v1.MigrateHomeServerResponse\x12M\n" +
+	"\fAdmitReplica\x12\x1d.quire.v1.AdmitReplicaRequest\x1a\x1e.quire.v1.AdmitReplicaResponse\x12V\n" +
+	"\x0fWithdrawReplica\x12 .quire.v1.WithdrawReplicaRequest\x1a!.quire.v1.WithdrawReplicaResponseB@Z>github.com/anthonyvsmuller/quire/internal/gen/quire/v1;quirev1b\x06proto3"
 
 var (
 	file_quire_v1_federation_proto_rawDescOnce sync.Once
@@ -1480,7 +1811,7 @@ func file_quire_v1_federation_proto_rawDescGZIP() []byte {
 	return file_quire_v1_federation_proto_rawDescData
 }
 
-var file_quire_v1_federation_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_quire_v1_federation_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_quire_v1_federation_proto_goTypes = []any{
 	(*ServerDescriptor)(nil),                  // 0: quire.v1.ServerDescriptor
 	(*Server)(nil),                            // 1: quire.v1.Server
@@ -1507,57 +1838,69 @@ var file_quire_v1_federation_proto_goTypes = []any{
 	(*ListReplicaAuthorizationsResponse)(nil), // 22: quire.v1.ListReplicaAuthorizationsResponse
 	(*MigrateHomeServerRequest)(nil),          // 23: quire.v1.MigrateHomeServerRequest
 	(*MigrateHomeServerResponse)(nil),         // 24: quire.v1.MigrateHomeServerResponse
-	(*timestamppb.Timestamp)(nil),             // 25: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil),             // 26: google.protobuf.FieldMask
-	(*Device)(nil),                            // 27: quire.v1.Device
-	(*User)(nil),                              // 28: quire.v1.User
-	(*Session)(nil),                           // 29: quire.v1.Session
+	(*ReplicatedReader)(nil),                  // 25: quire.v1.ReplicatedReader
+	(*ReplicatedDevice)(nil),                  // 26: quire.v1.ReplicatedDevice
+	(*AdmitReplicaRequest)(nil),               // 27: quire.v1.AdmitReplicaRequest
+	(*AdmitReplicaResponse)(nil),              // 28: quire.v1.AdmitReplicaResponse
+	(*WithdrawReplicaRequest)(nil),            // 29: quire.v1.WithdrawReplicaRequest
+	(*WithdrawReplicaResponse)(nil),           // 30: quire.v1.WithdrawReplicaResponse
+	(*timestamppb.Timestamp)(nil),             // 31: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),             // 32: google.protobuf.FieldMask
+	(*Device)(nil),                            // 33: quire.v1.Device
+	(*User)(nil),                              // 34: quire.v1.User
+	(*Session)(nil),                           // 35: quire.v1.Session
 }
 var file_quire_v1_federation_proto_depIdxs = []int32{
 	0,  // 0: quire.v1.Server.descriptor:type_name -> quire.v1.ServerDescriptor
-	25, // 1: quire.v1.Server.discovered_at:type_name -> google.protobuf.Timestamp
-	25, // 2: quire.v1.ReplicaAuthorization.authorized_at:type_name -> google.protobuf.Timestamp
+	31, // 1: quire.v1.Server.discovered_at:type_name -> google.protobuf.Timestamp
+	31, // 2: quire.v1.ReplicaAuthorization.authorized_at:type_name -> google.protobuf.Timestamp
 	0,  // 3: quire.v1.DiscoverServerResponse.descriptor:type_name -> quire.v1.ServerDescriptor
 	1,  // 4: quire.v1.AddKnownServerResponse.server:type_name -> quire.v1.Server
 	1,  // 5: quire.v1.GetKnownServerResponse.server:type_name -> quire.v1.Server
 	1,  // 6: quire.v1.ListKnownServersResponse.servers:type_name -> quire.v1.Server
 	1,  // 7: quire.v1.UpdateKnownServerRequest.server:type_name -> quire.v1.Server
-	26, // 8: quire.v1.UpdateKnownServerRequest.update_mask:type_name -> google.protobuf.FieldMask
+	32, // 8: quire.v1.UpdateKnownServerRequest.update_mask:type_name -> google.protobuf.FieldMask
 	1,  // 9: quire.v1.UpdateKnownServerResponse.server:type_name -> quire.v1.Server
 	1,  // 10: quire.v1.RefreshKnownServerResponse.server:type_name -> quire.v1.Server
 	2,  // 11: quire.v1.AuthorizeReplicaResponse.authorization:type_name -> quire.v1.ReplicaAuthorization
 	2,  // 12: quire.v1.ListReplicaAuthorizationsResponse.authorizations:type_name -> quire.v1.ReplicaAuthorization
-	27, // 13: quire.v1.MigrateHomeServerRequest.devices:type_name -> quire.v1.Device
-	28, // 14: quire.v1.MigrateHomeServerResponse.user:type_name -> quire.v1.User
-	27, // 15: quire.v1.MigrateHomeServerResponse.devices:type_name -> quire.v1.Device
-	29, // 16: quire.v1.MigrateHomeServerResponse.session:type_name -> quire.v1.Session
-	3,  // 17: quire.v1.FederationService.DiscoverServer:input_type -> quire.v1.DiscoverServerRequest
-	5,  // 18: quire.v1.FederationService.AddKnownServer:input_type -> quire.v1.AddKnownServerRequest
-	7,  // 19: quire.v1.FederationService.GetKnownServer:input_type -> quire.v1.GetKnownServerRequest
-	9,  // 20: quire.v1.FederationService.ListKnownServers:input_type -> quire.v1.ListKnownServersRequest
-	11, // 21: quire.v1.FederationService.UpdateKnownServer:input_type -> quire.v1.UpdateKnownServerRequest
-	13, // 22: quire.v1.FederationService.RefreshKnownServer:input_type -> quire.v1.RefreshKnownServerRequest
-	15, // 23: quire.v1.FederationService.RemoveKnownServer:input_type -> quire.v1.RemoveKnownServerRequest
-	17, // 24: quire.v1.FederationService.AuthorizeReplica:input_type -> quire.v1.AuthorizeReplicaRequest
-	19, // 25: quire.v1.FederationService.RevokeReplica:input_type -> quire.v1.RevokeReplicaRequest
-	21, // 26: quire.v1.FederationService.ListReplicaAuthorizations:input_type -> quire.v1.ListReplicaAuthorizationsRequest
-	23, // 27: quire.v1.FederationService.MigrateHomeServer:input_type -> quire.v1.MigrateHomeServerRequest
-	4,  // 28: quire.v1.FederationService.DiscoverServer:output_type -> quire.v1.DiscoverServerResponse
-	6,  // 29: quire.v1.FederationService.AddKnownServer:output_type -> quire.v1.AddKnownServerResponse
-	8,  // 30: quire.v1.FederationService.GetKnownServer:output_type -> quire.v1.GetKnownServerResponse
-	10, // 31: quire.v1.FederationService.ListKnownServers:output_type -> quire.v1.ListKnownServersResponse
-	12, // 32: quire.v1.FederationService.UpdateKnownServer:output_type -> quire.v1.UpdateKnownServerResponse
-	14, // 33: quire.v1.FederationService.RefreshKnownServer:output_type -> quire.v1.RefreshKnownServerResponse
-	16, // 34: quire.v1.FederationService.RemoveKnownServer:output_type -> quire.v1.RemoveKnownServerResponse
-	18, // 35: quire.v1.FederationService.AuthorizeReplica:output_type -> quire.v1.AuthorizeReplicaResponse
-	20, // 36: quire.v1.FederationService.RevokeReplica:output_type -> quire.v1.RevokeReplicaResponse
-	22, // 37: quire.v1.FederationService.ListReplicaAuthorizations:output_type -> quire.v1.ListReplicaAuthorizationsResponse
-	24, // 38: quire.v1.FederationService.MigrateHomeServer:output_type -> quire.v1.MigrateHomeServerResponse
-	28, // [28:39] is the sub-list for method output_type
-	17, // [17:28] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	33, // 13: quire.v1.MigrateHomeServerRequest.devices:type_name -> quire.v1.Device
+	34, // 14: quire.v1.MigrateHomeServerResponse.user:type_name -> quire.v1.User
+	33, // 15: quire.v1.MigrateHomeServerResponse.devices:type_name -> quire.v1.Device
+	35, // 16: quire.v1.MigrateHomeServerResponse.session:type_name -> quire.v1.Session
+	25, // 17: quire.v1.AdmitReplicaRequest.reader:type_name -> quire.v1.ReplicatedReader
+	26, // 18: quire.v1.AdmitReplicaRequest.devices:type_name -> quire.v1.ReplicatedDevice
+	3,  // 19: quire.v1.FederationService.DiscoverServer:input_type -> quire.v1.DiscoverServerRequest
+	5,  // 20: quire.v1.FederationService.AddKnownServer:input_type -> quire.v1.AddKnownServerRequest
+	7,  // 21: quire.v1.FederationService.GetKnownServer:input_type -> quire.v1.GetKnownServerRequest
+	9,  // 22: quire.v1.FederationService.ListKnownServers:input_type -> quire.v1.ListKnownServersRequest
+	11, // 23: quire.v1.FederationService.UpdateKnownServer:input_type -> quire.v1.UpdateKnownServerRequest
+	13, // 24: quire.v1.FederationService.RefreshKnownServer:input_type -> quire.v1.RefreshKnownServerRequest
+	15, // 25: quire.v1.FederationService.RemoveKnownServer:input_type -> quire.v1.RemoveKnownServerRequest
+	17, // 26: quire.v1.FederationService.AuthorizeReplica:input_type -> quire.v1.AuthorizeReplicaRequest
+	19, // 27: quire.v1.FederationService.RevokeReplica:input_type -> quire.v1.RevokeReplicaRequest
+	21, // 28: quire.v1.FederationService.ListReplicaAuthorizations:input_type -> quire.v1.ListReplicaAuthorizationsRequest
+	23, // 29: quire.v1.FederationService.MigrateHomeServer:input_type -> quire.v1.MigrateHomeServerRequest
+	27, // 30: quire.v1.FederationService.AdmitReplica:input_type -> quire.v1.AdmitReplicaRequest
+	29, // 31: quire.v1.FederationService.WithdrawReplica:input_type -> quire.v1.WithdrawReplicaRequest
+	4,  // 32: quire.v1.FederationService.DiscoverServer:output_type -> quire.v1.DiscoverServerResponse
+	6,  // 33: quire.v1.FederationService.AddKnownServer:output_type -> quire.v1.AddKnownServerResponse
+	8,  // 34: quire.v1.FederationService.GetKnownServer:output_type -> quire.v1.GetKnownServerResponse
+	10, // 35: quire.v1.FederationService.ListKnownServers:output_type -> quire.v1.ListKnownServersResponse
+	12, // 36: quire.v1.FederationService.UpdateKnownServer:output_type -> quire.v1.UpdateKnownServerResponse
+	14, // 37: quire.v1.FederationService.RefreshKnownServer:output_type -> quire.v1.RefreshKnownServerResponse
+	16, // 38: quire.v1.FederationService.RemoveKnownServer:output_type -> quire.v1.RemoveKnownServerResponse
+	18, // 39: quire.v1.FederationService.AuthorizeReplica:output_type -> quire.v1.AuthorizeReplicaResponse
+	20, // 40: quire.v1.FederationService.RevokeReplica:output_type -> quire.v1.RevokeReplicaResponse
+	22, // 41: quire.v1.FederationService.ListReplicaAuthorizations:output_type -> quire.v1.ListReplicaAuthorizationsResponse
+	24, // 42: quire.v1.FederationService.MigrateHomeServer:output_type -> quire.v1.MigrateHomeServerResponse
+	28, // 43: quire.v1.FederationService.AdmitReplica:output_type -> quire.v1.AdmitReplicaResponse
+	30, // 44: quire.v1.FederationService.WithdrawReplica:output_type -> quire.v1.WithdrawReplicaResponse
+	32, // [32:45] is the sub-list for method output_type
+	19, // [19:32] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_quire_v1_federation_proto_init() }
@@ -1574,7 +1917,7 @@ func file_quire_v1_federation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_quire_v1_federation_proto_rawDesc), len(file_quire_v1_federation_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   25,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
