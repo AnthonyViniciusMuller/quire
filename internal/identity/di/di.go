@@ -40,6 +40,8 @@ import (
 	revokedeviceusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/revokedevice"
 	updatedeviceusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/updatedevice"
 	updateuserusecase "github.com/anthonyvsmuller/quire/internal/identity/application/usecase/updateuser"
+	"github.com/anthonyvsmuller/quire/internal/identity/domain/device"
+	"github.com/anthonyvsmuller/quire/internal/identity/domain/user"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/authn"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/authservice"
 	"github.com/anthonyvsmuller/quire/internal/identity/infra/grpc/controller/changeemail"
@@ -83,6 +85,14 @@ type Container struct {
 	Interceptor *authn.Interceptor
 	// Service is the gRPC surface of the slice, ready to be registered.
 	Service *authservice.Service
+
+	// Users and Devices are this slice's repositories, exposed for the
+	// federation slice: a replica holds a row for every reader a peer
+	// replicates here and for every device of theirs, and it writes them
+	// through these rather than through statements of its own, so that what
+	// a replicated reader is stays in the package that defines one (C22).
+	Users   user.Repository
+	Devices device.Repository
 
 	// Deliveries is the worker that delivers the password recoveries this
 	// slice issues. It is here for the reason the replication worker is in the
@@ -179,6 +189,8 @@ func Initialize(
 		Auth:        auth,
 		Interceptor: authn.New(auth, clock, authn.PublicMethods()),
 		Service:     authservice.New(&controllers),
+		Users:       users,
+		Devices:     devices,
 		Deliveries:  notifier,
 		Migration:   migratehomeserver.New(migration),
 	}, nil

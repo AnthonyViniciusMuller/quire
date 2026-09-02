@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/addknownserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/admitreplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/authorizereplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/discoverserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/getknownserver"
@@ -37,6 +38,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/removeknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/revokereplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/updateknownserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/withdrawreplica"
 	quirev1 "github.com/anthonyvsmuller/quire/internal/gen/quire/v1"
 )
 
@@ -58,6 +60,11 @@ type Controllers struct {
 	ListReplicaAuthorizations *listreplicaauthorizations.ListReplicaAuthorizations
 	// The one that serves UC16, whose use case is the identity slice's.
 	MigrateHomeServer *migratehomeserver.MigrateHomeServer
+
+	// The two whose caller is a peer node, authenticated by its certificate
+	// rather than by a token (C22).
+	AdmitReplica    *admitreplica.AdmitReplica
+	WithdrawReplica *withdrawreplica.WithdrawReplica
 }
 
 // Service is the gRPC surface of the federation slice.
@@ -156,4 +163,19 @@ func (s *Service) MigrateHomeServer(
 	ctx context.Context, request *quirev1.MigrateHomeServerRequest,
 ) (*quirev1.MigrateHomeServerResponse, error) {
 	return s.controllers.MigrateHomeServer.Handle(ctx, request)
+}
+
+// AdmitReplica records a reader the calling node replicates here.
+func (s *Service) AdmitReplica(
+	ctx context.Context, request *quirev1.AdmitReplicaRequest,
+) (*quirev1.AdmitReplicaResponse, error) {
+	return s.controllers.AdmitReplica.Handle(ctx, request)
+}
+
+// WithdrawReplica deactivates the permission the calling node once carried
+// here.
+func (s *Service) WithdrawReplica(
+	ctx context.Context, request *quirev1.WithdrawReplicaRequest,
+) (*quirev1.WithdrawReplicaResponse, error) {
+	return s.controllers.WithdrawReplica.Handle(ctx, request)
 }

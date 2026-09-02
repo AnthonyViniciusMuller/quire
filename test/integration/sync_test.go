@@ -76,7 +76,8 @@ func serveSync(t *testing.T) synchronization {
 		t.Fatalf("building the identity slice: %v", err)
 	}
 
-	federationContainer := federationdi.Initialize(cfg, pool, identityContainer.Migration)
+	federationContainer := federationdi.Initialize(cfg, pool, identityContainer.Migration,
+		identityContainer.Users, identityContainer.Devices)
 
 	libraryContainer, err := librarydi.Initialize(t.Context(), cfg, pool, clock, logging.Discard())
 	if err != nil {

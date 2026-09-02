@@ -111,7 +111,8 @@ func serveFederation(t *testing.T) federation {
 		t.Fatalf("building the identity slice: %v", err)
 	}
 
-	federationContainer := federationdi.Initialize(cfg, pool, identityContainer.Migration)
+	federationContainer := federationdi.Initialize(cfg, pool, identityContainer.Migration,
+		identityContainer.Users, identityContainer.Devices)
 
 	grpcServer, err := grpcx.New(t.Context(), &cfg.Server,
 		grpcx.WithChain(grpcx.NewChain(logging.Discard())),

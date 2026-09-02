@@ -161,10 +161,44 @@ FROM federation.servers
 WHERE domain = $1
 `
 
-// The lookup UC12 addresses by name, and the one that tells an addition from a
-// node the catalogue already holds.
 func (q *Queries) GetServerByDomain(ctx context.Context, domain string) (FederationServer, error) {
 	row := q.db.QueryRow(ctx, getServerByDomain, domain)
+	var i FederationServer
+	err := row.Scan(
+		&i.ID,
+		&i.Domain,
+		&i.BaseUrl,
+		&i.JwksUri,
+		&i.CertificateFingerprint,
+		&i.IsLocal,
+		&i.DiscoveredAt,
+		&i.Active,
+		&i.GrpcAuthority,
+	)
+	return i, err
+}
+
+const getServerByFingerprint = `-- name: GetServerByFingerprint :one
+SELECT id, domain, base_url, jwks_uri, certificate_fingerprint, is_local, discovered_at, active,
+       grpc_authority
+FROM federation.servers
+WHERE certificate_fingerprint = $1
+  AND NOT is_local
+ORDER BY discovered_at
+LIMIT 1
+`
+
+// The lookup UC12 addresses by name, and the one that tells an addition from a
+// node the catalogue already holds.
+// The node that published a pin, for the calls whose caller is a peer.
+//
+// This instance's own row is excluded: it carries this node's own pin, and a
+// node that recognized itself as a peer would admit its own readers as somebody
+// else's. The column is not unique — two rows carry one pin only if an operator
+// recorded the same node under two domains — and the oldest is taken so that
+// the answer does not change when a second is added.
+func (q *Queries) GetServerByFingerprint(ctx context.Context, certificateFingerprint *string) (FederationServer, error) {
+	row := q.db.QueryRow(ctx, getServerByFingerprint, certificateFingerprint)
 	var i FederationServer
 	err := row.Scan(
 		&i.ID,

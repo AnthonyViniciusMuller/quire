@@ -56,34 +56,30 @@ func New(
 
 // Identify returns the node that published the pin.
 //
-// It reads the catalogue rather than asking for the one row, and that is a
-// deliberate trade rather than a missing statement. A reader's federation is
-// the handful of nodes they chose — the federation slice's own listing is not
-// paginated for the same reason — so the scan is over a few rows, and what it
-// buys is that the catalogue stays behind the port the federation slice
-// declares: adding a query here would put a second definition of "an active
-// node" in a slice that does not own the word.
+// The catalogue answers it through the federation slice's own port, this
+// instance excluded: its own row carries its own pin, and a node that
+// recognized itself as a peer would replicate to itself. A node the operator
+// has stopped is refused as if it were unknown, so that a peer cannot tell
+// whether it was ever in the catalogue.
 func (s *Service) Identify(ctx context.Context, pin string) (uuid.UUID, error) {
 	if pin == "" {
 		return uuid.UUID{}, s.unknown()
 	}
 
-	known, err := s.catalogue.List(ctx, false)
+	node, err := s.catalogue.GetByFingerprint(ctx, federationserver.Fingerprint(pin))
 	if err != nil {
+		if errors.Is(err, errs.KindNotFound) {
+			return uuid.UUID{}, s.unknown()
+		}
+
 		return uuid.UUID{}, err
 	}
 
-	for _, node := range known {
-		// This instance is excluded. Its own row carries its own pin, and a
-		// node that recognized itself as a peer would replicate to itself.
-		if node.IsLocal || node.CertificateFingerprint.String() != pin {
-			continue
-		}
-
-		return node.ID, nil
+	if !node.Active {
+		return uuid.UUID{}, s.unknown()
 	}
 
-	return uuid.UUID{}, s.unknown()
+	return node.ID, nil
 }
 
 // Authorized reports nil when the reader lets the node hold a copy.

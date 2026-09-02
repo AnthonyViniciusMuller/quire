@@ -166,6 +166,11 @@ func PublicMethods() []string {
 		// the last paragraph above: the certificate is the credential, and the
 		// handler is what checks it.
 		quirev1.SyncService_ReplicateOperations_FullMethodName,
+		// The two the federation service serves to a peer for the same reason
+		// (C22): the origin telling a replica that it is one, and that it has
+		// stopped being one.
+		quirev1.FederationService_AdmitReplica_FullMethodName,
+		quirev1.FederationService_WithdrawReplica_FullMethodName,
 	}
 }
 

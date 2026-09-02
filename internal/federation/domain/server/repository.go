@@ -85,6 +85,15 @@ type Repository interface {
 	// value UC12 addresses a lookup to and the one the catalogue makes unique.
 	GetByDomain(ctx context.Context, domain Domain) (*Server, error)
 
+	// GetByFingerprint reads the node that published the pin, this instance
+	// excluded, or errs.KindNotFound.
+	//
+	// It is what identifies the caller of a peer-facing call: the pin is read
+	// off the certificate the caller presented, and the row is what says which
+	// node that is. Whether that node may do what it is calling to do is the
+	// use case's question.
+	GetByFingerprint(ctx context.Context, pin Fingerprint) (*Server, error)
+
 	// List reads the catalogue, ordered by domain so that it does not
 	// reshuffle between two calls. Deactivated nodes are included only when
 	// asked for.

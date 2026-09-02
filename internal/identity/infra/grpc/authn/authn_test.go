@@ -186,6 +186,10 @@ func TestPublicMethodsAreTheOnesTheSpecificationExempts(t *testing.T) {
 		// certificate: the caller is a peer node, nobody ever issued it a
 		// token, and the handler checks the pin it presented instead.
 		quirev1.SyncService_ReplicateOperations_FullMethodName: true,
+		// The same credential, for the two calls by which an origin tells a
+		// replica that it is one, and that it has stopped being one (C22).
+		quirev1.FederationService_AdmitReplica_FullMethodName:    true,
+		quirev1.FederationService_WithdrawReplica_FullMethodName: true,
 	}
 
 	got := authn.PublicMethods()

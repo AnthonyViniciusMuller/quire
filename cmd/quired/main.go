@@ -114,7 +114,7 @@ func run(ctx context.Context) error {
 
 	defer func() { _ = dialer.Close() }()
 
-	federation := federationdi.Initialize(cfg, pool, identity.Migration)
+	federation := federationdi.Initialize(cfg, pool, identity.Migration, identity.Users, identity.Devices)
 
 	// For the same reason, and one of its own: which object store holds the
 	// readers' files is decided here, and an endpoint the SDK cannot address

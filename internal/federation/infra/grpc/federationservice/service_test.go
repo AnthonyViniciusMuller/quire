@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	addserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/addserver"
+	admitreplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/admitreplica"
 	authorizereplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/authorizereplica"
 	discoverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/discover"
 	getserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/getserver"
@@ -23,7 +24,9 @@ import (
 	removeserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/removeserver"
 	revokereplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/revokereplica"
 	updateserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/updateserver"
+	withdrawreplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/withdrawreplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/addknownserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/admitreplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/authorizereplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/discoverserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/getknownserver"
@@ -34,6 +37,7 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/removeknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/revokereplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/updateknownserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/withdrawreplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/federationservice"
 	quirev1 "github.com/anthonyvsmuller/quire/internal/gen/quire/v1"
 	"github.com/anthonyvsmuller/quire/internal/identity/application/apptest"
@@ -110,6 +114,14 @@ func TestEveryCallReachesItsController(t *testing.T) {
 		MigrateHomeServer: migratehomeserver.New(
 			recorder[migratehomeserverusecase.Input, migratehomeserverusecase.Output]{
 				name: "MigrateHomeServer", calls: &calls,
+			}),
+		AdmitReplica: admitreplica.New(
+			recorder[admitreplicausecase.Input, admitreplicausecase.Output]{
+				name: "AdmitReplica", calls: &calls,
+			}),
+		WithdrawReplica: withdrawreplica.New(
+			recorder[withdrawreplicausecase.Input, withdrawreplicausecase.Output]{
+				name: "WithdrawReplica", calls: &calls,
 			}),
 	})
 
@@ -239,4 +251,61 @@ func authenticated(t *testing.T) context.Context {
 	}
 
 	return served
+}
+
+// AdmitReplica and WithdrawReplica are the two methods of this service whose
+// caller is a peer node and not a device, and they are authenticated by the
+// certificate that caller presented rather than by a token.
+//
+// They are served, and what proves it is what they refuse: a caller with no
+// certificate is told the call is addressed to a node, which is an answer
+// only the peer-facing controllers can give.
+func TestThePeerFacingCallsRefuseACallerThatIsNotANode(t *testing.T) {
+	t.Parallel()
+
+	var calls []string
+
+	service := federationservice.New(&federationservice.Controllers{
+		AdmitReplica: admitreplica.New(
+			recorder[admitreplicausecase.Input, admitreplicausecase.Output]{
+				name: "AdmitReplica", calls: &calls,
+			}),
+		WithdrawReplica: withdrawreplica.New(
+			recorder[withdrawreplicausecase.Input, withdrawreplicausecase.Output]{
+				name: "WithdrawReplica", calls: &calls,
+			}),
+	})
+
+	ctx := authenticated(t)
+
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{"AdmitReplica", func() error {
+			_, err := service.AdmitReplica(ctx, &quirev1.AdmitReplicaRequest{})
+
+			return err
+		}},
+		{"WithdrawReplica", func() error {
+			_, err := service.WithdrawReplica(ctx, &quirev1.WithdrawReplicaRequest{})
+
+			return err
+		}},
+	}
+
+	for _, test := range tests {
+		calls = calls[:0]
+
+		err := test.call()
+
+		switch {
+		case status.Code(err) == codes.Unimplemented:
+			t.Errorf("%s answers Unimplemented, so the service does not serve it", test.name)
+		case err == nil:
+			t.Errorf("%s answered a caller that presented no certificate", test.name)
+		case len(calls) != 0:
+			t.Errorf("%s reached %v before the caller had been identified", test.name, calls)
+		}
+	}
 }

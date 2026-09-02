@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	addserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/addserver"
+	admitreplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/admitreplica"
 	authorizereplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/authorizereplica"
 	discoverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/discover"
 	getserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/getserver"
@@ -37,9 +38,11 @@ import (
 	removeserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/removeserver"
 	revokereplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/revokereplica"
 	updateserverusecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/updateserver"
+	withdrawreplicausecase "github.com/anthonyvsmuller/quire/internal/federation/application/usecase/withdrawreplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/replica"
 	"github.com/anthonyvsmuller/quire/internal/federation/domain/server"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/addknownserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/admitreplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/authorizereplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/discoverserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/getknownserver"
@@ -50,11 +53,15 @@ import (
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/removeknownserver"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/revokereplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/updateknownserver"
+	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/controller/withdrawreplica"
 	"github.com/anthonyvsmuller/quire/internal/federation/infra/grpc/federationservice"
 	replicarepository "github.com/anthonyvsmuller/quire/internal/federation/infra/repository/replica"
 	serverrepository "github.com/anthonyvsmuller/quire/internal/federation/infra/repository/server"
 	clockservice "github.com/anthonyvsmuller/quire/internal/federation/infra/service/clock"
 	discoveryservice "github.com/anthonyvsmuller/quire/internal/federation/infra/service/discovery"
+	readersservice "github.com/anthonyvsmuller/quire/internal/federation/infra/service/readers"
+	identitydevice "github.com/anthonyvsmuller/quire/internal/identity/domain/device"
+	identityuser "github.com/anthonyvsmuller/quire/internal/identity/domain/user"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 )
@@ -102,7 +109,11 @@ func Catalogue(pool *pgxpool.Pool) server.Repository {
 // a reader asks it to. A domain that does not answer is a failed call, not a
 // node that should not have started.
 func Initialize(
-	cfg *config.Config, pool *pgxpool.Pool, migration *migratehomeserver.MigrateHomeServer,
+	cfg *config.Config,
+	pool *pgxpool.Pool,
+	migration *migratehomeserver.MigrateHomeServer,
+	users identityuser.Repository,
+	devices identitydevice.Repository,
 ) *Container {
 	manager := persist.NewManager(pool)
 
@@ -111,6 +122,7 @@ func Initialize(
 
 	discovery := discoveryservice.New(&cfg.Federation)
 	clock := clockservice.New()
+	readers := readersservice.New(users, devices, clock)
 
 	// The manager itself is the unit of work: its Within is the port, so no
 	// adapter stands between them.
@@ -130,6 +142,9 @@ func Initialize(
 		ListReplicaAuthorizations: listreplicaauthorizations.New(
 			listauthorizationsusecase.New(servers, replicas)),
 		MigrateHomeServer: migration,
+		AdmitReplica: admitreplica.New(
+			admitreplicausecase.New(servers, replicas, readers, clock, transaction)),
+		WithdrawReplica: withdrawreplica.New(withdrawreplicausecase.New(servers, replicas)),
 	}
 
 	return &Container{

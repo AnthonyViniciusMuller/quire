@@ -274,6 +274,21 @@ func (r *ServerRepository) GetByDomain(_ context.Context, domain server.Domain) 
 	return nil, serverNotFound()
 }
 
+// GetByFingerprint reads the node that published the pin, this instance
+// excluded, as the statement does.
+func (r *ServerRepository) GetByFingerprint(_ context.Context, pin server.Fingerprint) (*server.Server, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, stored := range r.records {
+		if !stored.IsLocal && !pin.IsZero() && stored.CertificateFingerprint == pin {
+			return cloneServer(stored), nil
+		}
+	}
+
+	return nil, serverNotFound()
+}
+
 // List reads the catalogue, ordered as the statement orders it.
 func (r *ServerRepository) List(_ context.Context, includeInactive bool) ([]*server.Server, error) {
 	r.mu.Lock()
@@ -483,4 +498,99 @@ func (t *Transaction) Calls() int {
 	defer t.mu.Unlock()
 
 	return t.calls
+}
+
+// Readers is the identity slice as this one sees it: the readers peers have
+// admitted here, each under the origin that admitted them, and the devices
+// under each reader.
+//
+// It refuses what the adapter refuses — a reader held under another origin,
+// a device held under another reader — because the use case's contract with
+// the port is what a test of the use case is about.
+type Readers struct {
+	mu       sync.Mutex
+	origins  map[uuid.UUID]uuid.UUID
+	devices  map[uuid.UUID]uuid.UUID
+	admitted int
+	// Err, when set, is what Admit reports, standing for an identity slice
+	// that could not be written.
+	Err error
+}
+
+// Readers satisfies the port the use cases hold.
+var _ service.Readers = (*Readers)(nil)
+
+// NewReaders returns a slice holding nobody.
+func NewReaders() *Readers {
+	return &Readers{origins: map[uuid.UUID]uuid.UUID{}, devices: map[uuid.UUID]uuid.UUID{}}
+}
+
+// Host records a reader this node holds already, under the origin given —
+// this instance's own identifier for one it hosts.
+func (r *Readers) Host(readerID, originServerID uuid.UUID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.origins[readerID] = originServerID
+}
+
+// Admit records the reader and the devices, refusing a claim over a row that
+// has another owner.
+func (r *Readers) Admit(
+	_ context.Context, originServerID uuid.UUID, reader *service.Reader, devices []service.Device,
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.Err != nil {
+		return r.Err
+	}
+
+	if origin, held := r.origins[reader.ID]; held && origin != originServerID {
+		return errs.New(errs.KindPermissionDenied, "the reader is held here under another node")
+	}
+
+	for _, appliance := range devices {
+		if owner, held := r.devices[appliance.ID]; held && owner != reader.ID {
+			return errs.New(errs.KindPermissionDenied, "the device belongs to another reader")
+		}
+	}
+
+	r.origins[reader.ID] = originServerID
+
+	for _, appliance := range devices {
+		r.devices[appliance.ID] = reader.ID
+	}
+
+	r.admitted++
+
+	return nil
+}
+
+// OriginOf is the node a reader was admitted from, if any.
+func (r *Readers) OriginOf(readerID uuid.UUID) (uuid.UUID, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	origin, held := r.origins[readerID]
+
+	return origin, held
+}
+
+// Holds reports whether the device is recorded under the reader.
+func (r *Readers) Holds(readerID, deviceID uuid.UUID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	owner, held := r.devices[deviceID]
+
+	return held && owner == readerID
+}
+
+// Admitted is how many times Admit succeeded.
+func (r *Readers) Admitted() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.admitted
 }

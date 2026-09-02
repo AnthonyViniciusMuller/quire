@@ -23,6 +23,7 @@ const (
 	opGetByID          = "federation/server: get by id"
 	opGetByIDForUpdate = "federation/server: get by id for update"
 	opGetByDomain      = "federation/server: get by domain"
+	opGetByFingerprint = "federation/server: get by fingerprint"
 	opList             = "federation/server: list"
 )
 
@@ -161,6 +162,17 @@ func (r *Repository) GetByDomain(ctx context.Context, domain server.Domain) (*se
 	row, err := r.queries(ctx).GetServerByDomain(ctx, domain.String())
 	if err != nil {
 		return nil, readError(err, opGetByDomain)
+	}
+
+	return toDomain(&row), nil
+}
+
+// GetByFingerprint reads the node that published the pin, this instance
+// excluded.
+func (r *Repository) GetByFingerprint(ctx context.Context, pin server.Fingerprint) (*server.Server, error) {
+	row, err := r.queries(ctx).GetServerByFingerprint(ctx, optionalString(pin.String()))
+	if err != nil {
+		return nil, readError(err, opGetByFingerprint)
 	}
 
 	return toDomain(&row), nil

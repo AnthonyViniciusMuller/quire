@@ -82,9 +82,17 @@ type Querier interface {
 	// reader names: a node, and themselves. Revoked rows are returned, since
 	// re-authorizing one writes that row rather than a second.
 	GetReplicaAuthorizationByPair(ctx context.Context, arg GetReplicaAuthorizationByPairParams) (FederationUserReplica, error)
+	GetServerByDomain(ctx context.Context, domain string) (FederationServer, error)
 	// The lookup UC12 addresses by name, and the one that tells an addition from a
 	// node the catalogue already holds.
-	GetServerByDomain(ctx context.Context, domain string) (FederationServer, error)
+	// The node that published a pin, for the calls whose caller is a peer.
+	//
+	// This instance's own row is excluded: it carries this node's own pin, and a
+	// node that recognized itself as a peer would admit its own readers as somebody
+	// else's. The column is not unique — two rows carry one pin only if an operator
+	// recorded the same node under two domains — and the oldest is taken so that
+	// the answer does not change when a second is added.
+	GetServerByFingerprint(ctx context.Context, certificateFingerprint *string) (FederationServer, error)
 	GetServerByID(ctx context.Context, id uuid.UUID) (FederationServer, error)
 	// The same read, holding the row until the transaction ends.
 	//
