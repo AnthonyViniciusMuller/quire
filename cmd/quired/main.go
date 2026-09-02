@@ -234,6 +234,10 @@ func run(ctx context.Context) error {
 	// the sessions nobody is sending to, and releases every one still open when
 	// the node stops.
 	group.Go(func() error { return library.Uploads.Run(serving) })
+	// And the sixth is housekeeping. Every refresh writes a credential and
+	// spends the one presented (D07), and nothing else ever removes a row;
+	// this removes the ones nothing can present any more.
+	group.Go(func() error { return identity.Sweep.Run(serving) })
 
 	if err := group.Wait(); err != nil {
 		return err

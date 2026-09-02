@@ -69,6 +69,7 @@ import (
 	mailerservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/mailer"
 	smtpservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/smtp"
 	tokenservice "github.com/anthonyvsmuller/quire/internal/identity/infra/service/token"
+	"github.com/anthonyvsmuller/quire/internal/identity/infra/worker"
 	"github.com/anthonyvsmuller/quire/internal/shared/config"
 	"github.com/anthonyvsmuller/quire/internal/shared/persist"
 )
@@ -99,6 +100,10 @@ type Container struct {
 	// sync slice's container: nobody calls it, so nothing would start it, and
 	// the node is what starts the things that run on their own.
 	Deliveries *deferredservice.Service
+
+	// Sweep removes the credentials nothing can present any more. Here for
+	// the same reason: nobody calls it.
+	Sweep *worker.Sweep
 
 	// Migration serves FederationService.MigrateHomeServer (UC16, RF17).
 	//
@@ -192,6 +197,7 @@ func Initialize(
 		Users:       users,
 		Devices:     devices,
 		Deliveries:  notifier,
+		Sweep:       worker.New(credentials, clock, logger),
 		Migration:   migratehomeserver.New(migration),
 	}, nil
 }
