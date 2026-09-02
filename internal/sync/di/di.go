@@ -33,6 +33,7 @@ import (
 	federationreplica "github.com/anthonyvsmuller/quire/internal/federation/domain/replica"
 	federationserver "github.com/anthonyvsmuller/quire/internal/federation/domain/server"
 
+	identityuser "github.com/anthonyvsmuller/quire/internal/identity/domain/user"
 	librarycollection "github.com/anthonyvsmuller/quire/internal/library/domain/collection"
 	libraryebook "github.com/anthonyvsmuller/quire/internal/library/domain/ebook"
 	librarymembership "github.com/anthonyvsmuller/quire/internal/library/domain/membership"
@@ -116,6 +117,7 @@ func Initialize(
 	authorizations federationreplica.Repository,
 	peers federationservice.Peers,
 	readers federationservice.Readers,
+	users identityuser.Repository,
 	records *Records,
 	logger *slog.Logger,
 ) *Container {
@@ -145,7 +147,7 @@ func Initialize(
 		cfg.Federation.ReplicationInterval, cfg.Federation.ReplicationBatchSize)
 
 	inbound := replicateoperationsusecase.New(
-		replicasservice.New(catalogue, authorizations), push)
+		replicasservice.New(catalogue, authorizations, users), push)
 
 	controllers := syncservice.Controllers{
 		PushOperations:      pushoperations.New(push),

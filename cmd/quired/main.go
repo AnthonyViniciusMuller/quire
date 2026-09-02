@@ -141,7 +141,8 @@ func run(ctx context.Context) error {
 	// that is this file's job — the sync slice imports no container but its
 	// own.
 	synchronization := syncdi.Initialize(cfg, pool, clock, dialer,
-		federation.Servers, federation.Authorizations, federation.Peers, federation.Readers, &syncdi.Records{
+		federation.Servers, federation.Authorizations, federation.Peers, federation.Readers,
+		identity.Users, &syncdi.Records{
 			Works:     library.Ebooks,
 			Groupings: library.Collections,
 			Filings:   library.Memberships,

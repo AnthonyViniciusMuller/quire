@@ -18,6 +18,7 @@ import (
 
 	federationreplica "github.com/anthonyvsmuller/quire/internal/federation/domain/replica"
 	federationserver "github.com/anthonyvsmuller/quire/internal/federation/domain/server"
+	identityuser "github.com/anthonyvsmuller/quire/internal/identity/domain/user"
 	"github.com/anthonyvsmuller/quire/internal/shared/errs"
 	"github.com/anthonyvsmuller/quire/internal/sync/application/service"
 )
@@ -37,21 +38,24 @@ const (
 	CodeNotAuthorized = "replica_not_authorized"
 )
 
-// Service answers out of the federation slice's catalogue.
+// Service answers out of the federation slice's catalogue and the identity
+// slice's readers.
 type Service struct {
 	catalogue      federationserver.Repository
 	authorizations federationreplica.Repository
+	readers        identityuser.Repository
 }
 
 // Service satisfies the port the use cases hold.
 var _ service.Replicas = (*Service)(nil)
 
-// New returns the adapter over the two repositories.
+// New returns the adapter over the three repositories.
 func New(
 	catalogue federationserver.Repository,
 	authorizations federationreplica.Repository,
+	readers identityuser.Repository,
 ) *Service {
-	return &Service{catalogue: catalogue, authorizations: authorizations}
+	return &Service{catalogue: catalogue, authorizations: authorizations, readers: readers}
 }
 
 // Identify returns the node that published the pin.
@@ -82,7 +86,14 @@ func (s *Service) Identify(ctx context.Context, pin string) (uuid.UUID, error) {
 	return node.ID, nil
 }
 
-// Authorized reports nil when the reader lets the node hold a copy.
+// Authorized reports nil when the reader lets the node send their changes
+// here, and the node is the reader's origin.
+//
+// The reader is read through the identity slice's own repository, which is
+// where which node authenticates them is recorded (RN08). On the origin no
+// peer passes, because the reader's origin is this instance; on a replica
+// only the node that admitted the reader passes, because admission records
+// the reader as that node's.
 func (s *Service) Authorized(ctx context.Context, serverID, userID uuid.UUID) error {
 	granted, err := s.authorizations.GetByPair(ctx, userID, serverID)
 	if err != nil {
@@ -97,6 +108,19 @@ func (s *Service) Authorized(ctx context.Context, serverID, userID uuid.UUID) er
 		return s.refused()
 	}
 
+	reader, err := s.readers.GetByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, errs.KindNotFound) {
+			return s.refused()
+		}
+
+		return err
+	}
+
+	if reader.OriginServerID != serverID {
+		return s.refused()
+	}
+
 	return nil
 }
 
@@ -107,12 +131,14 @@ func (s *Service) unknown() error {
 		WithCode(CodeUnknownPeer)
 }
 
-// refused is the answer to a reader who has not authorized the node.
+// refused is the answer to a reader who has not authorized the node, and to
+// a node that is not the reader's origin.
 //
-// It says nothing about whether the reader exists. A peer that could tell a
-// reader who never authorized it from a reader who is not here would have an
-// oracle for who is hosted on this node, and being able to enumerate a node's
-// readers is not something an authorization for one of them should buy.
+// It says nothing about which, nor about whether the reader exists. A peer
+// that could tell a reader who never authorized it from a reader who is not
+// here would have an oracle for who is hosted on this node, and being able to
+// enumerate a node's readers is not something an authorization for one of
+// them should buy.
 func (s *Service) refused() error {
 	return errs.New(errs.KindPermissionDenied, "the reader has not authorized this node").
 		WithOp(opAuthorized).

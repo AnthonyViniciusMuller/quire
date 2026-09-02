@@ -109,9 +109,10 @@ func (p *PushOperations) Execute(ctx context.Context, input Input) (Output, erro
 // authorize checks RN10 over the batch.
 //
 // A caller with no device is a peer node, and there is nothing to check: it
-// replicates many devices and is none of them. What authorizes that call is the
-// reader's own permission for the node, which its controller established
-// before this was reached.
+// replicates many devices and is none of them. What authorizes that call is
+// the reader's own permission for the node and the node being the reader's
+// origin — the one node whose word about which device authored a change is
+// worth anything — which its controller established before this was reached.
 func (p *PushOperations) authorize(input *Input) error {
 	if input.Author == (uuid.UUID{}) {
 		return nil

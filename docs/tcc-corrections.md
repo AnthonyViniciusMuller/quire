@@ -1216,3 +1216,29 @@ that a reader who names a digest the node holds is served it, and that the node 
 record of which reader first supplied the bytes for that purpose.
 
 **Status** settled 2026-09-02.
+
+### D13 — replication runs one way, from the origin to the nodes the reader authorized
+
+The specification describes replication as the origin offering a reader's operations to
+the nodes they authorized (RF12, UC09, RF16) and never says whether an authorized node may
+offer them back, or on to a third. The implementation settles it: it may not. A node
+accepts a reader's operations from one peer only, the reader's origin — the node that
+authenticates them (RN08) and is therefore the one node whose word about which device
+authored a change is worth anything.
+
+The alternative is what the permission would otherwise become. A replica holds a copy of
+the reader's history, including the identifier of every device that ever wrote to it, and
+an operation names its device; a node that accepted operations from any node the reader
+authorized would let a replica write into the reader's history under any of those devices,
+and RN10's promise that a device pushes only what it authored would hold on the origin and
+nowhere else. Holding a copy would have become the authority to write.
+
+What it costs is that a reader's devices push to their origin and nowhere else, and that a
+replica which has fallen behind is caught up by the origin and not by another replica. Both
+are the shape the specification already draws.
+
+**Record** in 4.2.4, beside RF12: that a node accepts a reader's operations from the
+reader's origin only, and that an authorization is a permission to hold a copy and not to
+write.
+
+**Status** settled 2026-09-02.

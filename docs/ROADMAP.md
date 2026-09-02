@@ -831,6 +831,11 @@ it, and a call made at the authorization would leave every later device unknown;
 every binding would put another operator's outage inside a reader's login. C22 records the
 mechanism and is settled.
 
+Whether an authorized node may offer a reader's operations back to the origin or on to a
+third, on 2026-09-02: it may not. Replication runs from the origin to the nodes the reader
+authorized and no further, because a permission to hold a copy that also let the holder write
+under any of the reader's devices would be a permission to write; D13 records it.
+
 ## Divergences from the thesis specification
 
 Moved to [`tcc-corrections.md`](tcc-corrections.md), which now holds both the corrections the

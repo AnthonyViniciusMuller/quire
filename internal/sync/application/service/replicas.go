@@ -28,11 +28,16 @@ type Replicas interface {
 	// presented it: this node is not replicating with you.
 	Identify(ctx context.Context, pin string) (uuid.UUID, error)
 
-	// Authorized reports nil when the reader has an active authorization for
-	// the node, and an error of kind errs.KindPermissionDenied otherwise.
+	// Authorized reports nil when the reader lets the node send their changes
+	// here: the reader authorized it, and it is the reader's origin.
 	//
-	// A reader who never authorized the node and one who revoked it are the
-	// same answer, and the revocation is the point: a peer that kept
-	// replicating after a revocation would make RN03 a suggestion.
+	// The second half is what makes replication one way. A reader's origin
+	// is the one node that authenticates them, so it is the one node whose
+	// word about which device authored a change is worth anything; a node
+	// that accepted a reader's changes from any node the reader authorized
+	// would let a replica write into the reader's history under any of their
+	// devices, and holding a copy would have become the authority to write.
+	// It is errs.KindPermissionDenied otherwise, and the refusal does not say
+	// which half failed.
 	Authorized(ctx context.Context, serverID, userID uuid.UUID) error
 }
