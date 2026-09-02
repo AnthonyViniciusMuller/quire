@@ -22,7 +22,13 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
+      # The whole history and the tags, because the breaking-change check
+      # below compares the contract with the newest proto/N tag reachable from
+      # the commit being checked.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: actions/setup-go@v7
         with:
@@ -45,6 +51,11 @@ jobs:
       # rather than assumed.
       - name: Lint the protobuf definitions
         run: make proto-lint
+
+      # What a field number and a field name mean is fixed for good once a node
+      # has been built from them, because peers are upgraded on different days.
+      - name: Check the protobuf definitions for breaking changes
+        run: make proto-breaking
 
       - name: Check that go.mod is tidy
         run: |

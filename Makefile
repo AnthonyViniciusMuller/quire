@@ -284,6 +284,22 @@ proto-lint: $(BUF)
 	$(BUF) lint
 	$(BUF) format --diff --exit-code
 
+## proto-breaking: check the protobuf definitions against the last contract tag
+#
+# The baseline is the newest proto/N tag reachable from HEAD. Every commit that
+# changes proto/ is tagged proto/N+1 once it is on main, so the next change is
+# checked against the contract the last one left; a tree with no such tag in
+# its history has nothing to check against and says so rather than passing.
+.PHONY: proto-breaking
+proto-breaking: $(BUF)
+	@baseline="$$(git describe --tags --abbrev=0 --match 'proto/*' 2>/dev/null)"; \
+	if [ -z "$$baseline" ]; then \
+		echo "no proto/* tag is reachable from HEAD; fetch the tags, or tag the contract first" >&2; \
+		exit 1; \
+	fi; \
+	echo "checking proto/ against $$baseline"; \
+	$(BUF) breaking --against ".git#tag=$$baseline"
+
 ## proto-fmt: rewrite the protobuf definitions in buf's canonical format
 .PHONY: proto-fmt
 proto-fmt: $(BUF)

@@ -37,9 +37,11 @@ breaking:
   # a field name mean has to be fixed for good; what may still change is
   # everything invisible on the wire, such as where the Go stubs are generated.
   #
-  # There is no CI step for it yet, because there is no released baseline to
-  # compare against — the contract is still being written. It becomes one when
-  # the first node is deployed, checked against the tag that node was built
-  # from.
+  # The baseline is a tag. `make proto-breaking` compares this directory with
+  # the newest proto/N tag reachable from HEAD, and CI runs it on every push;
+  # a commit that changes proto/ is tagged proto/N+1 once it is on main, so
+  # what the next change is checked against is the contract the last one left.
+  # The tag is the deployed contract's name, which is what a peer built from
+  # it needs this file to promise about.
   use:
     - WIRE_JSON
