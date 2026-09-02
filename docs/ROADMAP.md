@@ -815,6 +815,14 @@ working for the length of the window, which is the one property rotation exists 
 its length would be a number chosen by feel. The window was refused on those terms rather than
 on principle, and D07 now records both the choice and the false positive it is known to cost.
 
+Whether deduplication by digest may let a reader who knows a digest read another reader's
+copy, on 2026-09-02: it may, and D12 records the acceptance. The alternative is a proof that
+the caller holds the bytes before the node admits to holding them, which gives back the
+deduplication for every reader who is not the first; the digest is a fact about the file and
+not a secret the node keeps, and a reader on an institution's node who has it could have
+asked. It is accepted for a node that admits an institution's readers and would have to be
+revisited for one that admitted the public.
+
 ## Divergences from the thesis specification
 
 Moved to [`tcc-corrections.md`](tcc-corrections.md), which now holds both the corrections the

@@ -1161,3 +1161,36 @@ its streaming forms; and that it makes the node stateful between calls, which is
 reason its deployment runs a single replica.
 
 **Status** settled 2026-08-31.
+
+### D12 — a digest is shared between readers, and knowing one is enough to read the file
+
+D02 stores the bytes of a work once, under the sha-256 of the bytes, and every work that
+names that digest shares the object. The consequence the specification does not address is
+what a digest is worth on its own. `CreateEbook` answers `content_missing` for whatever
+digest the caller names, whether or not any work of the caller's already holds it, and
+`DownloadEbookContent` authorizes the download by the work and not by who uploaded the
+bytes. A reader who knows the sha-256 of a file another reader uploaded — and the digests of
+published works are themselves published, on catalogues and in torrents — can register a
+work naming it, be told the node already holds it, and download the other reader's copy.
+What they get is also described the way the first uploader described it: the media type is
+stored once, with the bytes.
+
+C16 closes the write side of the same door, and deliberately not this one. The check that
+would close it is a digest the caller has to prove they hold — an upload, or a challenge
+over the bytes — before the node admits to holding it, and that is the deduplication given
+back: every reader uploads every file once, the object store holds one copy and the network
+carries as many as there are readers. The digest is not a secret the node keeps on a
+reader's behalf; it is a fact about the file, and a reader who has it has, in every practical
+sense, already found the file.
+
+This is accepted as a property of the design, on 2026-09-02, and not left as a finding. The
+threat is a reader with an account on the node who wants a particular file and has its
+digest, which on a node whose readers are the members of one institution is a reader who
+could have asked. The property would have to be revisited for a node that admitted the
+public.
+
+**Record** in 4.2.4, beside D02: that the object store is shared between readers by digest,
+that a reader who names a digest the node holds is served it, and that the node keeps no
+record of which reader first supplied the bytes for that purpose.
+
+**Status** settled 2026-09-02.
