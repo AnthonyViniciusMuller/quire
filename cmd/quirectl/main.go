@@ -1,13 +1,14 @@
 // Command quirectl is the reference Quire client: a device, driven from a
 // terminal.
 //
-// It is what the end-to-end suites drive and what stands in for the Flutter
-// application when the system is demonstrated (D05 in
-// docs/tcc-corrections.md). Everything it can do, a device can do, and it does
-// it the way a device does: it is bound to an origin server, it carries an
-// identifier every vector clock entry is keyed by, and it keeps its state
-// between two commands in a file — so two state files on one machine are two
-// devices, which is what makes a demonstration of UC10 possible on a laptop.
+// It is a terminal over the client of internal/client, which is what the
+// end-to-end suites drive, and it stands in for the Flutter application when
+// the system is demonstrated (D05 in docs/tcc-corrections.md). Everything it
+// can do, a device can do, and it does it the way a device does: it is bound
+// to an origin server, it carries an identifier every vector clock entry is
+// keyed by, and it keeps its state between two commands in a file — so two
+// state files on one machine are two devices, which is what makes a
+// demonstration of UC10 possible on a laptop.
 //
 // This file and the ones beside it decide nothing. They read flags, call one
 // method of internal/client, and print what comes back; the client is where a

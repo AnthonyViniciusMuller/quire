@@ -6,7 +6,10 @@ when one of a handful of things goes wrong.
 The reference deployment is [`deploy/k8s`](../deploy/k8s) with a local cluster in
 [`deploy/kind`](../deploy/kind). It is not the only way to run a node — the compose
 federation of [`deploy/docker`](../deploy/docker) is a whole federation on one machine, and
-the README covers it — but it is the one the thesis describes and the one CI runs.
+the README covers it — but it is the one the thesis describes. CI does not run either: the
+end-to-end suites take longer than a hosted runner should be held for, so they are run by
+hand, with `make test-e2e` against the compose federation and `make test-kind` against this
+one.
 
 Two documents are load-bearing here and are referred to throughout: C12 and C23 in
 [`tcc-corrections.md`](tcc-corrections.md). C12 is why a peer is identified by a published
@@ -164,9 +167,8 @@ make kind-down
 change to the manifests is applied. Credentials are generated once and then left alone —
 PostgreSQL reads `POSTGRES_PASSWORD` when it initializes an empty data directory and never
 again, and MinIO does the same, so a second run that generated new ones would leave a stack
-whose own secrets no longer open it. It generates every credential fresh on each run and
-restarts the node afterwards, since a pod holding the previous password is a pod that has
-stopped being able to connect.
+whose own secrets no longer open it. The one section applied on every run is the mail relay,
+which is not a credential, so that moving the relay does not need the secret deleted first.
 
 The two `/etc/hosts` entries are the one thing it will not do itself — a script that needed a
 password in order to bring up a test cluster is a script nobody should run — and the suite

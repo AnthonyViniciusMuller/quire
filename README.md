@@ -44,8 +44,8 @@ layout and the places this project departs from it are in
 storage, deduplicated by content hash; everything else lives in PostgreSQL, one schema per
 slice.
 
-A reference CLI client (`quirectl`) drives the end-to-end suites and stands in for the mobile
-client during demonstrations.
+A reference client library (`internal/client`) is what the end-to-end suites drive, and a CLI
+over it (`quirectl`) stands in for the mobile client during demonstrations.
 
 ```
 cmd/quired      node server            internal/shared    config · errs · logging · crdt · persist · grpcx
@@ -70,9 +70,9 @@ so. Inside the compose network they are `quire-a.example` and `quire-b.example`,
 what they discover each other by; from the host they answer on `127.0.0.1:19090` and
 `127.0.0.1:29090` for gRPC, on `127.0.0.1:18080` and `127.0.0.1:28080` for the discovery
 documents, and on `127.0.0.1:18090` and `127.0.0.1:28090` for gRPC-Web — the lane a browser
-uses, because it cannot speak gRPC itself. Those two are plain HTTP, which a browser accepts
-on a loopback origin without a certificate. They present the self-signed certificates `make dev-certs` generates, so a client
-outside the network names one:
+uses, because it cannot speak gRPC itself. The gRPC-Web ports are plain HTTP, which a browser
+accepts on a loopback origin without a certificate. The gRPC ports present the self-signed
+certificates `make dev-certs` generates, so a client outside the network names one:
 
 ```bash
 quirectl --server 127.0.0.1:19090 --ca deploy/docker/certs/quire-a.example.crt.pem whoami
