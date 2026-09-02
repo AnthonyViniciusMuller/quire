@@ -98,7 +98,7 @@ func serveSync(t *testing.T) synchronization {
 
 	syncContainer := syncdi.Initialize(cfg, pool, clock, dialer,
 		federationContainer.Servers, federationContainer.Authorizations,
-		federationContainer.Peers, federationContainer.Readers, &syncdi.Records{
+		federationContainer.Peers, federationContainer.Readers, identityContainer.Users, &syncdi.Records{
 			Works:     libraryContainer.Ebooks,
 			Groupings: libraryContainer.Collections,
 			Filings:   libraryContainer.Memberships,
@@ -1145,5 +1145,83 @@ func TestSyncLeavesOwedWhatThePeerDidNotAnswerFor(t *testing.T) {
 	output := replica.run(t)
 	if output.Confirmed != 1 || output.Failed != 2 {
 		t.Errorf("the pass reported %+v, want one settled and two left owed", output)
+	}
+}
+
+// A node the reader stops allowing is offered nothing more, not even what was
+// enqueued while the permission stood: the row stays, as the record of what
+// was owed and why, and is offered again only if the reader allows the node
+// again.
+func TestSyncStopsOfferingAPeerTheReaderRevoked(t *testing.T) {
+	node := serveSync(t)
+
+	node.push(t, node.change(t, quirev1.TargetEntity_TARGET_ENTITY_EBOOK, node.ebookID,
+		quirev1.OperationKind_OPERATION_KIND_UPDATE, 2, authored, map[string]any{"title": "Os Sertões"}))
+
+	replica := node.authorizeReplica(t, "quire-b.example")
+
+	// The first pass enqueues the change and fails to deliver it, which is how
+	// a row comes to be owed while the reader can still change their mind.
+	replica.peers.refuse = errs.New(errs.KindUnavailable, "no route to host")
+
+	if output := replica.run(t); output.Enqueued != 1 || output.Failed != 1 {
+		t.Fatalf("the first pass reported %+v, want one change owed and not delivered", output)
+	}
+
+	replica.peers.refuse = nil
+
+	manager := persist.NewManager(pool)
+	authorizations := replicarepository.New(manager)
+
+	reader, err := uuid.Parse(node.userID)
+	if err != nil {
+		t.Fatalf("parsing the reader: %v", err)
+	}
+
+	granted, err := authorizations.GetByPair(t.Context(), reader, replica.server)
+	if err != nil {
+		t.Fatalf("reading the permission: %v", err)
+	}
+
+	granted.Revoke()
+
+	if err = authorizations.Update(t.Context(), granted); err != nil {
+		t.Fatalf("revoking the permission: %v", err)
+	}
+
+	// A pass that runs once the backoff has lifted, so that the row would be
+	// offered if anything but the revocation held it back.
+	later := replicate.New(
+		deliveryrepository.New(manager),
+		operationrepository.New(manager),
+		replica.peers,
+		syncapptest.NewAdmissions(),
+		syncapptest.NewClock(time.Now().Add(time.Hour)),
+		30*time.Second,
+		100,
+	)
+
+	output, err := later.Execute(t.Context(), replicate.Input{})
+	if err != nil {
+		t.Fatalf("the pass after the revocation: %v", err)
+	}
+
+	if output.Servers != 0 || output.Offered != 0 {
+		t.Errorf("the pass reported %+v, want the revoked node neither dialed nor offered anything", output)
+	}
+
+	granted.Grant(false, time.Now().UTC())
+
+	if err = authorizations.Update(t.Context(), granted); err != nil {
+		t.Fatalf("granting the permission again: %v", err)
+	}
+
+	output, err = later.Execute(t.Context(), replicate.Input{})
+	if err != nil {
+		t.Fatalf("the pass after the permission was granted again: %v", err)
+	}
+
+	if output.Offered != 1 || output.Confirmed != 1 {
+		t.Errorf("the pass reported %+v, want the row picked up where it stopped", output)
 	}
 }

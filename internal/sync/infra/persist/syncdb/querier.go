@@ -151,6 +151,14 @@ type Querier interface {
 	// other cheap tie-break and is just as wrong: it is a random uuid, so it would
 	// have shuffled a reader's history into an order no node could apply.
 	//
+	// The two joins on the federation's tables are the reader's promise kept at
+	// the last moment. A row is owed because the reader had authorized the node
+	// when the change was enqueued; if the reader has withdrawn that since, or the
+	// operator has stopped the node, the row stays — it is the record of what was
+	// owed and why — and is offered to nobody. Filtering here rather than deleting
+	// on revocation is what lets a permission granted again pick up where it
+	// stopped.
+	//
 	// deliveries_pending_idx serves the destination and the backoff, and its
 	// partial predicate keeps it the size of the backlog rather than of the
 	// history.
@@ -159,8 +167,9 @@ type Querier interface {
 	//
 	// The worker asks this rather than walking the catalogue, because the two are
 	// different sets: a node authorized a moment ago is owed nothing yet, and a
-	// node whose authorization was revoked may still be owed what was enqueued
-	// before the revocation.
+	// node whose authorization was revoked still holds rows — which are not owed,
+	// for the reason ListPendingDeliveries gives, and the same joins keep the
+	// node out of the pass rather than letting it be dialed for nothing.
 	ListPendingServers(ctx context.Context) ([]uuid.UUID, error)
 }
 

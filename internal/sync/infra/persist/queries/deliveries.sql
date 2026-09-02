@@ -42,6 +42,14 @@ ON CONFLICT (operation_id, server_id) DO NOTHING;
 -- other cheap tie-break and is just as wrong: it is a random uuid, so it would
 -- have shuffled a reader's history into an order no node could apply.
 --
+-- The two joins on the federation's tables are the reader's promise kept at
+-- the last moment. A row is owed because the reader had authorized the node
+-- when the change was enqueued; if the reader has withdrawn that since, or the
+-- operator has stopped the node, the row stays — it is the record of what was
+-- owed and why — and is offered to nobody. Filtering here rather than deleting
+-- on revocation is what lets a permission granted again pick up where it
+-- stopped.
+--
 -- deliveries_pending_idx serves the destination and the backoff, and its
 -- partial predicate keeps it the size of the backlog rather than of the
 -- history.
@@ -49,8 +57,12 @@ ON CONFLICT (operation_id, server_id) DO NOTHING;
 SELECT d.id, d.operation_id, d.server_id, d.applied_at, d.attempts, d.last_attempt_at, d.last_error
 FROM sync.deliveries d
     JOIN sync.operations o ON o.id = d.operation_id
+    JOIN federation.user_replicas r ON r.user_id = o.user_id AND r.server_id = d.server_id
+    JOIN federation.servers s ON s.id = d.server_id
 WHERE d.server_id = sqlc.arg(server_id)
   AND d.applied_at IS NULL
+  AND r.active
+  AND s.active
   AND (d.last_attempt_at IS NULL
        OR d.last_attempt_at < sqlc.arg(now)::timestamptz
             - sqlc.arg(backoff_seconds)::double precision
@@ -63,12 +75,18 @@ LIMIT sqlc.arg(page_size)::integer;
 --
 -- The worker asks this rather than walking the catalogue, because the two are
 -- different sets: a node authorized a moment ago is owed nothing yet, and a
--- node whose authorization was revoked may still be owed what was enqueued
--- before the revocation.
+-- node whose authorization was revoked still holds rows — which are not owed,
+-- for the reason ListPendingDeliveries gives, and the same joins keep the
+-- node out of the pass rather than letting it be dialed for nothing.
 -- name: ListPendingServers :many
-SELECT DISTINCT server_id
-FROM sync.deliveries
-WHERE applied_at IS NULL;
+SELECT DISTINCT d.server_id
+FROM sync.deliveries d
+    JOIN sync.operations o ON o.id = d.operation_id
+    JOIN federation.user_replicas r ON r.user_id = o.user_id AND r.server_id = d.server_id
+    JOIN federation.servers s ON s.id = d.server_id
+WHERE d.applied_at IS NULL
+  AND r.active
+  AND s.active;
 
 -- Close the deliveries of one batch that the destination confirmed.
 --
