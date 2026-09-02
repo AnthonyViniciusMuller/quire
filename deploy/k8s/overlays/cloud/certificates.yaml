@@ -1,0 +1,94 @@
+# The two certificates a node holds, issued the way a real deployment issues
+# them.
+#
+# They are the same two certificates deploy/k8s/certmanager declares, answering
+# the same two questions, and they are copied here rather than included from
+# there for one reason: what differs is not the certificate but the authority,
+# and the authority is the whole of the difference between a laptop and a
+# deployment. That component points both at a cluster-local CA and patches
+# SSL_CERT_FILE into the node so it will verify against it — which is right on
+# one machine, where every endpoint the node talks to is signed by that CA, and
+# wrong everywhere else. Here there is no local CA, nothing is patched, and the
+# node verifies against the system trust store the distroless base carries.
+#
+# The domain is a placeholder. The generated layer the cloud stack writes
+# replaces it on both, because a certificate is an assertion about a domain and
+# the domain is the one thing a stack exists to say.
+---
+# What the node itself presents, and what the federation is pinned on.
+#
+# Self-signed, and that is the design rather than a shortcut. Two operators in a
+# federation share no authority to appeal to, so what identifies a peer is the
+# public key it published in its own discovery document and not a chain anybody
+# signed — C12 in docs/tcc-corrections.md. A certificate from a public CA would
+# be verified by nobody here and pinned by everybody, which is a cost with no
+# buyer.
+#
+# It is presented on the gRPC listener to peers and to devices, and it is also
+# what this node dials a peer *with*, so it carries client auth as well as
+# server auth.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: quire-federation-tls
+spec:
+  secretName: quire-federation-tls
+  duration: 2160h
+  renewBefore: 360h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    # The one line here that is load-bearing, and it is load-bearing in a way
+    # the cloud makes sharper rather than softer.
+    #
+    # The pin every peer holds is the digest of this key's SubjectPublicKeyInfo.
+    # A key rotated on renewal changes the digest, and every peer in the
+    # federation stops talking to this node at once — thirty days after an apply
+    # that looked like it worked. Rotating it is a deliberate act with a
+    # published consequence: every peer has to re-read the discovery document,
+    # which is what RefreshKnownServer is for.
+    rotationPolicy: Never
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - quire.example
+  issuerRef:
+    name: quire-selfsigned
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# What the gateway presents for the discovery documents.
+#
+# Publicly trusted, and that is the other half of C23. Nobody pins this one: a
+# peer fetching /.well-known/quire/server verifies it the ordinary way, against
+# an ordinary trust store, because the pin covers the gRPC identity and not the
+# document that publishes it. A node whose documents were behind a self-signed
+# certificate would be a node no peer could discover without being told to
+# trust something first, which is the thing the federation is built not to
+# require.
+#
+# So its key rotates on every renewal, which is what a key nobody has written
+# down should do — and the issuer is ACME over DNS-01, because the address this
+# domain resolves to is a load balancer passing TCP through and there is nothing
+# on the HTTP path for an HTTP-01 challenge to be answered by.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: quire-gateway-tls
+spec:
+  secretName: quire-gateway-tls
+  duration: 2160h
+  renewBefore: 360h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - server auth
+  dnsNames:
+    - quire.example
+  issuerRef:
+    name: quire-public
+    kind: ClusterIssuer
+    group: cert-manager.io

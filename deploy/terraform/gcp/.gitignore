@@ -1,0 +1,12 @@
+# The generated layer and the kubeconfig beside it. The layer is derived from
+# the templates and from an apply's variables, so a committed copy would be a
+# second answer to a question the templates already answer; the kubeconfig
+# points at one cluster and belongs to one operator.
+generated/
+
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!example.tfvars

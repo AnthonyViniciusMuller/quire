@@ -52,6 +52,7 @@ cmd/quired      node server            internal/shared    config · errs · logg
 cmd/quirectl    reference client       internal/<slice>   domain · application · infra · di
 proto/quire/v1  network contracts      migrations/        golang-migrate
 deploy/docker   local federation       deploy/k8s         kustomize + Istio + cert-manager
+deploy/kind     local cluster          deploy/terraform   aws and gcp, sharing nothing
 ```
 
 ## Getting started

@@ -1,0 +1,15 @@
+# One namespace, and the node is the only thing in it.
+#
+# The stack that deploys this creates the namespace too, before this overlay is
+# applied, because the five secrets have to land somewhere and a secret written
+# after the workload is a workload that crash-loops until it is. Declaring it
+# here as well is deliberate and costs nothing: the two agree on the one label
+# that matters, so applying both is idempotent, and the overlay stays something
+# a person can read and understand without the Terraform beside it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quire
+  labels:
+    # What tells the mesh to inject a proxy into every pod here.
+    istio-injection: enabled

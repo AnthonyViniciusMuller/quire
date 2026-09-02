@@ -1,0 +1,95 @@
+# A node on a managed cluster, and the four things that makes different.
+#
+# It is the third overlay beside origin and replica, and it is not a third
+# node: those two are one federation on one machine, and this one is what a
+# cloud stack deploys. What it does not say is which cloud, which domain, or
+# which image — a managed cluster has all three and none of them belong in a
+# file that is the same for both of them. `deploy/terraform/aws` and
+# `deploy/terraform/gcp` each generate a thin layer on top of this that says
+# exactly those, and nothing else.
+#
+# The four differences from origin, in the order they matter:
+#
+#   1. The dependencies component is gone. A PostgreSQL, an object store and a
+#      mail relay are what the cloud already has — managed, backed up, and
+#      addressed by the secrets the stack creates. That is the first item in
+#      "what a real deployment changes" in docs/deployment.md, and this is it
+#      being changed.
+#
+#   2. The certmanager component is gone too, and its certificates are declared
+#      here instead. Not because the certificates differ — they are the same two
+#      certificates, answering the same two questions — but because the
+#      authority does. There is no cluster-local CA here, so nothing is patched
+#      into SSL_CERT_FILE and the node verifies against the system trust store,
+#      which is the correct default everywhere that is not one laptop. See
+#      certificates.yaml.
+#
+#   3. Everything the origin overlay patches for its namespace is patched here
+#      for this one. The namespace is `quire` and there is one node in the
+#      cluster, so the strings that carry it — the gateway's istio label, the
+#      authorization principal, the ServiceEntry's endpoint — are known here and
+#      are not left to the generated layer. Only the domain is not knowable, and
+#      only the domain is left out.
+#
+#   4. The gateway's Service is not patched here. Publishing it is where the two
+#      clouds genuinely differ: one takes a reserved address in a field, the
+#      other takes a load balancer type in an annotation. That patch is the
+#      generated layer's, and it is the only manifest either stack writes by
+#      hand.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: quire
+
+resources:
+  - namespace.yaml
+  - ../../base
+  - certificates.yaml
+
+components:
+  # The mesh: the node's own gateway, the two ports and how each is terminated,
+  # and who may reach which path. Identical to what the local overlays include —
+  # C23 does not become less true for being in somebody's cloud, and the L4 load
+  # balancer in front of this gateway is chosen precisely so that it stays true.
+  - ../../istio
+
+patches:
+  # The label that binds this node's Gateway to this node's proxy. There is one
+  # node per cluster here, so nothing else could claim it — and it is patched
+  # anyway, because a Gateway selects across the whole mesh and a value left at
+  # the placeholder is a value the next thing installed in this cluster may
+  # match.
+  - target:
+      kind: Deployment
+      name: quire-gateway
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/labels/istio
+        value: quire-gateway-quire
+  - target:
+      kind: Gateway
+      name: quire
+    patch: |-
+      - op: replace
+        path: /spec/selector/istio
+        value: quire-gateway-quire
+
+  # The principal in the authorization policy is a service account path, and a
+  # namespace transformer does not rewrite strings.
+  - target:
+      kind: AuthorizationPolicy
+      name: quire
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/from/0/source/principals/0
+        value: cluster.local/ns/quire/sa/quire-gateway
+
+  # The browser lane's endpoint, for the same reason: it is an address written
+  # into a field, not a reference the namespace reaches.
+  - target:
+      kind: ServiceEntry
+      name: quire-api
+    patch: |-
+      - op: replace
+        path: /spec/endpoints/0/address
+        value: quire.quire.svc.cluster.local

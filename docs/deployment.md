@@ -24,13 +24,19 @@ deploy/k8s/
 ├── components/dependencies/  a component: PostgreSQL, an object store, a mail relay
 └── overlays/
     ├── origin/               quire-a.example, in namespace quire-a
-    └── replica/              quire-b.example, in namespace quire-b
+    ├── replica/              quire-b.example, in namespace quire-b
+    └── cloud/                one node on a managed cluster, domain supplied by a stack
 ```
 
 An overlay says four things and nothing else: which namespace, which domain, what the node
 needs beside it, and what signs its certificates. Everything about *how* a node is deployed
-is in the base and the components and is identical for both, which is why there are two
-overlays rather than two copies.
+is in the base and the components and is identical for all three, which is why there are
+three overlays rather than three copies.
+
+The third is not a third node. `origin` and `replica` are one federation on one machine;
+`cloud` is what [`deploy/terraform`](../deploy/terraform) deploys, and it is the only one
+that says no domain at all — a managed cluster has one and it belongs to the stack that
+knows which cloud this is. "Two clouds, as Terraform" below is what it becomes.
 
 Two images are built from one Dockerfile, and `make images` builds both. `quired` is the
 node on a distroless base — no shell, no package manager — and `quire-migrate` is the schema
@@ -187,6 +193,47 @@ collide with the compose federation, so both can run at once.
    applied by a job rather than on startup for exactly that reason — but the replication
    worker ticks per process, so two replicas offer the same log to the same peer twice. The
    peer is idempotent about it and the traffic is not.
+
+## Two clouds, as Terraform
+
+The four changes above are made, twice, in [`deploy/terraform`](../deploy/terraform):
+`aws/` deploys a node and the Atril web client on AWS and `gcp/` deploys a node on
+GCP, and the two share no module, no state and no resource. Either can be
+destroyed without the other noticing. The web client is deployed once rather than
+twice because a shipped build knows no node until a reader types a domain into
+it, so one copy reaches both.
+
+Both apply the same manifests. `deploy/k8s/overlays/cloud` is a third overlay
+beside origin and replica, and it is that list of four turned into a
+kustomization: no dependencies component, no local authority and therefore no
+`SSL_CERT_FILE`, a publicly trusted certificate for the documents and a
+self-signed one for the federation, and one replica. What it deliberately does
+not say is which domain, which image, or how a cloud publishes a gateway — each
+stack generates a thin layer on top that says exactly those and nothing else.
+
+What differs between the two clouds is smaller than it sounds, and every
+difference is a property of the cloud rather than a decision:
+
+| | AWS | GCP |
+| --- | --- | --- |
+| Cluster | EKS | GKE |
+| Database | RDS PostgreSQL | Cloud SQL, on a private address |
+| Objects | S3, with a key pair — the adapter has no credential chain | Cloud Storage, through Workload Identity and no key at all |
+| Mail | SES, provisioned including DKIM | a relay the operator names; this cloud has none |
+| The gateway's address | a name Kubernetes was given, so a `CNAME` | reserved before the Service, so an `A` |
+| The web client | S3 behind CloudFront, ACM — the only copy | not deployed |
+
+The federation port is passed through in both, by an L4 load balancer that
+terminates nothing — which is the reason both are Kubernetes rather than one of
+the managed container services either cloud would otherwise be the obvious place
+for. C23 rules those out: a front that terminates TLS presents its own
+certificate to a peer that pinned this node's, and consumes the caller's
+certificate that `ReplicateOperations` identifies a peer by.
+
+One step in each is not automatable and both READMEs lead with it: the DNS zone
+is created by the stack and delegated by a person. Certificates are issued by
+answering a challenge in that zone, so nothing verifies until the registrar has
+been pointed at it.
 
 ## Operations
 

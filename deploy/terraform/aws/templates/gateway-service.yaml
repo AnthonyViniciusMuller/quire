@@ -1,0 +1,37 @@
+# How this cloud publishes the node's gateway.
+#
+# A Network Load Balancer and not an Application one, and that is the whole of
+# C23 expressed in an annotation. An ALB terminates TLS and speaks HTTP: it
+# would present its own certificate to a peer that pinned this node's (C12) and
+# consume the caller's certificate that ReplicateOperations identifies a peer
+# by. An NLB forwards TCP and reads nothing, which is the only thing port 9443
+# can survive.
+#
+# All three ports go through it, including the two the gateway does terminate.
+# There is no reason to split them across two load balancers: what terminates
+# 443 is the node's own gateway either way, and a second balancer would be a
+# second name in DNS for one node.
+#
+# It is the in-tree service controller that builds it rather than the AWS Load
+# Balancer Controller. The controller is the better tool and is the upgrade
+# path — it can hold static addresses, which would make this record an A rather
+# than a CNAME — but it is a Helm release, an IAM policy of three hundred lines
+# and a webhook, and none of that changes what reaches the node.
+#
+# Not generated: this file is copied as it is. It says nothing an apply decides.
+apiVersion: v1
+kind: Service
+metadata:
+  name: quire-gateway
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  type: LoadBalancer
+  # Cluster and not Local, and the cost is stated rather than discovered: the
+  # node sees the load balancer's address as the client's, not the caller's.
+  # Nothing here depends on that. A peer is identified by the certificate it
+  # presents and a device by its bearer token, and neither is an address —
+  # which is the same property that lets a node be reached through a NAT.
+  externalTrafficPolicy: Cluster
