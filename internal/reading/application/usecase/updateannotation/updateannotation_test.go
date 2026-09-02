@@ -252,3 +252,23 @@ func TestExecuteRefusesAMarkTheReaderMayNotSee(t *testing.T) {
 		})
 	}
 }
+
+// A library that could not be read is not a mark that does not exist: a
+// client told the mark is gone would believe it and stop asking.
+func TestExecuteReportsALibraryThatCouldNotBeRead(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture()
+	stored := f.note(t)
+	f.works.Err = errs.New(errs.KindUnavailable, "the database is unavailable")
+
+	_, err := f.usecase.Execute(t.Context(), updateannotation.Input{
+		UserID:       f.reader,
+		DeviceID:     f.phone,
+		AnnotationID: stored.ID,
+		Changes:      updateannotation.Changes{Text: text("outra nota")},
+	})
+	if !errors.Is(err, errs.KindUnavailable) {
+		t.Errorf("Execute = %v, want the library's own failure", err)
+	}
+}

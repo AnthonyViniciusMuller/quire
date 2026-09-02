@@ -159,3 +159,22 @@ func TestExecuteRefusesAMarkTheReaderMayNotSee(t *testing.T) {
 		t.Error("a reader who may not see the mark deleted it")
 	}
 }
+
+// A library that could not be read is not a mark that does not exist: a
+// client told the mark is gone would believe it and stop asking.
+func TestExecuteReportsALibraryThatCouldNotBeRead(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture()
+	stored := f.note(t)
+	f.works.Err = errs.New(errs.KindUnavailable, "the database is unavailable")
+
+	_, err := f.usecase.Execute(t.Context(), deleteannotation.Input{
+		UserID:       f.reader,
+		DeviceID:     f.phone,
+		AnnotationID: stored.ID,
+	})
+	if !errors.Is(err, errs.KindUnavailable) {
+		t.Errorf("Execute = %v, want the library's own failure", err)
+	}
+}

@@ -69,6 +69,9 @@ func (c *Clock) Advance(by time.Duration) {
 type Works struct {
 	mu      sync.Mutex
 	visible map[uuid.UUID]uuid.UUID
+	// Err, when set, is what Visible reports about every work, standing for
+	// a library that could not be read at all.
+	Err error
 }
 
 // Works satisfies the port the use cases hold.
@@ -98,6 +101,10 @@ func (w *Works) Remove(ebookID uuid.UUID) {
 func (w *Works) Visible(_ context.Context, ebookID, userID uuid.UUID) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	if w.Err != nil {
+		return w.Err
+	}
 
 	// The kind is what the use cases branch on, and it is all the fake
 	// promises. The code the client sees is the library slice's, which the

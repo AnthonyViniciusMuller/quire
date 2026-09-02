@@ -3,6 +3,7 @@ package getannotation
 
 import (
 	"context"
+	"errors"
 
 	"github.com/anthonyvsmuller/quire/internal/reading/application/service"
 	command "github.com/anthonyvsmuller/quire/internal/reading/application/usecase"
@@ -49,7 +50,7 @@ func (g *GetAnnotation) Execute(ctx context.Context, input Input) (Output, error
 	}
 
 	if err = g.works.Visible(ctx, mark.EbookID, input.UserID); err != nil {
-		return Output{}, NotFound(opExecute)
+		return Output{}, NotVisible(opExecute, err)
 	}
 
 	return Output{Annotation: mark}, nil
@@ -66,4 +67,20 @@ func NotFound(op string) error {
 	return errs.New(errs.KindNotFound, "no such annotation").
 		WithOp(op).
 		WithCode(annotation.CodeNotFound)
+}
+
+// NotVisible is the answer for a mark whose work the Works port would not
+// show: the mark's own refusal when the port refused, and the port's error
+// untouched when it failed.
+//
+// The two have to be told apart. A work that is not there is one of the four
+// situations above and is answered as the mark not being there. A library
+// that could not be read is a node that is unavailable, and a client told
+// the mark does not exist would believe it and stop asking.
+func NotVisible(op string, err error) error {
+	if errors.Is(err, errs.KindNotFound) {
+		return NotFound(op)
+	}
+
+	return err
 }

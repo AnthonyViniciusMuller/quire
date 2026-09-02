@@ -134,3 +134,19 @@ func TestExecuteAnswersEveryRefusalTheSameWay(t *testing.T) {
 		})
 	}
 }
+
+// A library that could not be read is not a mark that does not exist. The
+// refusal above is for the four situations the client can do nothing about;
+// a node that is unavailable is one it should ask again.
+func TestExecuteReportsALibraryThatCouldNotBeRead(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture()
+	stored := f.mark(t)
+	f.works.Err = errs.New(errs.KindUnavailable, "the database is unavailable")
+
+	_, err := f.usecase.Execute(t.Context(), getannotation.Input{UserID: f.reader, AnnotationID: stored.ID})
+	if !errors.Is(err, errs.KindUnavailable) {
+		t.Errorf("Execute = %v, want the library's own failure", err)
+	}
+}

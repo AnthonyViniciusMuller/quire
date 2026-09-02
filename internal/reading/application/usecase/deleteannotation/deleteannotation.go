@@ -52,7 +52,7 @@ func (d *DeleteAnnotation) Execute(ctx context.Context, input Input) (Output, er
 	}
 
 	if err = d.works.Visible(ctx, mark.EbookID, input.UserID); err != nil {
-		return Output{}, getannotation.NotFound(opExecute)
+		return Output{}, getannotation.NotVisible(opExecute, err)
 	}
 
 	mark.Delete(input.DeviceID, d.clock.Now())

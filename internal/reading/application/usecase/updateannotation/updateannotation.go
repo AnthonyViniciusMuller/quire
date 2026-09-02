@@ -71,7 +71,7 @@ func (u *UpdateAnnotation) Execute(ctx context.Context, input Input) (Output, er
 	}
 
 	if err = u.works.Visible(ctx, mark.EbookID, input.UserID); err != nil {
-		return Output{}, getannotation.NotFound(opExecute)
+		return Output{}, getannotation.NotVisible(opExecute, err)
 	}
 
 	edited, err := apply(&mark.Mark, &input.Changes)
