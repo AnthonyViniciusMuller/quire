@@ -63,6 +63,27 @@ resource "helm_release" "istiod" {
   # so nothing may be applied into that namespace before this is ready.
   wait = true
 
+  # The chart asks for 500m and 2Gi, and that is a request sized for a mesh with
+  # hundreds of proxies in it. This one has three — the node's sidecar, the
+  # gateway's, and the migration job's while it runs. A request is a reservation
+  # rather than a measurement, so the chart's number would hold 2Gi of an
+  # e2-medium's 2.9Gi allocatable against pods that are never going to be
+  # scheduled.
+  #
+  # It is what lets var.node_machine_type be an e2-medium rather than an
+  # e2-standard-2: the two are one change and raising either alone is wrong. A
+  # mesh that grows past a handful of proxies wants the chart's numbers back,
+  # and a node large enough to put them on.
+  set {
+    name  = "pilot.resources.requests.cpu"
+    value = "100m"
+  }
+
+  set {
+    name  = "pilot.resources.requests.memory"
+    value = "512Mi"
+  }
+
   depends_on = [helm_release.istio_base]
 }
 

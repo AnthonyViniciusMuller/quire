@@ -57,8 +57,13 @@ resource "google_sql_database_instance" "this" {
     }
 
     backup_configuration {
-      enabled                        = true
-      point_in_time_recovery_enabled = true
+      enabled = true
+      # The daily backup stays and the write-ahead log does not. PITR archives
+      # every write so that a restore can name a moment between backups, and it
+      # is billed for the archive — a dollar or two a month here — to answer a
+      # question this deployment would never ask. What it would do after losing
+      # its database is apply again.
+      point_in_time_recovery_enabled = false
       start_time                     = "04:00"
     }
   }

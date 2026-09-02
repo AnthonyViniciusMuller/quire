@@ -97,19 +97,20 @@ a reader names one, which is why one copy reaches both clouds.
 
 ## The cluster is zonal, and that is a decision
 
-`var.zonal` defaults to true, so the cluster and its one node live in
+`var.zonal` defaults to true, so the cluster and its two nodes live in
 `<region>-a`. Two things follow, and both are the reason:
 
-- **A node pool's counts are per zone.** On a regional cluster `min_node_count = 1`
-  is three nodes, not one — which reads like a typo in a bill rather than in a
+- **A node pool's counts are per zone.** On a regional cluster `min_node_count = 2`
+  is six nodes, not two — which reads like a typo in a bill rather than in a
   variable.
 - **GKE's monthly credit covers zonal and Autopilot clusters only.** A regional
   control plane is billed in full.
 
-Together that is roughly $180 a month for a deployment that runs a single replica
-of a single node. What it costs is control-plane high availability and nodes
-spread across zones; neither protects anything here, because the node is not
-redundant and nothing in its request path talks to the API server.
+Together that is roughly $170 a month — the control plane, plus four more nodes
+— for a deployment that runs a single replica of a single Quire node. What it
+costs is control-plane high availability and workers spread across zones;
+neither protects anything here, because the Quire node is not redundant and
+nothing in its request path talks to the API server.
 
 Set `zonal = false` when the deployment has grown past one replica, and raise
 the replica count in the same commit or the change buys nothing.

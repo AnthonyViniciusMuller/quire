@@ -75,9 +75,51 @@ variable "node_instance_types" {
     What the managed node group runs on. The node itself asks for 100m of CPU
     and 128Mi; what sizes this is the mesh beside it — istiod, a sidecar per
     pod, and the gateway's own proxy.
+
+    A medium and not a large, and the two have the same two cores: what halves
+    is memory, and with it thirty dollars a month. It fits only because
+    platform.tf trims istiod's request from the chart's 2Gi to 512Mi, so the two
+    are one change and moving either alone is wrong.
+
+    Three of them, and that is about var.node_capacity_type rather than about
+    size. A spot group with one instance type in it is a group that waits when
+    that one type has no spare capacity in either zone; the allocation strategy
+    wants alternatives, and these are the same two cores and four gigabytes
+    under three different names. Keep them interchangeable — a managed node
+    group refuses a spot list whose members differ in vCPU or memory.
+
+    The other ceiling a medium brings is pods rather than cores. The VPC CNI
+    allows 17 on one against a large's 35, and this cluster runs about twelve:
+    room, but not much of it, and a component added here is a number to check.
   TEXT
   type        = list(string)
-  default     = ["t3.large"]
+  default     = ["t3.medium", "t3a.medium", "t2.medium"]
+}
+
+variable "node_capacity_type" {
+  description = <<-TEXT
+    ON_DEMAND or SPOT. Spot, and it is the largest cut left on this stack after
+    the control plane. A medium runs about a third of its on-demand price on
+    spot — $0.015 against $0.0416 when this was written, and it moves by zone
+    and by hour — which is roughly twenty dollars a month off a group that runs
+    one node.
+
+    What it costs is written here rather than discovered later. AWS reclaims a
+    spot instance on two minutes' notice, and this group runs one: when it goes
+    the node goes with it and returns when the group can place a replacement —
+    minutes, not seconds, and the federation port is closed for all of them. A
+    peer replicating across the gap retries; a reader gets an error.
+
+    That is a fair trade for a demonstration and no trade at all for something
+    readers depend on. Set it to ON_DEMAND before it becomes the second thing.
+  TEXT
+  type        = string
+  default     = "SPOT"
+
+  validation {
+    condition     = contains(["ON_DEMAND", "SPOT"], var.node_capacity_type)
+    error_message = "The capacity type is ON_DEMAND or SPOT."
+  }
 }
 
 variable "node_disk_size" {
@@ -95,14 +137,15 @@ variable "node_disk_size" {
 variable "node_group_size" {
   description = <<-TEXT
     The desired, minimum and maximum size of the managed node group. These are
-    counts for the group as a whole, not per zone — the group spans all three
-    private subnets and places wherever it can.
+    counts for the group as a whole, not per zone — the group spans both public
+    subnets and places wherever it can.
 
-    One node, and it fits with little to spare. The Quire node asks for 100m of
-    CPU and 128Mi; what sizes this is the mesh beside it — istiod, a sidecar per
-    pod and the gateway's own proxy come to roughly 1.2 of the 1.93 cores a
-    t3.large makes allocatable. The ceiling is 3 so that a rolling replacement
-    has somewhere to put the new node before it drains the old one.
+    One node, and it fits. The Quire node asks for 100m of CPU and 128Mi; what
+    sizes this is the mesh beside it — istiod, a sidecar per pod and the
+    gateway's own proxy come to roughly 0.8 of the 1.93 cores a t3.medium makes
+    allocatable, once istiod is asking platform.tf's number rather than the
+    chart's. The ceiling is 3 so that a rolling replacement has somewhere to put
+    the new node before it drains the old one.
   TEXT
   type        = object({ desired = number, min = number, max = number })
   default     = { desired = 1, min = 1, max = 3 }
@@ -110,11 +153,18 @@ variable "node_group_size" {
 
 variable "availability_zones" {
   description = <<-TEXT
-    How many zones the VPC spans. Three is what EKS asks for and what a load
-    balancer wants; two works and one does not.
+    How many zones the VPC spans. Two, which is the floor: EKS refuses a cluster
+    in one zone and an RDS subnet group needs two.
+
+    Three was the default first, and what the third bought on a group that runs
+    one node was a third public IPv4 address on the load balancer — the NLB
+    takes one per subnet it is placed in, at $0.005 an hour whether a node ever
+    lands in that zone or not. Raise it back to three when the node group grows
+    past one, and in the same commit: a rolling replacement wants a zone to
+    place into.
   TEXT
   type        = number
-  default     = 3
+  default     = 2
 }
 
 variable "vpc_cidr" {

@@ -10,7 +10,7 @@ argued in the file comments; this is how to run it.
 ## What it creates
 
 ```
-VPC (3 zones, public + private, one NAT)
+VPC (2 zones, public + private, no NAT)
 ├── EKS                     the cluster, istio and cert-manager on it
 │   └── quire               the namespace deploy/k8s/overlays/cloud is applied into
 │       └── quire-gateway   a Service of type LoadBalancer → an NLB on 80, 443, 9443

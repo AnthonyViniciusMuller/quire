@@ -74,41 +74,86 @@ variable "node_machine_type" {
     What the node pool runs on. The Quire node asks for 100m of CPU and 128Mi;
     what sizes this is the mesh beside it — istiod, a sidecar per pod, and the
     gateway's own proxy.
+
+    An e2-medium and not an e2-standard-2, which is half the price for the same
+    two cores: what halves is memory, from eight gigabytes to four, and four
+    leaves about 2.9GiB allocatable once GKE has taken its quarter of the first
+    four. That is enough only because platform.tf trims istiod's request from
+    the chart's 2Gi to 512Mi, so the two are one change and moving either alone
+    is wrong.
+
+    Note that E2 is the one family Compute Engine gives no sustained use
+    discount to — its list price is the price. That is a reason to size it
+    honestly rather than a reason to leave it.
   TEXT
   type        = string
-  default     = "e2-standard-2"
+  default     = "e2-medium"
+}
+
+variable "node_spot" {
+  description = <<-TEXT
+    Whether the pool runs on Spot VMs. False here, and true in the stack next
+    door, and the asymmetry is deliberate rather than an oversight.
+
+    Google prices spot capacity 60% to 91% below on demand, so turning it on
+    would take about fifteen dollars a month off this pool. What it would cost
+    is a node reclaimed on thirty seconds' notice with no replacement until the
+    pool can place one — and on a pool of two that is half the cluster, on a
+    pool of one it is all of it. Either way the Quire node is a single replica,
+    so its pod goes down and comes back somewhere else.
+
+    This stack does not need to take that trade. GKE's free tier pays for the
+    control plane and AWS charges $73 a month for the same thing, so the same
+    budget buys two on-demand nodes here and one spot node there. Turn it on if
+    the bill has to come down further: it is the largest cut left on this stack.
+  TEXT
+  type        = bool
+  default     = false
 }
 
 variable "node_disk_size" {
   description = <<-TEXT
     Gigabytes of boot disk under each node. GKE's own default is 100, which is
     ten dollars a month of space nothing uses: the images this node pulls come
-    to about a gigabyte. Thirty leaves room for image churn across redeploys and
-    for the logs a node writes before they are shipped.
+    to about a gigabyte. Twenty leaves room for image churn across redeploys and
+    for the logs a node writes before they are shipped, and is a dollar a month
+    below the thirty this asked for first.
 
     It stays pd-balanced rather than dropping to pd-standard. A standard disk's
-    throughput scales with its size, and thirty gigabytes of it would make every
+    throughput scales with its size, and twenty gigabytes of it would make every
     image pull slow enough to notice — which is a poor trade for the two dollars
     it saves.
   TEXT
   type        = number
-  default     = 30
+  default     = 20
 }
 
 variable "node_pool_size" {
   description = <<-TEXT
     The initial, minimum and maximum size of the node pool, **per zone**. That
     word is the whole reason var.zonal exists: on a regional cluster these are
-    multiplied by the number of zones, so a minimum of 1 is three nodes and
-    reads like one.
+    multiplied by the number of zones, so the minimum of 2 below is six nodes
+    and reads like two.
 
-    One node fits with little to spare. The Quire node asks for 100m of CPU and
-    128Mi; what sizes this is the mesh beside it — istiod, a sidecar per pod and
-    the gateway's own proxy come to roughly 1.2 of the 1.93 cores an
-    e2-standard-2 makes allocatable.
+    Two, and one would fit: the Quire node asks for 100m of CPU and 128Mi, and
+    what sizes this is the mesh beside it — istiod, a sidecar per pod and the
+    gateway's own proxy come to roughly 0.8 of the 1.93 cores a single e2-medium
+    makes allocatable, once istiod is asking platform.tf's number rather than
+    the chart's.
+
+    The second is bought with what the free control plane saves, and it is worth
+    being exact about what it does and does not buy. It does not make the Quire
+    node redundant — that is one replica of one Deployment, and a pod that dies
+    is a gap whichever node it was on. What it buys is somewhere for that pod to
+    land immediately, room for a node to be repaired or upgraded without
+    draining the cluster onto nothing, and a mesh that is no longer one
+    eviction away from having nowhere to schedule istiod.
+
+    The ceiling is 3 for the same reason it is 3 next door: a rolling
+    replacement needs somewhere to put the new node before it drains the old.
   TEXT
   type        = object({ initial = number, min = number, max = number })
-  default     = { initial = 1, min = 1, max = 2 }
+  default     = { initial = 2, min = 2, max = 3 }
 }
 
 variable "zonal" {
@@ -119,13 +164,15 @@ variable "zonal" {
     cluster replicates the node pool into every zone — so `node_pool_size` above
     is multiplied by three — and it is billed for its control plane, because
     GKE's monthly credit covers zonal and Autopilot clusters and not regional
-    ones. Together that is roughly $180 a month for a deployment that runs one
-    replica of one node.
+    ones. Together that is roughly a hundred and seventy dollars a month — the
+    control plane plus four more nodes — for a deployment that runs one replica
+    of one Quire node.
 
     What it costs is real and is worth saying: no control-plane high
-    availability, and every node in one zone. Neither is worth much here. The
-    node is a single replica that cannot survive its own pod being rescheduled,
-    so a second zone protects a workload that was never redundant to begin with;
+    availability, and both workers in one zone. Neither is worth much here. The
+    Quire node is a single replica that cannot survive its own pod being
+    rescheduled, so a second zone protects a workload that was never redundant
+    to begin with;
     and a control plane that is briefly unavailable does not stop the node
     serving, because nothing in the request path talks to the API server.
 
@@ -166,9 +213,19 @@ variable "service_cidr" {
 # --- the managed dependencies ------------------------------------------------
 
 variable "database_tier" {
-  description = "The Cloud SQL tier. The node opens ten connections at most."
+  description = <<-TEXT
+    The Cloud SQL tier. The node opens ten connections at most and db-f1-micro
+    allows twenty-five, so what the smallest tier costs is not connections but
+    headroom: 0.6GB of memory, no SLA, and Google's own documentation calling it
+    a tier for testing rather than for production.
+
+    It is eighteen dollars a month below db-g1-small, which makes it the largest
+    cut on this stack that leaves the shape of the deployment alone — the
+    database is still managed, still private, still reached across the peering.
+    Move it up the moment this holds something whose loss would matter.
+  TEXT
   type        = string
-  default     = "db-g1-small"
+  default     = "db-f1-micro"
 }
 
 variable "database_disk_size" {

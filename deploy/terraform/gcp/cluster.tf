@@ -123,6 +123,7 @@ resource "google_container_node_pool" "this" {
     machine_type    = var.node_machine_type
     disk_size_gb    = var.node_disk_size
     disk_type       = "pd-balanced"
+    spot            = var.node_spot
     service_account = google_service_account.nodes.email
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
 
