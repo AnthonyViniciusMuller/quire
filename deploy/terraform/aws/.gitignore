@@ -4,8 +4,11 @@
 # points at one cluster and belongs to one operator.
 generated/
 
+# The lock file is not ignored. It is what makes two applies resolve the
+# same provider versions, and a stack whose providers drift between applies
+# is a stack whose plan cannot be trusted; it is committed at the first init
+# and updated on purpose, with -upgrade.
 .terraform/
-.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars

@@ -184,7 +184,7 @@ test-storage-up:
 	docker run --rm -d --name $(TEST_STORAGE_CONTAINER) -p 127.0.0.1:55900:9000 \
 		-e MINIO_ROOT_USER=$(TEST_STORAGE_ACCESS_KEY) \
 		-e MINIO_ROOT_PASSWORD=$(TEST_STORAGE_SECRET_KEY) \
-		quay.io/minio/minio:latest server /data
+		quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
 	@until curl -sf http://$(TEST_STORAGE_ENDPOINT)/minio/health/live >/dev/null 2>&1; do sleep 1; done
 	@echo "$(TEST_STORAGE_CONTAINER) is ready on 55900"
 

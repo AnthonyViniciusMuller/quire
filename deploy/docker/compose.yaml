@@ -34,7 +34,7 @@ x-database: &database
   networks: [quire]
 
 x-storage: &storage
-  image: quay.io/minio/minio:latest
+  image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
   command: ["server", "/data"]
   environment:
     MINIO_ROOT_USER: quire
@@ -112,7 +112,7 @@ services:
   # The node does not create its bucket: a node that created one would have the
   # right to, which is more than a node needs in order to store a file in it.
   bucket-a:
-    image: quay.io/minio/mc:latest
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: quire-bucket-a
     depends_on:
       storage-a:
@@ -181,7 +181,7 @@ services:
     container_name: quire-storage-b
 
   bucket-b:
-    image: quay.io/minio/mc:latest
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: quire-bucket-b
     depends_on:
       storage-b:
