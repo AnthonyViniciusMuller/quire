@@ -447,7 +447,7 @@ func (r *DeliveryRepository) Enqueue(
 	return nil
 }
 
-// ListPending reads what is still owed to one node, oldest attempt first.
+// ListPending reads what is still owed to one node, in the order it was owed.
 func (r *DeliveryRepository) ListPending(
 	_ context.Context, batch *delivery.Batch,
 ) ([]*delivery.Delivery, error) {
@@ -468,19 +468,9 @@ func (r *DeliveryRepository) ListPending(
 		pending = append(pending, row)
 	}
 
-	slices.SortStableFunc(pending, func(left, right *delivery.Delivery) int {
-		switch {
-		case left.LastAttemptAt == nil && right.LastAttemptAt == nil:
-			return 0
-		case left.LastAttemptAt == nil:
-			return -1
-		case right.LastAttemptAt == nil:
-			return 1
-		default:
-			return left.LastAttemptAt.Compare(*right.LastAttemptAt)
-		}
-	})
-
+	// The rows are kept in the order they were owed, which is the order of
+	// the log, and that is the only order the statement applies: what a try
+	// did to a row does not move it.
 	if len(pending) > batch.Size {
 		return pending[:batch.Size], nil
 	}

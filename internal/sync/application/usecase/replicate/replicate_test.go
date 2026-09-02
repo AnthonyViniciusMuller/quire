@@ -2,6 +2,7 @@ package replicate_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -116,7 +117,7 @@ func TestExecute(t *testing.T) {
 
 	// The batch is the reader's history in the order this node committed it: a
 	// batch carrying an update ahead of the insert it depends on would be
-	// refused at the far end, and refused for ever.
+	// refused at the far end.
 	for index, id := range batches[0] {
 		if id != owed[index].ID {
 			t.Errorf("change %d was offered out of the order the log holds", index)
@@ -184,10 +185,11 @@ func TestExecuteCountsATryThatDidNotLand(t *testing.T) {
 	}
 }
 
-// A refusal is a verdict and not a delivery failure: the destination has read
-// the change and will read it the same way again, so a queue that retried it
-// would never drain.
-func TestExecuteSettlesAChangeThePeerRefused(t *testing.T) {
+// A refusal is not a delivery: what the destination refuses depends on what it
+// already holds, and an update refused for naming a record that has not
+// arrived yet is applied once the insert lands. Settling it would be this node
+// claiming a delivery the peer never made.
+func TestExecuteLeavesOwedAChangeThePeerRefused(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture()
@@ -200,13 +202,33 @@ func TestExecuteSettlesAChangeThePeerRefused(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if output.Confirmed != 1 {
-		t.Errorf("the pass confirmed %d, want the refusal settled", output.Confirmed)
+	if output.Confirmed != 0 || output.Failed != 1 {
+		t.Fatalf("the pass reported %+v, want the refusal counted as a failed try", output)
+	}
+
+	for _, row := range f.deliveries.Rows() {
+		switch {
+		case !row.IsPending():
+			t.Error("a change the peer refused was settled, so it will never be offered again")
+		case row.Attempts != 1:
+			t.Errorf("the delivery has been tried %d times, want the refusal counted", row.Attempts)
+		case !strings.Contains(row.LastError, refusal.Detail):
+			t.Errorf("last_error is %q, want the peer's own reason in it", row.LastError)
+		}
+	}
+
+	// And it is offered again once the backoff lifts, to a peer that by then
+	// holds what the change depends on.
+	f.peers.Refuse = nil
+	later := replicate.New(f.deliveries, f.log, f.peers, apptest.NewClock(authored.Add(3*backoff)), backoff, 100)
+
+	if _, err = later.Execute(t.Context(), replicate.Input{}); err != nil {
+		t.Fatalf("the second pass: %v", err)
 	}
 
 	for _, row := range f.deliveries.Rows() {
 		if row.IsPending() {
-			t.Error("a change the peer refused is still owed, so the queue will never drain")
+			t.Error("the change was not offered again after the backoff lifted")
 		}
 	}
 }

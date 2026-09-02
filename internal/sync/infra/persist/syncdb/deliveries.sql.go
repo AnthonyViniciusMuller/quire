@@ -172,7 +172,7 @@ WHERE d.server_id = $1
             - $3::double precision
               * power(2, least(d.attempts, $4::integer))
               * interval '1 second')
-ORDER BY last_attempt_at NULLS FIRST, o.user_id, o.position
+ORDER BY o.user_id, o.position
 LIMIT $5::integer
 `
 
@@ -184,7 +184,7 @@ type ListPendingDeliveriesParams struct {
 	PageSize       int32
 }
 
-// What is still owed to one node, oldest attempt first and then in log order.
+// What is still owed to one node, in log order.
 //
 // The backoff is in the predicate rather than in the worker, because the
 // alternative is reading rows in order to skip them: a peer that has been
@@ -192,13 +192,16 @@ type ListPendingDeliveriesParams struct {
 // filtered in Go would page through all of them on every tick. Doubling once
 // per attempt is bounded by the caller, which passes the exponent ceiling.
 //
-// The order is the log's and not the queue's, and the join is what buys it: a
-// peer is offered a reader's changes in the order this node committed them, so
-// a batch cannot carry an update ahead of the insert it depends on — which the
-// reconciler at the far end would refuse outright. The row identifier would
-// have been the cheap tie-break and is exactly the wrong one: it is a random
-// uuid, so it would have shuffled a reader's history into an order no node
-// could apply.
+// The order is the log's and nothing but the log's, and the join is what buys
+// it: a peer is offered a reader's changes in the order this node committed
+// them, so a batch cannot carry an update ahead of the insert it depends on —
+// which the reconciler at the far end would refuse. This query once put the
+// rows never tried ahead of the rest, and that is exactly how an update
+// overtakes its insert: the insert fails with the batch it was in and backs
+// off, the update is written afterwards and has never been tried, and the
+// next pass offers the update alone. The row identifier would have been the
+// other cheap tie-break and is just as wrong: it is a random uuid, so it would
+// have shuffled a reader's history into an order no node could apply.
 //
 // deliveries_pending_idx serves the destination and the backoff, and its
 // partial predicate keeps it the size of the backlog rather than of the

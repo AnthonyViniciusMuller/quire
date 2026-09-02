@@ -16,13 +16,16 @@
 //
 // It offers a reader's changes in the order this node committed them. A batch
 // that carried an update ahead of the insert it depends on would be refused at
-// the far end, and the refusal would be permanent: the reconciler there creates
-// records only from an insert.
+// the far end, because the reconciler there creates records only from an
+// insert — and a refusal is not final, which is the third decision.
 //
 // It records the outcome of every try, and the count is what the backoff is
 // computed from. A peer belonging to another operator is unreachable often
 // enough that retrying it at full rate would be this node's largest source of
-// outbound traffic, and a failure nobody counted is a peer retried for ever.
+// outbound traffic, and a failure nobody counted is a peer retried for ever. A
+// refusal counts as a failed try too: what the peer refuses depends on what it
+// already holds, so a change refused today for naming a record the peer has
+// not received yet is a change the peer applies once it has.
 package replicate
 
 import (
@@ -165,12 +168,20 @@ type pass struct {
 
 // offer hands one reader's changes to one peer and settles the rows.
 //
-// Every change the destination answered about is settled, whatever it answered.
-// A refusal is a verdict and not a delivery failure: the destination has read
-// the change and will read it the same way again, so a queue that retried it
-// would never drain and the operator would be told about the same refusal for
-// ever. What is retried is what the destination did not answer for, which is a
-// call that was lost rather than a change that was refused.
+// A change the destination applied, already held or judged superseded is
+// settled: in each of the three it has read the change and holds it. A change
+// it refused stays owed, and the refusal is counted as a failed try with the
+// peer's reason as the error. The destination's verdict is not a property of
+// the change alone but of the change against what the destination holds, and
+// that changes: an update refused because the record it names has not arrived
+// is applied on the try after the insert lands. Settling it would have been
+// this node claiming a delivery the peer never made, and nothing afterwards
+// would have noticed. A refusal that never lifts costs one call per backoff
+// interval, which is the price of a queue that never drops what it owes; the
+// reason stays in last_error for the operator to act on.
+//
+// What the destination did not answer for at all is a call that was cut
+// short rather than a verdict, and is counted the same way.
 func (r *Replicate) offer(ctx context.Context, serverID uuid.UUID, batch *readerBatch) (pass, error) {
 	attempted := r.clock.Now()
 
@@ -190,30 +201,53 @@ func (r *Replicate) offer(ctx context.Context, serverID uuid.UUID, batch *reader
 	}
 
 	answered := make([]uuid.UUID, 0, len(results))
+	settled := make([]uuid.UUID, 0, len(results))
+	refused := make([]operation.Result, 0)
 
 	for _, result := range results {
 		answered = append(answered, result.OperationID)
 
-		if result.Outcome == operation.OutcomeRejected {
-			logging.From(ctx).WarnContext(ctx, "a peer refused a change",
-				slog.String("server_id", serverID.String()),
-				slog.String("operation_id", result.OperationID.String()),
-				slog.String("detail", result.Detail))
+		if result.Outcome != operation.OutcomeRejected {
+			settled = append(settled, result.OperationID)
+
+			continue
 		}
+
+		logging.From(ctx).WarnContext(ctx, "a peer refused a change",
+			slog.String("server_id", serverID.String()),
+			slog.String("operation_id", result.OperationID.String()),
+			slog.String("detail", result.Detail))
+
+		refused = append(refused, result)
 	}
 
-	confirmed, err := r.deliveries.Record(ctx, serverID, answered,
+	confirmed, err := r.deliveries.Record(ctx, serverID, settled,
 		&delivery.Attempt{At: attempted})
 	if err != nil {
 		return pass{}, err
 	}
 
-	silent := missing(batch.identifiers(), answered)
-	if len(silent) == 0 {
-		return pass{Confirmed: confirmed}, nil
+	failed := int64(0)
+
+	// One row at a time, because each refusal carries its own reason and the
+	// reason is what the operator reads. A batch refused wholesale is rare
+	// enough that the extra statements do not matter.
+	for _, refusal := range refused {
+		counted, recordErr := r.deliveries.Record(ctx, serverID, []uuid.UUID{refusal.OperationID},
+			&delivery.Attempt{At: attempted, Err: refusedError{detail: refusal.Detail}})
+		if recordErr != nil {
+			return pass{}, recordErr
+		}
+
+		failed += counted
 	}
 
-	failed, err := r.deliveries.Record(ctx, serverID, silent, &delivery.Attempt{
+	silent := missing(batch.identifiers(), answered)
+	if len(silent) == 0 {
+		return pass{Confirmed: confirmed, Failed: failed}, nil
+	}
+
+	counted, err := r.deliveries.Record(ctx, serverID, silent, &delivery.Attempt{
 		At:  attempted,
 		Err: noVerdictError{},
 	})
@@ -221,7 +255,7 @@ func (r *Replicate) offer(ctx context.Context, serverID uuid.UUID, batch *reader
 		return pass{}, err
 	}
 
-	return pass{Confirmed: confirmed, Failed: failed}, nil
+	return pass{Confirmed: confirmed, Failed: failed + counted}, nil
 }
 
 // readerBatch is one reader's changes, in the order this node committed them.
@@ -291,3 +325,11 @@ type noVerdictError struct{}
 
 // Error renders the silence.
 func (noVerdictError) Error() string { return "the destination answered nothing about this change" }
+
+// refusedError is what a delivery the destination refused is recorded with:
+// the peer's own reason, which is the one thing about the refusal the operator
+// can act on.
+type refusedError struct{ detail string }
+
+// Error renders the refusal.
+func (e refusedError) Error() string { return "the destination refused the change: " + e.detail }
