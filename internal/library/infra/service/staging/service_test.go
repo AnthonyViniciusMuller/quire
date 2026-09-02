@@ -1,6 +1,7 @@
 package staging_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -107,11 +108,44 @@ func TestStageReportsAStreamThatDidNotArriveInFull(t *testing.T) {
 	}
 }
 
-// failingReader is a stream that dies partway, which is a mobile network.
-type failingReader struct{ served bool }
+// The stream is the caller's, and what the caller already said about it is
+// kept: a client's mistake stays the client's, and a caller that hung up is
+// not a node that is down.
+func TestStageKeepsTheCallersOwnVerdictOnTheStream(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+		want errs.Kind
+	}{
+		{"the client's mistake", errs.New(errs.KindInvalidArgument, "the upload described the file twice"), errs.KindInvalidArgument},
+		{"a caller that hung up", context.Canceled, errs.KindCanceled},
+		{"a deadline that passed", context.DeadlineExceeded, errs.KindDeadlineExceeded},
+	}
+
+	for _, tc := range cases {
+		_, err := staging.New().Stage(t.Context(), &failingReader{err: tc.err}, 1024)
+
+		if !errors.Is(err, tc.want) {
+			t.Errorf("Stage over %s = %v, want %v", tc.name, err, tc.want)
+		}
+	}
+}
+
+// failingReader is a stream that dies partway, which is a mobile network. err
+// is what it dies with; nil stands for a connection lost without a word.
+type failingReader struct {
+	served bool
+	err    error
+}
 
 func (f *failingReader) Read(p []byte) (int, error) {
 	if f.served {
+		if f.err != nil {
+			return 0, f.err
+		}
+
 		return 0, errors.New("the connection was lost")
 	}
 

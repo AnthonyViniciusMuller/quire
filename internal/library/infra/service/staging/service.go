@@ -61,9 +61,7 @@ func (*Service) Stage(_ context.Context, body io.Reader, limit int64) (service.S
 	if err != nil {
 		_ = staged.Close()
 
-		return nil, errs.Wrap(err, errs.KindUnavailable, "the upload did not arrive in full").
-			WithOp(opStage).
-			WithCode(service.CodeStagingFailed)
+		return nil, arrivalFailed(err)
 	}
 
 	if written > limit {
@@ -78,6 +76,32 @@ func (*Service) Stage(_ context.Context, body io.Reader, limit int64) (service.S
 	staged.size = written
 
 	return staged, nil
+}
+
+// arrivalFailed is the error for a stream that ended before its end.
+//
+// The stream is the caller's, and the caller may already have said what went
+// wrong: the controller that feeds a gRPC stream in here reports a message
+// that described the file twice as the client's mistake and a caller that
+// hung up as a cancellation. Those are kept as they are. Wrapping them would
+// replace the kind — errs.KindOf reads the outermost — and turn the client's
+// own mistake into a node that is unavailable, in the reply and in the logs.
+// A bare cancellation is classified the same way; anything else is a transfer
+// that was lost, which is the transport's failure and not the node's.
+func arrivalFailed(err error) error {
+	var already *errs.Error
+	if errors.As(err, &already) {
+		return err
+	}
+
+	kind := errs.KindOf(err)
+	if kind == errs.KindUnknown {
+		kind = errs.KindUnavailable
+	}
+
+	return errs.Wrap(err, kind, "the upload did not arrive in full").
+		WithOp(opStage).
+		WithCode(service.CodeStagingFailed)
 }
 
 // Open returns a holder the caller fills a chunk at a time.
